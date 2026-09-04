@@ -1,0 +1,26 @@
+# dependencies
+/node_modules
+/.npm-cache
+
+# next.js
+/.next/
+/out/
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# debug / test / backup artifacts
+*.test.cjs
+_debug_sync.cjs
+dev_output.txt
+dev_verify.log
+dev_verify_err.log
+/backup_20260808/
+/outputs/
+/work/
+
+# misc
+.DS_Store
+*.pem
+.env*.local

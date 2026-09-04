@@ -262,33 +262,31 @@ export default function HomePage() {
 
 function NewCustomerForm({ onClose, onSave }: { onClose: () => void; onSave: (name: string, city: string) => void }) { const [name, setName] = useState(""); const [city, setCity] = useState(""); return <div className="overlay" onClick={onClose}><section className="modal new-form" onClick={event => event.stopPropagation()}><button className="close" onClick={onClose}>×</button><h2>Customer Baru</h2><p>Mulai dari profilnya. Order pertama dapat ditambahkan setelah ini.</p><label>Nama customer<input value={name} onChange={event => setName(event.target.value)} placeholder="Contoh: Ummu Maryam"/></label><label>Kota / domisili<input value={city} onChange={event => setCity(event.target.value)} placeholder="Contoh: Jakarta Timur"/></label><button className="primary" disabled={!name.trim()} onClick={() => onSave(name.trim(), city.trim() || "Belum diisi")}>Buat Profil Customer</button></section></div> }
 
-function NewOrderForm({ customerName, onClose, onSave }) { 
+function NewOrderForm({ customerName, onClose, onSave }: { customerName: string; onClose: () => void; onSave: (total: number) => void }) { 
   const [brand, setBrand] = useState("Afeena");
   const [product, setProduct] = useState("Amna Jilbab");
   const [qty, setQty] = useState(1);
   const [ongkir, setOngkir] = useState(0);
   const [catatan, setCatatan] = useState("");
 
-  // Kebutuhan Atribut Afeena
+  // Atribut Afeena
   const [size, setSize] = useState("L"); 
   const [handZip, setHandZip] = useState(false); 
   const [middleZip, setMiddleZip] = useState(false); 
   const [ties, setTies] = useState(false); 
 
-  // Kebutuhan Atribut Etalase YasLa
+  // Atribut YasLa
   const [bookType, setBookType] = useState("PO");
 
-  // Daftar Produk Dinamis
   const afeenaProducts = ["Amna Jilbab", "Niqab Khadijah", "Manset Basic"];
   const yaslaProducts = ["Buku Si Pensil Kecil", "Buku Persis Sepertimu", "Box Set 25 Buku", "Buku ASAQU!"];
 
-  // Perhitungan Harga Pintar (Decision Engine Dasar)
   let unitPrice = 0;
   if (brand === "Afeena") {
-    const basePrices = { M: 250000, L: 260000, XL: 260000, XXL: 270000 }; 
+    const basePrices: Record<string, number> = { M: 250000, L: 260000, XL: 260000, XXL: 270000 }; 
     unitPrice = (basePrices[size] || 250000) + (handZip ? 20000 : 0) + (middleZip ? 20000 : 0) + (ties ? 8000 : 0); 
   } else {
-    const bookPrices = { "PO": 149000, "Ready Stock": 155000, "Early Bird": 147000 };
+    const bookPrices: Record<string, number> = { "PO": 149000, "Ready Stock": 155000, "Early Bird": 147000 };
     unitPrice = bookPrices[bookType] || 149000;
   }
   
@@ -300,61 +298,66 @@ function NewOrderForm({ customerName, onClose, onSave }) {
       <section 
         className="modal order-form" 
         onClick={event => event.stopPropagation()}
-        style={{ maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}
+        style={{ maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px' }}
       >
-        <button className="close" onClick={onClose} style={{ position: 'absolute', right: '15px', top: '15px' }}>×</button>
+        <button className="close" onClick={onClose} style={{ position: 'absolute', right: '15px', top: '15px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>×</button>
         
         <div>
-          <p className="eyebrow">ORDER BARU · {customerName}</p>
-          <h2 style={{ margin: '4px 0' }}>Detail Pesanan</h2>
+          <p className="eyebrow" style={{ fontSize: '12px', color: '#888', fontWeight: 'bold' }}>ORDER BARU · {customerName}</p>
+          <h2 style={{ margin: '4px 0', fontSize: '20px' }}>Pilih Produk & Detail</h2>
         </div>
 
         {/* Pemilihan Brand */}
-        <label>Pilih Brand
-          <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Pilih Brand</label>
+          <div style={{ display: 'flex', gap: '10px' }}>
             <button 
+              type="button"
               className={brand === "Afeena" ? "primary" : "secondary"} 
-              style={{ flex: 1, padding: '8px', borderRadius: '8px' }}
+              style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', border: '1px solid #745034', background: brand === "Afeena" ? '#745034' : '#fff', color: brand === "Afeena" ? '#fff' : '#745034' }}
               onClick={() => { setBrand("Afeena"); setProduct(afeenaProducts[0]); }}
             >Afeena</button>
             <button 
+              type="button"
               className={brand === "YasLa" ? "primary" : "secondary"} 
-              style={{ flex: 1, padding: '8px', borderRadius: '8px' }}
+              style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', border: '1px solid #745034', background: brand === "YasLa" ? '#745034' : '#fff', color: brand === "YasLa" ? '#fff' : '#745034' }}
               onClick={() => { setBrand("YasLa"); setProduct(yaslaProducts[0]); }}
             >Etalase YasLa</button>
           </div>
-        </label>
+        </div>
 
-        {/* Pemilihan Produk Berdasarkan Brand */}
-        <label>Produk
-          <select value={product} onChange={e => setProduct(e.target.value)} style={{ width: '100%', padding: '8px', marginTop: '4px' }}>
+        {/* Pemilihan Produk Dinamis */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Produk</label>
+          <select value={product} onChange={e => setProduct(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}>
             {brand === "Afeena" 
               ? afeenaProducts.map(p => <option key={p} value={p}>{p}</option>)
               : yaslaProducts.map(p => <option key={p} value={p}>{p}</option>)
             }
           </select>
-        </label>
+        </div>
 
-        {/* Atribut Dinamis: Tampil beda antara Jilbab vs Buku */}
+        {/* Atribut Dinamis */}
         {brand === "Afeena" ? (
           <>
-            <label>Size
-              <select value={size} onChange={e => setSize(e.target.value)} style={{ width: '100%', padding: '8px', marginTop: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Size</label>
+              <select value={size} onChange={e => setSize(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}>
                 {["M", "L", "XL", "XXL"].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-            </label>
-            <fieldset style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '8px' }}>
+            </div>
+            <fieldset style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '8px', margin: 0 }}>
               <legend style={{ padding: '0 4px', fontSize: '14px', fontWeight: 'bold' }}>Modifikasi Jilbab</legend>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '8px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginTop: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
                   <input type="checkbox" checked={handZip} onChange={e => setHandZip(e.target.checked)}/> 
                   <span>Lubang tangan rits <b>+ Rp 20.000</b></span>
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
                   <input type="checkbox" checked={middleZip} onChange={e => setMiddleZip(e.target.checked)}/> 
                   <span>Rits tengah busui <b>+ Rp 20.000</b></span>
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
                   <input type="checkbox" checked={ties} onChange={e => setTies(e.target.checked)}/> 
                   <span>Tali kecil dalam <b>+ Rp 8.000</b></span>
                 </label>
@@ -362,27 +365,31 @@ function NewOrderForm({ customerName, onClose, onSave }) {
             </fieldset>
           </>
         ) : (
-          <label>Jenis Harga Buku
-            <select value={bookType} onChange={e => setBookType(e.target.value)} style={{ width: '100%', padding: '8px', marginTop: '4px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Jenis Harga Buku</label>
+            <select value={bookType} onChange={e => setBookType(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}>
               {["PO", "Early Bird", "Ready Stock"].map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-          </label>
+          </div>
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <label>Jumlah (Qty)
-            <input type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, Number(e.target.value) || 1))} style={{ width: '100%', padding: '8px', marginTop: '4px' }}/>
-          </label>
-          <label>Ongkos Kirim
-            <input type="number" min="0" value={ongkir} onChange={e => setOngkir(Number(e.target.value))} placeholder="Contoh: 15000" style={{ width: '100%', padding: '8px', marginTop: '4px' }}/>
-          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Jumlah (Qty)</label>
+            <input type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, Number(e.target.value) || 1))} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}/>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Ongkos Kirim</label>
+            <input type="number" min="0" value={ongkir} onChange={e => setOngkir(Number(e.target.value))} placeholder="Contoh: 15000" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}/>
+          </div>
         </div>
 
-        <label>Catatan order
-          <textarea value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Contoh: Titip di pos satpam, atau kirim bareng Batch 8" style={{ width: '100%', padding: '8px', marginTop: '4px', minHeight: '60px' }}/>
-        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Catatan order</label>
+          <textarea value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Contoh: Kirim bareng Batch 8" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', minHeight: '60px' }}/>
+        </div>
 
-        <div style={{ background: '#f9f6f0', padding: '12px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ background: '#f9f6f0', padding: '12px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
             <span>Harga Satuan:</span> <b>Rp {unitPrice.toLocaleString("id-ID")}</b>
           </div>
@@ -392,13 +399,18 @@ function NewOrderForm({ customerName, onClose, onSave }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
             <span>Ongkos Kirim:</span> <b>Rp {Number(ongkir).toLocaleString("id-ID")}</b>
           </div>
-          <hr style={{ borderTop: '1px dashed #ccc', margin: '8px 0' }}/>
+          <hr style={{ borderTop: '1px dashed #ccc', margin: '4px 0' }}/>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', color: '#745034' }}>
             <strong>GRAND TOTAL:</strong> <strong>Rp {grandTotal.toLocaleString("id-ID")}</strong>
           </div>
         </div>
 
-        <button className="primary" onClick={() => onSave(grandTotal)} style={{ padding: '12px', width: '100%', marginTop: '8px' }}>
+        <button 
+          type="button" 
+          className="primary" 
+          onClick={() => onSave(grandTotal)} 
+          style={{ padding: '12px', width: '100%', background: '#745034', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+        >
           Tambahkan ke Order {customerName}
         </button>
       </section>

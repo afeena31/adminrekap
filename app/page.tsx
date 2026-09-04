@@ -262,34 +262,149 @@ export default function HomePage() {
 
 function NewCustomerForm({ onClose, onSave }: { onClose: () => void; onSave: (name: string, city: string) => void }) { const [name, setName] = useState(""); const [city, setCity] = useState(""); return <div className="overlay" onClick={onClose}><section className="modal new-form" onClick={event => event.stopPropagation()}><button className="close" onClick={onClose}>×</button><h2>Customer Baru</h2><p>Mulai dari profilnya. Order pertama dapat ditambahkan setelah ini.</p><label>Nama customer<input value={name} onChange={event => setName(event.target.value)} placeholder="Contoh: Ummu Maryam"/></label><label>Kota / domisili<input value={city} onChange={event => setCity(event.target.value)} placeholder="Contoh: Jakarta Timur"/></label><button className="primary" disabled={!name.trim()} onClick={() => onSave(name.trim(), city.trim() || "Belum diisi")}>Buat Profil Customer</button></section></div> }
 
-function NewOrderForm({ customerName, onClose, onSave }: { customerName: string; onClose: () => void; onSave: (total: number) => void }) { const [size, setSize] = useState("L"); const [handZip, setHandZip] = useState(false); const [middleZip, setMiddleZip] = useState(false); const [ties, setTies] = useState(false); const [qty, setQty] = useState(1); const basePrices: Record<string, number> = { M: 250000, L: 260000, XL: 260000, XXL: 270000 }; const unitPrice = basePrices[size] + (handZip ? 20000 : 0) + (middleZip ? 20000 : 0) + (ties ? 8000 : 0); const total = unitPrice * qty; return <div className="overlay" onClick={onClose}><section className="modal order-form" onClick={event => event.stopPropagation()}><button className="close" onClick={onClose}>×</button><p className="eyebrow">ORDER BARU · {customerName}</p><h2>Amna Jilbab</h2><p className="muted">Harga dihitung otomatis dari size dan modifikasi.</p><label>Size<select value={size} onChange={event => setSize(event.target.value)}>{Object.entries(basePrices).map(([label, price]) => <option key={label} value={label}>{label} · Rp {price.toLocaleString("id-ID")}</option>)}</select></label><fieldset><legend>Modifikasi</legend><label><input type="checkbox" checked={handZip} onChange={event => setHandZip(event.target.checked)}/> Lubang tangan rits <b>+ Rp 20.000</b></label><label><input type="checkbox" checked={middleZip} onChange={event => setMiddleZip(event.target.checked)}/> Rits tengah busui <b>+ Rp 20.000</b></label><label><input type="checkbox" checked={ties} onChange={event => setTies(event.target.checked)}/> Tali kecil kanan–kiri dalam <b>+ Rp 8.000</b></label></fieldset><div className="order-grid"><label>Jumlah<input type="number" min="1" value={qty} onChange={event => setQty(Math.max(1, Number(event.target.value) || 1))}/></label><label>Batch / kloter<select><option>Belum ditentukan</option><option>Batch 8</option><option>Batch 9</option></select></label></div><label>Catatan order<textarea placeholder="Contoh: kirim sekalian jika semua barang sudah ready"/></label><div className="price-preview"><span>Harga satuan <b>Rp {unitPrice.toLocaleString("id-ID")}</b></span><strong>Total produk <b>Rp {total.toLocaleString("id-ID")}</b></strong></div><button className="primary" onClick={() => onSave(total)}>Tambahkan ke Order {customerName}</button></section></div> }
+function NewOrderForm({ customerName, onClose, onSave }) { 
+  const [brand, setBrand] = useState("Afeena");
+  const [product, setProduct] = useState("Amna Jilbab");
+  const [qty, setQty] = useState(1);
+  const [ongkir, setOngkir] = useState(0);
+  const [catatan, setCatatan] = useState("");
 
-// ===== DERIVE PRIMARY CONDITION (anti-duplikasi) =====
-// Satu kondisi utama per item — bukan menampilkan semua status sekaligus.
-// Prioritas: bermasalah → perlu ditagih → menunggu produksi/QC → siap packing
-//           → perlu input resi → sudah dikirim → selesai.
-function derivePrimaryCondition(card: ProductStatusCard): { name: string; emoji: string; tone: string } {
-  if (card.paymentStatus === "bermasalah" || card.progressStatus === "retur") {
-    return { name: "Bermasalah", emoji: "⛔", tone: "problem" };
+  // Kebutuhan Atribut Afeena
+  const [size, setSize] = useState("L"); 
+  const [handZip, setHandZip] = useState(false); 
+  const [middleZip, setMiddleZip] = useState(false); 
+  const [ties, setTies] = useState(false); 
+
+  // Kebutuhan Atribut Etalase YasLa
+  const [bookType, setBookType] = useState("PO");
+
+  // Daftar Produk Dinamis
+  const afeenaProducts = ["Amna Jilbab", "Niqab Khadijah", "Manset Basic"];
+  const yaslaProducts = ["Buku Si Pensil Kecil", "Buku Persis Sepertimu", "Box Set 25 Buku", "Buku ASAQU!"];
+
+  // Perhitungan Harga Pintar (Decision Engine Dasar)
+  let unitPrice = 0;
+  if (brand === "Afeena") {
+    const basePrices = { M: 250000, L: 260000, XL: 260000, XXL: 270000 }; 
+    unitPrice = (basePrices[size] || 250000) + (handZip ? 20000 : 0) + (middleZip ? 20000 : 0) + (ties ? 8000 : 0); 
+  } else {
+    const bookPrices = { "PO": 149000, "Ready Stock": 155000, "Early Bird": 147000 };
+    unitPrice = bookPrices[bookType] || 149000;
   }
-  if (card.paymentStatus === "belum-bayar" || card.paymentStatus === "dp" || card.paymentStatus === "lunas-sebagian") {
-    return { name: "Perlu Ditagih", emoji: "💰", tone: "unpaid" };
-  }
-  if (card.progressStatus === "menunggu-batch" || card.progressStatus === "produksi" || card.progressStatus === "qc") {
-    return { name: "Menunggu Produksi / QC", emoji: "🏭", tone: "production" };
-  }
-  if (card.progressStatus === "siap-packing" || card.progressStatus === "sedang-packing") {
-    return { name: "Siap Packing", emoji: "📦", tone: "packing" };
-  }
-  if (card.progressStatus === "perlu-input-resi" || card.shipmentStatus === "menunggu-pickup") {
-    return { name: "Perlu Input Resi", emoji: "🧾", tone: "resi" };
-  }
-  if (card.shipmentStatus === "delivered") {
-    return { name: "Dalam Pengiriman", emoji: "🚚", tone: "shipped" };
-  }
-  return { name: "Selesai", emoji: "🎉", tone: "done" };
+  
+  const totalProduk = unitPrice * qty;
+  const grandTotal = totalProduk + Number(ongkir);
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <section 
+        className="modal order-form" 
+        onClick={event => event.stopPropagation()}
+        style={{ maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}
+      >
+        <button className="close" onClick={onClose} style={{ position: 'absolute', right: '15px', top: '15px' }}>×</button>
+        
+        <div>
+          <p className="eyebrow">ORDER BARU · {customerName}</p>
+          <h2 style={{ margin: '4px 0' }}>Detail Pesanan</h2>
+        </div>
+
+        {/* Pemilihan Brand */}
+        <label>Pilih Brand
+          <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+            <button 
+              className={brand === "Afeena" ? "primary" : "secondary"} 
+              style={{ flex: 1, padding: '8px', borderRadius: '8px' }}
+              onClick={() => { setBrand("Afeena"); setProduct(afeenaProducts[0]); }}
+            >Afeena</button>
+            <button 
+              className={brand === "YasLa" ? "primary" : "secondary"} 
+              style={{ flex: 1, padding: '8px', borderRadius: '8px' }}
+              onClick={() => { setBrand("YasLa"); setProduct(yaslaProducts[0]); }}
+            >Etalase YasLa</button>
+          </div>
+        </label>
+
+        {/* Pemilihan Produk Berdasarkan Brand */}
+        <label>Produk
+          <select value={product} onChange={e => setProduct(e.target.value)} style={{ width: '100%', padding: '8px', marginTop: '4px' }}>
+            {brand === "Afeena" 
+              ? afeenaProducts.map(p => <option key={p} value={p}>{p}</option>)
+              : yaslaProducts.map(p => <option key={p} value={p}>{p}</option>)
+            }
+          </select>
+        </label>
+
+        {/* Atribut Dinamis: Tampil beda antara Jilbab vs Buku */}
+        {brand === "Afeena" ? (
+          <>
+            <label>Size
+              <select value={size} onChange={e => setSize(e.target.value)} style={{ width: '100%', padding: '8px', marginTop: '4px' }}>
+                {["M", "L", "XL", "XXL"].map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </label>
+            <fieldset style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '8px' }}>
+              <legend style={{ padding: '0 4px', fontSize: '14px', fontWeight: 'bold' }}>Modifikasi Jilbab</legend>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input type="checkbox" checked={handZip} onChange={e => setHandZip(e.target.checked)}/> 
+                  <span>Lubang tangan rits <b>+ Rp 20.000</b></span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input type="checkbox" checked={middleZip} onChange={e => setMiddleZip(e.target.checked)}/> 
+                  <span>Rits tengah busui <b>+ Rp 20.000</b></span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input type="checkbox" checked={ties} onChange={e => setTies(e.target.checked)}/> 
+                  <span>Tali kecil dalam <b>+ Rp 8.000</b></span>
+                </label>
+              </div>
+            </fieldset>
+          </>
+        ) : (
+          <label>Jenis Harga Buku
+            <select value={bookType} onChange={e => setBookType(e.target.value)} style={{ width: '100%', padding: '8px', marginTop: '4px' }}>
+              {["PO", "Early Bird", "Ready Stock"].map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </label>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <label>Jumlah (Qty)
+            <input type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, Number(e.target.value) || 1))} style={{ width: '100%', padding: '8px', marginTop: '4px' }}/>
+          </label>
+          <label>Ongkos Kirim
+            <input type="number" min="0" value={ongkir} onChange={e => setOngkir(Number(e.target.value))} placeholder="Contoh: 15000" style={{ width: '100%', padding: '8px', marginTop: '4px' }}/>
+          </label>
+        </div>
+
+        <label>Catatan order
+          <textarea value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Contoh: Titip di pos satpam, atau kirim bareng Batch 8" style={{ width: '100%', padding: '8px', marginTop: '4px', minHeight: '60px' }}/>
+        </label>
+
+        <div style={{ background: '#f9f6f0', padding: '12px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+            <span>Harga Satuan:</span> <b>Rp {unitPrice.toLocaleString("id-ID")}</b>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+            <span>Total Produk ({qty} pcs):</span> <b>Rp {totalProduk.toLocaleString("id-ID")}</b>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+            <span>Ongkos Kirim:</span> <b>Rp {Number(ongkir).toLocaleString("id-ID")}</b>
+          </div>
+          <hr style={{ borderTop: '1px dashed #ccc', margin: '8px 0' }}/>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', color: '#745034' }}>
+            <strong>GRAND TOTAL:</strong> <strong>Rp {grandTotal.toLocaleString("id-ID")}</strong>
+          </div>
+        </div>
+
+        <button className="primary" onClick={() => onSave(grandTotal)} style={{ padding: '12px', width: '100%', marginTop: '8px' }}>
+          Tambahkan ke Order {customerName}
+        </button>
+      </section>
+    </div>
+  );
 }
-
 // ===== ORDER DETAIL MODAL =====
 // Menampilkan status order dari state machine (operations.ts).
 // Admin tidak memilih status — admin memilih AKSI, sistem mengubah status otomatis.

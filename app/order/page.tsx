@@ -7,9 +7,12 @@ import { useEffect, useState } from "react";
 
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, rekeningByCategory, type Product, type InvoiceType } from "../data/products";
-import { toDisplayCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
+import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
 import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, getOrders, getOrderById, saveFee, getNextInvoiceNumber, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
-import { getCustomers, getCustomer as getCentralCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
+import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
+import { NewCustomerForm } from "../components/NewCustomerForm";
+
+const NEW_CUSTOMER_OPTION = "__new_customer__";
 
 function loadFirstCustomer(): Customer {
   const first = getCustomers()[0];
@@ -76,6 +79,7 @@ export default function OrderPage() {
   // useEffect di bawah, sama seperti productList/marketers/existingOrders.
   const [customer, setCustomer] = useState<Customer>(EMPTY_CUSTOMER);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   const [recipientName, setRecipientName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -163,6 +167,7 @@ export default function OrderPage() {
 
 
   const handleCustomerChange = (customerId: string) => {
+    if (customerId === NEW_CUSTOMER_OPTION) { setNewCustomerOpen(true); return; }
     const central = getCentralCustomer(customerId);
     if (!central) return;
     const c = toDisplayCustomer(central, getCustomerAddresses(customerId));
@@ -173,6 +178,21 @@ export default function OrderPage() {
     setRecipientName(defAddr?.recipientName || "");
     setPhone(defAddr?.phone || "");
     setAddress(defAddr ? `${defAddr.address}${defAddr.landmark ? ` (${defAddr.landmark})` : ""}` : "");
+  };
+
+  // ===== CUSTOMER BARU LANGSUNG DARI HALAMAN ORDER =====
+  const handleCreateCustomer = (name: string, city: string) => {
+    const created = createNewCustomer(name, city);
+    addCustomer(created);
+    setCustomerList(getCustomers());
+    setCustomer(toDisplayCustomer(created, []));
+    setCustomerAddresses([]);
+    setSelectedAddressId("");
+    setRecipientName("");
+    setPhone("");
+    setAddress("");
+    setNewCustomerOpen(false);
+    notify(`Profil ${name} berhasil dibuat`);
   };
 
   const handleAddressChange = (addrId: string) => {
@@ -672,6 +692,7 @@ export default function OrderPage() {
       <label>Customer</label>
       <select value={customer.id} onChange={e => handleCustomerChange(e.target.value)}>
         {customerList.map(c => <option key={c.id} value={c.id}>{c.name} · {c.city}</option>)}
+        <option value={NEW_CUSTOMER_OPTION}>+ Tambah Customer Baru</option>
       </select>
       <small className="customer-wa">Nama WA: {customer.waName}</small>
 
@@ -700,6 +721,9 @@ export default function OrderPage() {
         </label>
       </div>
     </div>
+
+    {/* ===== CUSTOMER BARU MODAL ===== */}
+    {newCustomerOpen && <NewCustomerForm onClose={() => setNewCustomerOpen(false)} onSave={handleCreateCustomer} />}
 
     {/* ===== TAMBAH ALAMAT MODAL ===== */}
     {showAddressModal && <div className="overlay" onClick={() => setShowAddressModal(false)}>

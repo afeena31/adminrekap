@@ -9,6 +9,7 @@ import { useState, useEffect } from "react";
 import { createNewCustomer, toDisplayCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "./data/customers";
 import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentralCustomer, addAddress, updateAddress as updateCentralAddress, deleteAddress as deleteCentralAddress, getCustomerAddresses as getCentralCustomerAddresses, softDeleteCustomer, backupLocalStorage } from "./data/central";
 import { Overview, CustomerPanel } from "./components/panels";
+import { NewCustomerForm } from "./components/NewCustomerForm";
 import { getCollections, getCollectionStats, addCollection, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "./data/demoSeed";
 
@@ -364,7 +365,6 @@ export default function HomePage() {
 }
 
 
-function NewCustomerForm({ onClose, onSave }: { onClose: () => void; onSave: (name: string, city: string) => void }) { const [name, setName] = useState(""); const [city, setCity] = useState(""); return <div className="overlay" onClick={onClose}><section className="modal new-form" onClick={event => event.stopPropagation()}><button className="close" onClick={onClose}>×</button><h2>Customer Baru</h2><p>Mulai dari profilnya. Order pertama dapat ditambahkan setelah ini.</p><label>Nama customer<input value={name} onChange={event => setName(event.target.value)} placeholder="Contoh: Ummu Maryam"/></label><label>Kota / domisili<input value={city} onChange={event => setCity(event.target.value)} placeholder="Contoh: Jakarta Timur"/></label><button className="primary" disabled={!name.trim()} onClick={() => onSave(name.trim(), city.trim() || "Belum diisi")}>Buat Profil Customer</button></section></div> }
 
 function NewOrderForm({ customerName, onClose, onSave }: { customerName: string; onClose: () => void; onSave: (total: number) => void }) { 
   const [brand, setBrand] = useState("Afeena");

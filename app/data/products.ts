@@ -94,9 +94,10 @@ export const modifikasiInfo = [
 ];
 
 export const ongkirInfo = [
-  { name: "ID Express Pulau Jawa", price: 8500, emoji: "🚚" },
+  { name: "ID Express Pulau Jawa", price: 9000, emoji: "🚚" },
+  { name: "ID Express Sumatera (per kg)", price: 11000, emoji: "🚚" },
   { name: "ID Express 2 kg", price: 17000, emoji: "🚚" },
-  { name: "Luar Pulau Jawa", price: null, note: "Menyesuaikan tarif", emoji: "🌏" },
+  { name: "Luar Jawa-Sumatera", price: null, note: "Menyesuaikan tarif", emoji: "🌏" },
   { name: "J&T 40%", price: null, note: "Menyesuaikan tarif", emoji: "📦" },
 ];
 
@@ -142,9 +143,10 @@ export const jilbabModifikasi = [
 export type InvoiceType = "buku" | "ready" | "po-amna" | "pelunasan-amna" | "gabungan";
 
 export const ongkirOptions = [
-  { id: "id-jawa", name: "ID Express Pulau Jawa (flat 8.500/kg)", price: 8500 },
-  { id: "id-jawa-2kg", name: "ID Express 2 kg", price: 17000 },
-  { id: "custom", name: "Custom (luar Jawa / J&T)", price: null },
+  { id: "id-jawa", name: "ID Express Pulau Jawa (flat 9.000/kg)", price: 9000 },
+  { id: "id-jawa-2kg", name: "ID Express Pulau Jawa 2 kg", price: 17000 },
+  { id: "id-sumatera", name: "ID Express Sumatera (11.000/kg)", price: 11000 },
+  { id: "custom", name: "Custom (luar Jawa-Sumatera / J&T)", price: null },
 ];
 
 export const invoiceTypeInfo: Record<InvoiceType, { name: string; desc: string }> = {

@@ -400,9 +400,11 @@ a.nav-link:hover { background: #f5ece5; color: #694628; transform: translateY(-1
 }
 .order-marketer label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
 .order-marketer select { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; font: inherit; font-size: 14px; background: #fff; color: var(--ink); }
-.marketer-fee-preview { margin-top: 12px; background: linear-gradient(135deg, #eef4e8, #e2ecd9); border: 1px solid #d3e2c8; border-radius: 12px; padding: 13px 15px; display: grid; gap: 3px; }
-.marketer-fee-preview span { font-size: 12px; color: #4a6b3a; }
+.marketer-fee-preview { margin-top: 12px; background: linear-gradient(135deg, #eef4e8, #e2ecd9); border: 1px solid #d3e2c8; border-radius: 12px; padding: 13px 15px; display: grid; gap: 5px; }
+.marketer-fee-preview span, .marketer-fee-preview label { font-size: 12px; color: #4a6b3a; font-weight: 600; }
 .marketer-fee-preview b { font-size: 18px; color: #4a6b3a; font-family: var(--serif); }
+.marketer-fee-preview input { font-size: 18px; color: #4a6b3a; font-family: var(--serif); border: 1px solid #c3d6b5; border-radius: 8px; padding: 7px 10px; background: #fff; width: 100%; }
+.marketer-fee-preview input:focus { outline: none; border-color: #8fae72; }
 .marketer-fee-preview small { font-size: 11px; color: #6b625a; }
 
 /* ===== MARKETER SMART SEARCH ===== */

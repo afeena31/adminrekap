@@ -100,6 +100,10 @@ export default function OrderPage() {
 
   const [discountValue, setDiscountValue] = useState(0);
   const [marketerId, setMarketerId] = useState<string>("");
+  // Nominal fee marketer untuk order INI SAJA — beda order bisa beda nominal
+  // (kadang malah Rp0 kalau fee-nya sudah dipotong langsung di sistem lain),
+  // jadi bukan sekadar dihitung otomatis dari defaultFee marketer/produk.
+  const [feeOverride, setFeeOverride] = useState<number | null>(null);
   const [marketerSearch, setMarketerSearch] = useState("");
   const [showMarketerModal, setShowMarketerModal] = useState(false);
   const [mkName, setMkName] = useState("");
@@ -247,6 +251,9 @@ export default function OrderPage() {
     const feePerUnit = item.feeMarketer > 0 ? item.feeMarketer : (selectedMarketer?.defaultFee || 0);
     return sum + feePerUnit * item.qty;
   }, 0);
+  // Nominal yang benar-benar dipakai: hasil ketikan admin (feeOverride) kalau
+  // ada, kalau belum diisi pakai perkiraan otomatis (totalFee) sebagai saran awal.
+  const effectiveFee = marketerId ? (feeOverride ?? totalFee) : 0;
 
 
 
@@ -490,7 +497,7 @@ export default function OrderPage() {
       note,
       marketerId: marketer?.id || null,
       marketerName: marketer?.name || null,
-      totalFee,
+      totalFee: effectiveFee,
       subtotal,
       total,
       status: "confirmed",
@@ -521,18 +528,16 @@ export default function OrderPage() {
 
     // ===== SAVE FEE RECORD =====
 
-    if (marketer && totalFee > 0) {
-      const feeItems = items
-        .map(i => {
-          const feePerUnit = i.feeMarketer > 0 ? i.feeMarketer : (marketer.defaultFee || 0);
-          return {
-            productName: i.name,
-            qty: i.qty,
-            feePerUnit,
-            feeTotal: feePerUnit * i.qty,
-          };
-        })
-        .filter(f => f.feeTotal > 0);
+    if (marketer && effectiveFee > 0) {
+      // Satu baris merangkum nominal yang diketik admin untuk order ini —
+      // bukan dihitung ulang per-produk, supaya jumlahnya selalu cocok dengan
+      // apa yang benar-benar disepakati (bisa beda dari perkiraan otomatis).
+      const feeItems = [{
+        productName: items.map(i => i.name).join(", "),
+        qty: 1,
+        feePerUnit: effectiveFee,
+        feeTotal: effectiveFee,
+      }];
 
 
       const feeRecord: FeeRecord = {
@@ -544,7 +549,7 @@ export default function OrderPage() {
         marketerName: marketer.name,
         date: now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
         items: feeItems,
-        totalFee,
+        totalFee: effectiveFee,
         status: "belum-diambil",
         paidDate: null,
         note: "",
@@ -604,6 +609,7 @@ export default function OrderPage() {
     setDpAmount(order.dp);
     setNote(order.note);
     setMarketerId(order.marketerId || "");
+    setFeeOverride(order.marketerId ? order.totalFee : null);
     setBatch(order.batch || "Batch 7");
 
     // Set editing mode
@@ -773,13 +779,21 @@ export default function OrderPage() {
         />
       </div>
       <div className="marketer-options">
-        <button className={marketerId === "" ? "selected" : ""} onClick={() => { setMarketerId(""); setMarketerSearch(""); }}>
+        <button className={marketerId === "" ? "selected" : ""} onClick={() => { setMarketerId(""); setMarketerSearch(""); setFeeOverride(null); }}>
           <span>— Tanpa marketer —</span>
         </button>
         {marketers.filter(m => m.status === "aktif")
           .filter(m => m.name.toLowerCase().includes(marketerSearch.toLowerCase()))
           .map(m => (
-            <button key={m.id} className={marketerId === m.id ? "selected" : ""} onClick={() => { setMarketerId(m.id); setMarketerSearch(""); }}>
+            <button key={m.id} className={marketerId === m.id ? "selected" : ""} onClick={() => {
+              setMarketerId(m.id);
+              setMarketerSearch("");
+              const suggested = items.reduce((sum, item) => {
+                const feePerUnit = item.feeMarketer > 0 ? item.feeMarketer : (m.defaultFee || 0);
+                return sum + feePerUnit * item.qty;
+              }, 0);
+              setFeeOverride(suggested);
+            }}>
               <span>{m.name}</span>
               {m.defaultFee > 0 && <small>Fee {formatRupiah(m.defaultFee)}</small>}
             </button>
@@ -794,11 +808,18 @@ export default function OrderPage() {
       <button className="add-marketer-btn" onClick={() => { setMkName(""); setMkFee(0); setMkSaveToMaster(true); setShowMarketerModal(true); }}>
         <Plus size={15} /> Tambah Marketer
       </button>
-      {marketerId && totalFee > 0 && (
+      {marketerId && (
         <div className="marketer-fee-preview">
-          <span>Fee marketer otomatis</span>
-          <b>{formatRupiah(totalFee)}</b>
-          <small>Internal · tidak tampil di invoice customer</small>
+          <label htmlFor="marketer-fee-input">Fee marketer untuk order ini</label>
+          <input
+            id="marketer-fee-input"
+            type="number"
+            min="0"
+            value={feeOverride ?? 0}
+            onChange={e => setFeeOverride(Math.max(0, Number(e.target.value) || 0))}
+            placeholder="Contoh: 15000, atau 0 kalau sudah dipotong sistem"
+          />
+          <small>Internal · tidak tampil di invoice customer. Bisa diisi 0 kalau fee sudah dipotong langsung.</small>
         </div>
       )}
     </div>
@@ -990,7 +1011,7 @@ export default function OrderPage() {
       <div className="summary-row"><span>Ongkir</span><b>{ongkir > 0 ? formatRupiah(ongkir) : "—"}</b></div>
       {dpAmount > 0 && <div className="summary-row"><span>DP / Deposit</span><b>-{formatRupiah(dpAmount)}</b></div>}
       <div className="summary-row total-row"><span>Total Tagihan</span><b>{formatRupiah(total)}</b></div>
-      {marketerId && totalFee > 0 && <div className="summary-row fee-row"><span>Fee marketer (internal)</span><b>{formatRupiah(totalFee)}</b></div>}
+      {marketerId && effectiveFee > 0 && <div className="summary-row fee-row"><span>Fee marketer (internal)</span><b>{formatRupiah(effectiveFee)}</b></div>}
     </div>
 
     <button className="primary generate-invoice" onClick={generateInvoice}><FileText size={17} /> Generate Invoice</button>

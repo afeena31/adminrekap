@@ -18,7 +18,7 @@ import {
 } from "../../data/collections";
 import { formatRupiah, type OrderRecord } from "../../data/store";
 
-import { customersData } from "../../data/customers";
+import { getCustomers } from "../../data/central";
 
 type TabKey = "ringkasan" | "order" | "customer" | "payment" | "shipment" | "catatan" | "aktivitas";
 
@@ -510,7 +510,7 @@ export default function CollectionDetailPage() {
 
           {matchedCustomer && (
             <div className="customer-match-hint">
-              ✅ Customer <b>{customersData.find(c => c.id === matchedCustomer)?.name}</b> ditemukan — order akan terhubung otomatis.
+              ✅ Customer <b>{getCustomers().find(c => c.id === matchedCustomer)?.name}</b> ditemukan — order akan terhubung otomatis.
             </div>
           )}
           {!matchedCustomer && (orderForm.customerName.trim() || orderForm.phone.trim()) && (

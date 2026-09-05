@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle, Check, ChevronRight, ClipboardList, MapPin, UserRound, Boxes, Truck, Package, Zap, Clock, MessageCircle, ArrowRight, PackageCheck } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Customer, PaymentData } from "../data/customers";
 
 import {
@@ -30,6 +30,14 @@ import {
 export function Overview({ customer, onTab, onOrder }: { customer: Customer; onTab: (tab: string) => void; onOrder: () => void }) {
   const [ops, setOps] = useState<CustomerOperations>(() => getOperations(customer.id));
   const [notice, setNotice] = useState("");
+
+  // Komponen ini gak di-remount pas pindah customer (cuma re-render dengan
+  // props baru), jadi ops-nya harus dimuat ulang sendiri tiap customer.id
+  // berubah — kalau tidak, Action Center/Product Status Cards nyangkut nunjukin
+  // punya customer sebelumnya.
+  useEffect(() => {
+    setOps(getOperations(customer.id));
+  }, [customer.id]);
 
   const act = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 

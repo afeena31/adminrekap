@@ -1,7 +1,7 @@
 "use client";
 
 import { products as seedProducts, type Product } from "./products";
-import { customersData, type CustomerAddress } from "./customers";
+import { type CustomerAddress } from "./customers";
 
 
 // ===== TYPES =====
@@ -280,18 +280,16 @@ export function getMarketerStats(marketerId: string): MarketerStats | null {
 
 
 // ===== ADDRESS STORE =====
-// Alamat pengiriman disimpan permanen di localStorage.
-// Alamat seed (dari customers.ts) digabung dengan alamat yang disimpan user.
+// Alamat pengiriman disimpan permanen di localStorage (key yang sama dipakai
+// central.ts's addAddress/getCustomerAddresses — lihat app/data/central.ts).
 
 export function getSavedAddresses(): CustomerAddress[] {
   return load<CustomerAddress[]>(KEYS.addresses, []);
 }
 
-// Semua alamat untuk satu customer (seed + tersimpan)
+// Semua alamat tersimpan untuk satu customer
 export function getCustomerAddresses(customerId: string): CustomerAddress[] {
-  const seed = customersData.find(c => c.id === customerId)?.addresses || [];
-  const saved = getSavedAddresses().filter(a => a.customerId === customerId);
-  return [...seed, ...saved];
+  return getSavedAddresses().filter(a => a.customerId === customerId);
 }
 
 // Simpan alamat baru secara permanen

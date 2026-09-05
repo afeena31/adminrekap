@@ -7,9 +7,14 @@ import { useEffect, useState } from "react";
 
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, rekeningByCategory, type Product, type InvoiceType } from "../data/products";
-import { customersData, type Customer, type CustomerAddress } from "../data/customers";
+import { toDisplayCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
 import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, getOrders, getOrderById, saveFee, getNextInvoiceNumber, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
-import { syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
+import { getCustomers, getCustomer as getCentralCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
+
+function loadFirstCustomer(): Customer {
+  const first = getCustomers()[0];
+  return first ? toDisplayCustomer(first, getCustomerAddresses(first.id)) : EMPTY_CUSTOMER;
+}
 
 
 
@@ -66,8 +71,11 @@ type Invoice = {
 const fmt = (v: number) => v.toLocaleString("id-ID");
 
 export default function OrderPage() {
-  const [customer, setCustomer] = useState<Customer>(customersData[0]);
-  const [selectedAddressId, setSelectedAddressId] = useState<string>(customersData[0].defaultAddressId || "");
+  // Mulai dari EMPTY_CUSTOMER (bukan langsung baca localStorage) supaya render
+  // pertama di server & di client sama — data asli dimuat lewat HYDRATION FIX
+  // useEffect di bawah, sama seperti productList/marketers/existingOrders.
+  const [customer, setCustomer] = useState<Customer>(EMPTY_CUSTOMER);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
   const [recipientName, setRecipientName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -126,15 +134,25 @@ export default function OrderPage() {
   const [productList, setProductList] = useState(() => getProducts());
   const [marketers, setMarketers] = useState(() => getMarketers());
   const [customerAddresses, setCustomerAddresses] = useState<CustomerAddress[]>(() => getCustomerAddresses(customer.id));
+  // Kosong dulu di render pertama (server tidak punya localStorage) — diisi di
+  // HYDRATION FIX effect di bawah, sama seperti productList/marketers.
+  const [customerList, setCustomerList] = useState<{ id: string; name: string; city: string }[]>([]);
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
   // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
   useEffect(() => {
+    if (customer.id === "") {
+      const first = loadFirstCustomer();
+      setCustomer(first);
+      setSelectedAddressId(first.defaultAddressId || "");
+      return; // effect ini jalan lagi begitu customer.id berubah, lanjutkan di sana
+    }
     setExistingOrders(getOrders());
     setProductList(getProducts());
     setMarketers(getMarketers());
     setCustomerAddresses(getCustomerAddresses(customer.id));
+    setCustomerList(getCustomers());
   }, [customer.id]);
 
   // ===== CUSTOMER & SHIPPING ADDRESS =====
@@ -145,8 +163,9 @@ export default function OrderPage() {
 
 
   const handleCustomerChange = (customerId: string) => {
-    const c = customersData.find(x => x.id === customerId);
-    if (!c) return;
+    const central = getCentralCustomer(customerId);
+    if (!central) return;
+    const c = toDisplayCustomer(central, getCustomerAddresses(customerId));
     setCustomer(c);
     const all = getCustomerAddresses(customerId);
     const defAddr = all.find(a => a.isDefault) || all[0];
@@ -521,7 +540,8 @@ export default function OrderPage() {
   // ===== LOAD ORDER KE FORM (EDIT MODE) =====
   const loadOrderIntoForm = (order: OrderRecord) => {
     // Load customer
-    const c = customersData.find(x => x.id === order.customerId) || customersData[0];
+    const centralC = (order.customerId ? getCentralCustomer(order.customerId) : undefined) || getCustomers()[0];
+    const c = centralC ? toDisplayCustomer(centralC, getCustomerAddresses(centralC.id)) : EMPTY_CUSTOMER;
     setCustomer(c);
     // Set selected address to default if available
     const all = getCustomerAddresses(c.id);
@@ -651,7 +671,7 @@ export default function OrderPage() {
     <div className="order-customer">
       <label>Customer</label>
       <select value={customer.id} onChange={e => handleCustomerChange(e.target.value)}>
-        {customersData.map(c => <option key={c.id} value={c.id}>{c.name} · {c.city}</option>)}
+        {customerList.map(c => <option key={c.id} value={c.id}>{c.name} · {c.city}</option>)}
       </select>
       <small className="customer-wa">Nama WA: {customer.waName}</small>
 

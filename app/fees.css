@@ -14,7 +14,7 @@
     linear-gradient(180deg, #faf7f2 0%, #f6efe6 45%, #f1e7da 100%);
   background-attachment: fixed;
 }
-.fees-page .topbar { position: sticky; top: 0; background: transparent; z-index: 5; }
+.fees-page .topbar { position: sticky; top: 0; background: rgba(251, 247, 241, 0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 5; }
 
 /* ===== HERO — editorial anchor ===== */
 .fees-hero {

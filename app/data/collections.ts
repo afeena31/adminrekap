@@ -1,7 +1,7 @@
 "use client";
 
 import { getOrders, saveOrder, type OrderRecord } from "./store";
-import { customersData } from "./customers";
+import { getCustomers } from "./central";
 
 
 // ===== COLLECTION TYPES =====
@@ -339,13 +339,14 @@ export function getCollectionStats(collectionId: string): CollectionStats {
 // berdasarkan: Customer ID → WhatsApp → Email → Nama (fuzzy)
 
 export function matchCustomerId(name: string, phone: string): string | null {
-  if (!customersData || customersData.length === 0) return null;
+  const customers = getCustomers();
+  if (customers.length === 0) return null;
 
 
   // 1. Match by phone (normalized)
   if (phone) {
     const normalizedPhone = phone.replace(/[^0-9]/g, "");
-    const byPhone = customersData.find(c => {
+    const byPhone = customers.find(c => {
       const cPhone = (c.phone || "").replace(/[^0-9]/g, "");
       return cPhone && normalizedPhone && cPhone === normalizedPhone;
     });
@@ -355,7 +356,7 @@ export function matchCustomerId(name: string, phone: string): string | null {
   // 2. Match by name (exact or fuzzy)
   if (name) {
     const normalizedName = name.toLowerCase().trim();
-    const byName = customersData.find(c => {
+    const byName = customers.find(c => {
       const cName = c.name.toLowerCase().trim();
       const cWaName = c.waName.toLowerCase().trim();
       return cName === normalizedName || cWaName === normalizedName;
@@ -363,7 +364,7 @@ export function matchCustomerId(name: string, phone: string): string | null {
     if (byName) return byName.id;
 
     // Fuzzy: partial match
-    const fuzzy = customersData.find(c => {
+    const fuzzy = customers.find(c => {
       const cName = c.name.toLowerCase().trim();
       const cWaName = c.waName.toLowerCase().trim();
       return cName.includes(normalizedName) || normalizedName.includes(cName) ||

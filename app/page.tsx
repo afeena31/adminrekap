@@ -5,10 +5,12 @@ import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, Credit
 
 
 import Link from "next/link";
-import { useState } from "react";
-import { customersData, createNewCustomer, type Customer, type CustomerAddress } from "./data/customers";
+import { useState, useEffect } from "react";
+import { createNewCustomer, toDisplayCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "./data/customers";
+import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentralCustomer, addAddress, updateAddress as updateCentralAddress, deleteAddress as deleteCentralAddress, getCustomerAddresses as getCentralCustomerAddresses, softDeleteCustomer, backupLocalStorage } from "./data/central";
 import { Overview, CustomerPanel } from "./components/panels";
 import { getCollections, getCollectionStats, addCollection, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
+import { demoCustomers, demoAddresses, demoCustomerIds } from "./data/demoSeed";
 
 import { formatRupiah } from "./data/store";
 import {
@@ -41,6 +43,10 @@ const metrics = [
   { label: "Total Shipment", value: "4", note: "4 paket terkirim", icon: Truck, tone: "olive", progress: 100 },
 ];
 
+function loadFirstCustomer(): Customer {
+  const first = getCustomers()[0];
+  return first ? toDisplayCustomer(first, getCentralCustomerAddresses(first.id)) : EMPTY_CUSTOMER;
+}
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState("Ringkasan");
@@ -50,14 +56,59 @@ export default function HomePage() {
   const [finderOpen, setFinderOpen] = useState(false);
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
-  const [customer, setCustomer] = useState<Customer>(customersData[0]);
+  // Mulai dari EMPTY_CUSTOMER (bukan langsung baca localStorage) supaya render
+  // pertama di server & di client SAMA — localStorage cuma ada di browser, jadi
+  // kalau dibaca langsung di sini akan bikin hydration mismatch. Data asli dimuat
+  // lewat useEffect di bawah, setelah mount (lihat pola sama di dashboard/fees).
+  const [customer, setCustomer] = useState<Customer>(EMPTY_CUSTOMER);
   const [notice, setNotice] = useState("");
   const [addressFormOpen, setAddressFormOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null);
   const [addrForm, setAddrForm] = useState({ label: "", recipientName: "", phone: "", address: "", landmark: "", courier: "", note: "", isDefault: false });
   const [searchQuery, setSearchQuery] = useState("");
-  const [ops, setOps] = useState<CustomerOperations>(() => getOperations(customersData[0].id));
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [ops, setOps] = useState<CustomerOperations>(() => getOperations("-"));
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
+
+  // ===== HYDRATION FIX: muat customer asli dari localStorage setelah mount =====
+  useEffect(() => {
+    setCustomer(loadFirstCustomer());
+  }, []);
+
+  // Setiap kali customer yang aktif berganti (pindah profil / bikin customer baru),
+  // muat ulang operasinya sendiri — jangan biarkan ops customer sebelumnya "nempel".
+  useEffect(() => {
+    setOps(getOperations(customer.id || "-"));
+  }, [customer.id]);
+
+  // ===== CUSTOMER BARU — beneran tersimpan lewat central.ts, bukan cuma di state React =====
+  const handleCreateCustomer = (name: string, city: string) => {
+    const created = createNewCustomer(name, city);
+    addCustomer(created);
+    setCustomer(toDisplayCustomer(created, []));
+  };
+
+  // ===== DATA DEMO — muat / sembunyikan lewat central.ts, aman & bisa dipulihkan =====
+  const loadDemoData = () => {
+    backupLocalStorage();
+    const existingIds = new Set(getCustomers().map(c => c.id));
+    let added = 0;
+    for (const c of demoCustomers) {
+      if (!existingIds.has(c.id)) { addCustomer(c); added++; }
+    }
+    for (const a of demoAddresses) {
+      addAddress(a);
+    }
+    setCustomer(loadFirstCustomer());
+    notify(added > 0 ? `Data demo dimuat (${added} customer)` : "Data demo sudah dimuat sebelumnya");
+  };
+
+  const clearDemoData = () => {
+    backupLocalStorage();
+    for (const id of demoCustomerIds) softDeleteCustomer(id);
+    setCustomer(loadFirstCustomer());
+    notify("Data demo disembunyikan");
+  };
 
   // ===== OPERATIONS: AKSI → STATUS (state machine) =====
   // Filosofi: Admin tidak memilih status — admin memilih AKSI, sistem mengubah status.
@@ -82,38 +133,54 @@ export default function HomePage() {
     setAddressFormOpen(true);
   };
 
+  // Simpan defaultAddressId ke central.ts juga, supaya tetap benar setelah refresh.
+  const persistDefaultAddressId = (defaultAddressId: string | null) => {
+    const centralCust = getCustomer(customer.id);
+    if (centralCust) updateCentralCustomer({ ...centralCust, defaultAddressId });
+  };
+
   const saveAddress = () => {
     if (!addrForm.label.trim() || !addrForm.recipientName.trim() || !addrForm.address.trim()) { notify("Label, nama penerima, dan alamat wajib diisi"); return; }
     const updatedCustomer = { ...customer };
     let addresses = [...updatedCustomer.addresses];
+    let newAddrId: string | null = null;
     if (editingAddress) {
       addresses = addresses.map(a => a.id === editingAddress.id ? { ...a, ...addrForm, id: a.id, customerId: a.customerId } : a);
     } else {
       const newAddr: CustomerAddress = { id: "addr-" + Date.now(), customerId: customer.id, ...addrForm };
       addresses = [...addresses, newAddr];
+      newAddrId = newAddr.id;
     }
     if (addrForm.isDefault) {
-      addresses = addresses.map(a => ({ ...a, isDefault: a.id === (editingAddress?.id || addresses.find(x => x.isDefault)?.id) ? true : false }));
-      // pastikan hanya satu default
-      const targetId = editingAddress ? editingAddress.id : addresses[addresses.length - 1].id;
+      const targetId = editingAddress ? editingAddress.id : newAddrId!;
       addresses = addresses.map(a => ({ ...a, isDefault: a.id === targetId }));
     }
     updatedCustomer.addresses = addresses;
     updatedCustomer.defaultAddressId = addresses.find(a => a.isDefault)?.id || null;
     setCustomer(updatedCustomer);
+
+    // Simpan ke central.ts supaya alamat beneran tersimpan, bukan cuma di state React.
+    for (const a of addresses) { if (a.id === newAddrId) addAddress(a); else updateCentralAddress(a); }
+    persistDefaultAddressId(updatedCustomer.defaultAddressId);
+
     setAddressFormOpen(false);
     notify(editingAddress ? "Alamat diperbarui" : "Alamat ditambahkan");
   };
 
   const deleteAddress = (addrId: string) => {
     const updatedCustomer = { ...customer };
-    const remaining = updatedCustomer.addresses.filter(a => a.id !== addrId);
+    const remaining = updatedCustomer.addresses.filter(a => a.id !== addrId).map(a => ({ ...a }));
     if (remaining.length > 0 && !remaining.some(a => a.isDefault)) {
       remaining[0].isDefault = true;
     }
     updatedCustomer.addresses = remaining;
     updatedCustomer.defaultAddressId = remaining.find(a => a.isDefault)?.id || null;
     setCustomer(updatedCustomer);
+
+    deleteCentralAddress(addrId);
+    for (const a of remaining) updateCentralAddress(a);
+    persistDefaultAddressId(updatedCustomer.defaultAddressId);
+
     notify("Alamat dihapus");
   };
 
@@ -122,8 +189,32 @@ export default function HomePage() {
     updatedCustomer.addresses = updatedCustomer.addresses.map(a => ({ ...a, isDefault: a.id === addrId }));
     updatedCustomer.defaultAddressId = addrId;
     setCustomer(updatedCustomer);
+
+    for (const a of updatedCustomer.addresses) updateCentralAddress(a);
+    persistDefaultAddressId(addrId);
+
     notify("Alamat default diperbarui");
   };
+
+  // Belum ada customer sama sekali (localStorage kosong) — tampilkan layar
+  // kosong yang jelas, bukan crash atau halaman utama yang isinya string kosong.
+  if (customer.id === "") {
+    return <main className="app-shell">
+      <header className="topbar">
+        <div className="brand">UmayasLa<span>·</span></div>
+        <div className="header-actions"><button className="icon-btn" onClick={() => setSettingsOpen(true)}><MoreHorizontal size={21} /></button></div>
+      </header>
+      <div className="empty-state" style={{ marginTop: 40 }}>
+        <span>👋</span>
+        <h3>Belum ada customer</h3>
+        <p>Tambah customer pertama, atau muat data demo untuk melihat contoh tampilannya.</p>
+        <button className="primary" style={{ marginTop: 16 }} onClick={() => setNewCustomerOpen(true)}><Plus size={16} /> Tambah Customer Baru</button>
+        <button className="quiet" style={{ marginTop: 8 }} onClick={loadDemoData}>Muat Data Demo</button>
+      </div>
+      {newCustomerOpen && <NewCustomerForm onClose={() => setNewCustomerOpen(false)} onSave={(name, city) => { handleCreateCustomer(name, city); setNewCustomerOpen(false); notify(`Profil ${name} berhasil dibuat`); }}/>}
+      {notice && <div className="toast"><Check size={17}/>{notice}</div>}
+    </main>;
+  }
 
   return <main className="app-shell">
 
@@ -131,7 +222,7 @@ export default function HomePage() {
       <button className="icon-btn" aria-label="Kembali" onClick={() => window.history.back()}><ArrowLeft size={21} /></button>
 
       <div className="brand">UmayasLa<span>·</span></div>
-      <div className="header-actions"><Link href="/products" className="icon-btn" aria-label="Katalog produk"><ShoppingBag size={19} /></Link><button className="icon-btn"><Bell size={19} /></button><button className="icon-btn"><MoreHorizontal size={21} /></button></div>
+      <div className="header-actions"><Link href="/products" className="icon-btn" aria-label="Katalog produk"><ShoppingBag size={19} /></Link><button className="icon-btn"><Bell size={19} /></button><button className="icon-btn" onClick={() => setSettingsOpen(true)}><MoreHorizontal size={21} /></button></div>
     </header>
     <button className="customer-finder" onClick={() => setFinderOpen(true)}><Search size={17}/><span>Cari atau pindah customer...</span><kbd>⌘ K</kbd></button>
 
@@ -201,7 +292,8 @@ export default function HomePage() {
     {finderOpen && <div className="overlay" onClick={() => setFinderOpen(false)}><section className="modal finder" onClick={event => event.stopPropagation()}><button className="close" onClick={() => setFinderOpen(false)}>×</button><h2>Universal Search</h2><div className="find-input"><Search size={18}/><input autoFocus placeholder="Cari customer atau collection..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}/></div><button className="new-customer" onClick={() => { setFinderOpen(false); setNewCustomerOpen(true); }}>+ Tambah Customer Baru</button>
       {(() => {
         const q = searchQuery.toLowerCase().trim();
-        const filteredCustomers = q ? customersData.filter(c => c.name.toLowerCase().includes(q) || c.city.toLowerCase().includes(q) || c.waName.toLowerCase().includes(q)) : customersData;
+        const allCustomers = getCustomers().map(c => toDisplayCustomer(c, getCentralCustomerAddresses(c.id)));
+        const filteredCustomers = q ? allCustomers.filter(c => c.name.toLowerCase().includes(q) || c.city.toLowerCase().includes(q) || c.waName.toLowerCase().includes(q)) : allCustomers;
         const filteredCollections = q ? getCollections().filter(c => c.name.toLowerCase().includes(q) || c.tags.some(t => t.toLowerCase().includes(q)) || (c.description || "").toLowerCase().includes(q)) : getCollections();
         return <>
           <p className="muted">Customer</p>
@@ -212,7 +304,19 @@ export default function HomePage() {
       })()}
     </section></div>}
 
-    {newCustomerOpen && <NewCustomerForm onClose={() => setNewCustomerOpen(false)} onSave={(name, city) => { setCustomer(createNewCustomer(name, city)); setNewCustomerOpen(false); setActiveTab("Ringkasan"); notify(`Profil ${name} berhasil dibuat`); }}/>}
+    {newCustomerOpen && <NewCustomerForm onClose={() => setNewCustomerOpen(false)} onSave={(name, city) => { handleCreateCustomer(name, city); setNewCustomerOpen(false); setActiveTab("Ringkasan"); notify(`Profil ${name} berhasil dibuat`); }}/>}
+    {settingsOpen && <div className="overlay" onClick={() => setSettingsOpen(false)}>
+      <section className="modal" onClick={event => event.stopPropagation()}>
+        <button className="close" onClick={() => setSettingsOpen(false)}>×</button>
+        <h2>Pengaturan</h2>
+        <p className="muted" style={{ marginBottom: 14 }}>Data Demo</p>
+        <p style={{ fontSize: 13, color: "#8a7c6c", marginBottom: 14 }}>Muat 3 contoh customer untuk melihat tampilan aplikasi, atau sembunyikan kalau sudah tidak diperlukan. Bisa dipulihkan dari backup lokal kapan saja.</p>
+        <div className="form-actions" style={{ flexDirection: "column", gap: 8 }}>
+          <button className="chat" onClick={() => { loadDemoData(); setSettingsOpen(false); }}>Muat Data Demo</button>
+          <button className="quiet" onClick={() => { clearDemoData(); setSettingsOpen(false); }}>Sembunyikan Data Demo</button>
+        </div>
+      </section>
+    </div>}
     {newOrderOpen && <NewOrderForm customerName={customer.name} onClose={() => setNewOrderOpen(false)} onSave={(total) => { setNewOrderOpen(false); setActiveTab("Order (6)"); notify(`Order baru dibuat · Total Rp ${total.toLocaleString("id-ID")}`); }}/>}
     {chatOpen && <div className="overlay" onClick={() => setChatOpen(false)}><section className="modal" onClick={event => event.stopPropagation()}><button className="close" onClick={() => setChatOpen(false)}>×</button><div className="chat-title"><span className="mini-avatar">{customer.initials}</span><div><b>{customer.name}</b><small>WhatsApp customer</small></div></div><div className="message">Assalamu'alaikum {customer.name.split(" ")[0]}, ada yang bisa kami bantu?</div><div className="composer"><input placeholder="Tulis pesan..."/><button onClick={() => { setChatOpen(false); notify("Pesan siap dikirim ke WhatsApp"); }}>Kirim</button></div></section></div>}
     {orderOpen && <OrderDetailModal customer={customer} ops={ops} onClose={() => setOrderOpen(false)} onAction={handleOrderAction} />}

@@ -11,10 +11,14 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { customersData } from "../data/customers";
+import { toDisplayCustomer } from "../data/customers";
 import { getOrders, getFees, getMarketers, getProducts, formatRupiah } from "../data/store";
 import { getOperations } from "../data/operations";
-import { getDashboardWorkQueue, type WorkQueueItem, type PrimaryCondition } from "../data/central";
+import { getCustomers, getCustomerAddresses as getCentralCustomerAddresses, getDashboardWorkQueue, type WorkQueueItem, type PrimaryCondition } from "../data/central";
+
+function loadAllDisplayCustomers() {
+  return getCustomers().map(c => toDisplayCustomer(c, getCentralCustomerAddresses(c.id)));
+}
 
 export default function DashboardPage() {
   const [notice, setNotice] = useState("");
@@ -24,8 +28,9 @@ export default function DashboardPage() {
   const [fees, setFees] = useState(() => getFees());
   const [marketers, setMarketers] = useState(() => getMarketers());
   const [products, setProducts] = useState(() => getProducts());
-  const [allOps, setAllOps] = useState(() => customersData.map(c => ({ customer: c, ops: getOperations(c.id) })));
+  const [allOps, setAllOps] = useState(() => loadAllDisplayCustomers().map(c => ({ customer: c, ops: getOperations(c.id) })));
   const [workQueue, setWorkQueue] = useState(() => getDashboardWorkQueue());
+  const [totalCustomers, setTotalCustomers] = useState(0);
 
   // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
   useEffect(() => {
@@ -33,8 +38,9 @@ export default function DashboardPage() {
     setFees(getFees());
     setMarketers(getMarketers());
     setProducts(getProducts());
-    setAllOps(customersData.map(c => ({ customer: c, ops: getOperations(c.id) })));
+    setAllOps(loadAllDisplayCustomers().map(c => ({ customer: c, ops: getOperations(c.id) })));
     setWorkQueue(getDashboardWorkQueue());
+    setTotalCustomers(getCustomers().length);
   }, []);
 
   // ===== SECTION 3: TODAY'S ACTIVITY (HISTORI — hanya kejadian yang terjadi) =====
@@ -61,7 +67,7 @@ export default function DashboardPage() {
   };
 
   // ===== SECTION 6: PRODUCTION (domain batch — terpisah dari work queue) =====
-  const productionBatches = customersData.flatMap(c =>
+  const productionBatches = loadAllDisplayCustomers().flatMap(c =>
     c.batches.map(b => ({ customer: c, batch: b }))
   ).filter(({ batch }) => batch.status !== "selesai");
 
@@ -78,7 +84,6 @@ export default function DashboardPage() {
   const totalOutstanding = orders
     .filter(o => o.status !== "paid")
     .reduce((sum, o) => sum + (o.total - o.dp), 0);
-  const totalCustomers = customersData.length;
   const totalOrders = orders.length;
   const totalProducts = products.length;
   const totalMarketers = marketers.filter(m => m.status === "aktif").length;

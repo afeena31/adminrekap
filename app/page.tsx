@@ -417,6 +417,33 @@ function NewOrderForm({ customerName, onClose, onSave }: { customerName: string;
     </div>
   );
 }
+// Menentukan SATU kondisi utama per item, dari 5 dimensi status di ProductStatusCard.
+// Prioritas: fulfillment bermasalah > pembayaran belum lunas > hold > progres produksi > pengiriman > selesai.
+function derivePrimaryCondition(card: ProductStatusCard): { name: string; emoji: string; tone: string } {
+  if (
+    card.progressStatus === "retur" ||
+    card.fulfillmentDecision === "retur" ||
+    card.fulfillmentDecision === "batal" ||
+    card.fulfillmentDecision === "cancel-po" ||
+    card.fulfillmentDecision === "cancel-tanpa-konfirmasi"
+  ) {
+    return fulfillmentDecisionInfo[card.fulfillmentDecision] ?? progressStatusInfo["retur"];
+  }
+  if (card.paymentStatus !== "lunas" && card.paymentStatus !== "refund") {
+    return paymentStatusInfo[card.paymentStatus];
+  }
+  if (card.fulfillmentDecision === "hold-customer" || card.fulfillmentDecision === "hold-admin") {
+    return fulfillmentDecisionInfo[card.fulfillmentDecision];
+  }
+  if (card.progressStatus !== "selesai") {
+    return progressStatusInfo[card.progressStatus];
+  }
+  if (card.shipmentStatus !== "delivered") {
+    return shipmentStatusInfo[card.shipmentStatus];
+  }
+  return progressStatusInfo["selesai"];
+}
+
 // ===== ORDER DETAIL MODAL =====
 // Menampilkan status order dari state machine (operations.ts).
 // Admin tidak memilih status — admin memilih AKSI, sistem mengubah status otomatis.

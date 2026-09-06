@@ -321,7 +321,7 @@ function OrderPanel({ customer }: { customer: Customer }) {
           <span className={`round ${orderStatusTone[order.status] || "sand"}`}><Check size={17}/></span>
           <span>
             <b>{order.items.map(i => i.name).join(", ") || order.number}</b><br/>
-            <small>{order.number} · {formatRupiah(order.total)} · {orderStatusLabel[order.status] || order.status}</small>
+            <small>{order.number} · {formatRupiah(order.total)} · {orderStatusLabel[order.status] || order.status}{order.internalNote ? " · 📌" : ""}</small>
           </span>
           <ChevronRight size={18}/>
         </Link>

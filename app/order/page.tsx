@@ -11,7 +11,7 @@ import { goBack } from "../lib/goBack";
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, rekeningByCategory, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
-import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, getOrders, getOrderById, saveFee, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
+import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
 import { getOrCreateBatchCollection, syncOrderBatchCollection } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
@@ -108,6 +108,7 @@ function OrderPageInner() {
   const [splitShopee, setSplitShopee] = useState(false);
   const [dpAmount, setDpAmount] = useState(0);
   const [note, setNote] = useState("");
+  const [internalNote, setInternalNote] = useState("");
   const [amnaStatus, setAmnaStatus] = useState<"po" | "lunas">("po");
   const [batch, setBatch] = useState("Batch 7");
   const [batchNames, setBatchNames] = useState<string[]>(["Batch 7", "Batch 8"]);
@@ -521,6 +522,7 @@ function OrderPageInner() {
       ongkirLabel,
       dp: dpAmount,
       note,
+      internalNote: internalNote.trim() || undefined,
       marketerId: marketer?.id || null,
       marketerName: marketer?.name || null,
       totalFee: effectiveFee,
@@ -588,6 +590,10 @@ function OrderPageInner() {
         createdAt: Date.now(),
       };
       saveFee(feeRecord);
+    } else if (editingOrderId) {
+      // Marketer/fee dihapus saat edit — bersihkan FeeRecord lama order ini
+      // supaya gak nyangkut selamanya di halaman Fee.
+      removeFeeForOrder(orderId);
     }
 
     // Refresh daftar order agar order yang baru dibuat/diedit langsung terlihat.
@@ -641,6 +647,7 @@ function OrderPageInner() {
     setCustomOngkirLabel(matchedOngkir ? "" : order.ongkirLabel);
     setDpAmount(order.dp);
     setNote(order.note);
+    setInternalNote(order.internalNote || "");
     setMarketerId(order.marketerId || "");
     setFeeOverride(order.marketerId ? order.totalFee : null);
     if (order.batch) setBatchNames(addBatchName(order.batch));
@@ -707,6 +714,7 @@ function OrderPageInner() {
             setItems([]);
             setDpAmount(0);
             setNote("");
+            setInternalNote("");
             setDiscountValue(0);
             setMarketerId("");
             setBatch("Batch 7");
@@ -733,6 +741,7 @@ function OrderPageInner() {
                 <small>{order.customer} · {new Date(order.date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</small>
                 <small>{order.items.map(i => `${i.name} x${i.qty}`).join(", ")}</small>
                 {order.batch && <small className="order-list-batch">📦 {order.batch}</small>}
+                {order.internalNote && <small className="order-list-batch" title={order.internalNote}>📌 Ada catatan internal</small>}
               </div>
               <div className="order-list-right">
                 <b>{formatRupiah(order.total)}</b>
@@ -1084,6 +1093,13 @@ function OrderPageInner() {
       <div className="setting-row">
         <label>Catatan (opsional)</label>
         <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Contoh: kirim sekalian jika semua barang ready" />
+        <small className="field-hint">Catatan ini ikut tampil di invoice & pesan WhatsApp ke customer.</small>
+      </div>
+
+      <div className="setting-row">
+        <label>📌 Catatan Internal (opsional)</label>
+        <textarea value={internalNote} onChange={e => setInternalNote(e.target.value)} placeholder="Contoh: customer sensitif warna, jangan kirim sebelum dikonfirmasi ulang" />
+        <small className="field-hint">Khusus admin — TIDAK PERNAH ikut ke invoice atau WhatsApp customer.</small>
       </div>
     </div>
 
@@ -1281,7 +1297,7 @@ function OrderPageInner() {
           <button className="secondary" onClick={copyInvoice}><Copy size={16} /> Salin Invoice</button>
         </div>
         <div className="invoice-actions">
-          <button className="secondary" onClick={() => { setInvoice(null); setItems([]); setDpAmount(0); setNote(""); setDiscountValue(0); setMarketerId(""); setEditingOrderId(null); notify("Order baru siap dibuat"); }}><Check size={16} /> Selesai</button>
+          <button className="secondary" onClick={() => { setInvoice(null); setItems([]); setDpAmount(0); setNote(""); setInternalNote(""); setDiscountValue(0); setMarketerId(""); setEditingOrderId(null); notify("Order baru siap dibuat"); }}><Check size={16} /> Selesai</button>
         </div>
       </section>
     </div>}

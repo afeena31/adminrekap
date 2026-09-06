@@ -67,7 +67,8 @@ export type OrderRecord = {
   ongkir: number;
   ongkirLabel: string;
   dp: number;
-  note: string;
+  note: string;             // catatan customer — ikut ditampilkan di invoice & pesan WhatsApp
+  internalNote?: string;    // catatan internal admin — TIDAK PERNAH dikirim ke customer
   marketerId: string | null;
   marketerName: string | null;
   totalFee: number;
@@ -441,9 +442,29 @@ export function getFees(): FeeRecord[] {
 }
 
 
+// Satu order = maksimal satu FeeRecord. Sebelumnya tiap kali order (dengan
+// marketer+fee) disimpan — termasuk tiap kali diEDIT — fungsi ini menambah
+// entri BARU tanpa pernah mengecek entri lama punya order yang sama, jadi
+// fee marketer dobel/tripel/dst di halaman Fee tiap order-nya diedit ulang.
+// Sekarang: kalau order itu sudah pernah punya FeeRecord, perbarui entri yang
+// sama (pakai id lama) — status "sudah-diambil"/paidDate yang sudah tercatat
+// TIDAK ikut ter-reset, cuma nominal/item fee-nya yang disegarkan.
 export function saveFee(fee: FeeRecord): FeeRecord[] {
   const list = getFees();
-  const updated = [fee, ...list];
+  const existing = list.find(f => f.orderId === fee.orderId);
+  const merged: FeeRecord = existing
+    ? { ...fee, id: existing.id, status: existing.status, paidDate: existing.paidDate, createdAt: existing.createdAt }
+    : fee;
+  const filtered = list.filter(f => f.orderId !== fee.orderId);
+  const updated = [merged, ...filtered];
+  save(KEYS.fees, updated);
+  return updated;
+}
+
+// Dipakai saat order diedit sampai marketer/fee-nya dihapus — supaya fee lama
+// dari kondisi sebelumnya gak nyangkut selamanya di halaman Fee.
+export function removeFeeForOrder(orderId: string): FeeRecord[] {
+  const updated = getFees().filter(f => f.orderId !== orderId);
   save(KEYS.fees, updated);
   return updated;
 }

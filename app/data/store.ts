@@ -333,6 +333,23 @@ export function getOrdersForCustomer(customerId: string): OrderRecord[] {
   return getOrders().filter(o => o.customerId === customerId);
 }
 
+// Total dibayar & outstanding dari order ASLI seorang customer — dipakai di
+// beberapa tempat (situation-strip, kartu metrik, ringkasan tab Payment) yang
+// dulu masing-masing baca field customer.paid/customer.outstanding statis
+// ("Rp 0" selalu, gak pernah dihitung ulang sejak migrasi ke central.ts).
+//
+// Dihitung dari DP (order.dp), BUKAN order.status === "paid" — sampai saat
+// ini tidak ada satupun alur di aplikasi yang benar-benar mengubah status
+// order jadi "paid" (cuma "draft"/"confirmed" yang pernah dipakai), jadi
+// pendekatan berbasis status akan selalu menghasilkan Rp 0 walau DP/pelunasan
+// sudah dicatat. Kalau nanti ada fitur "Tandai Lunas" yang benar-benar
+// mengubah status, order itu otomatis dihitung lunas penuh (bukan cuma DP-nya).
+export function computePaymentTotals(orders: OrderRecord[]) {
+  const totalPaid = orders.reduce((sum, o) => sum + (o.status === "paid" ? o.total : o.dp), 0);
+  const totalOutstanding = orders.reduce((sum, o) => sum + (o.status === "paid" ? 0 : o.total - o.dp), 0);
+  return { totalPaid, totalOutstanding };
+}
+
 // Perbarui order yang sudah ada (misal saat edit order)
 export function updateOrder(order: OrderRecord): OrderRecord[] {
   const list = getOrders();

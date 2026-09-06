@@ -255,6 +255,66 @@ export function hardDeleteCollection(id: string): Collection[] {
   return updated;
 }
 
+// ===== JEMBATAN BATCH PRODUKSI → COLLECTION "PO BATCH" =====
+// Nama batch di halaman Order (mis. "Batch 7", store.ts) dan Collection tipe
+// "po-batch" di sini dulu dua sistem terpisah yang tidak saling kenal —
+// halaman Order cuma nyimpen batch sebagai label teks bebas, sementara
+// Collection Workspace tidak pernah tahu batch itu ada. Fungsi di bawah ini
+// menjembatani keduanya: satu Collection "PO Batch" otomatis dibuat/dipakai
+// ulang untuk tiap nama batch, dan order yang memakai batch itu otomatis
+// tertaut ke situ — supaya Collection Workspace jadi tampilan manajemen
+// produksi lintas-customer, tanpa perlu tab/sistem baru yang terpisah lagi.
+
+function slugifyBatchName(name: string): string {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+// ID deterministik dari nama batch (mis. "Batch 7" -> "col-po-batch-7") supaya
+// selalu cocok dengan Collection "PO Batch 7"/"PO Batch 8" yang sudah ada di
+// seed data, bukan bikin duplikat.
+export function getOrCreateBatchCollection(batchName: string): Collection {
+  const id = "col-po-" + slugifyBatchName(batchName);
+  const all = getAllCollections();
+  const existing = all.find(c => c.id === id);
+  if (existing) {
+    if (existing.deletedAt !== null) {
+      const revived: Collection = { ...existing, deletedAt: null, updatedAt: Date.now() };
+      updateCollection(revived);
+      return revived;
+    }
+    return existing;
+  }
+  const now = Date.now();
+  const collection: Collection = {
+    id,
+    name: "PO " + batchName,
+    type: "po-batch",
+    status: "aktif",
+    icon: "📦",
+    color: collectionColors[0],
+    description: `Pre-order produksi ${batchName} (dibuat otomatis dari halaman Order).`,
+    tags: ["po", "batch"],
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  };
+  addCollection(collection);
+  return collection;
+}
+
+// Pastikan order tertaut ke Collection batch yang benar — dipanggil tiap
+// order disimpan/diedit dari halaman Order. Kalau batch berubah (atau item
+// Amna Jilbab dihapus saat edit, batchName jadi undefined), order dilepas
+// dulu dari Collection batch lama sebelum ditautkan ke yang baru.
+export function syncOrderBatchCollection(orderId: string, batchName: string | undefined, previousBatchName?: string) {
+  if (previousBatchName && previousBatchName !== batchName) {
+    removeOrderFromCollection("col-po-" + slugifyBatchName(previousBatchName), orderId);
+  }
+  if (!batchName) return;
+  const collection = getOrCreateBatchCollection(batchName);
+  addOrderToCollection(collection.id, orderId);
+}
+
 // ===== COLLECTION ORDER STORE =====
 
 export function getCollectionOrders(): CollectionOrder[] {

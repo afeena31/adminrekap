@@ -4,7 +4,7 @@ import { AlertCircle, Check, ChevronRight, ClipboardList, MapPin, UserRound, Box
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { Customer, PaymentData } from "../data/customers";
-import { getOrdersForCustomer, formatRupiah, type OrderRecord } from "../data/store";
+import { getOrdersForCustomer, formatRupiah, computePaymentTotals, type OrderRecord } from "../data/store";
 
 import {
   getOperations,
@@ -81,7 +81,7 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
           <div><Check size={15}/><span>Rekomendasi sistem berdasarkan status produksi & permintaan customer.</span></div>
           <div><Clock size={15}/><span>Estimasi siap kirim: <span className="decision-expected">12 Juni</span></span></div>
         </div>
-        <button onClick={() => onTab("Shipment (4)")}>Kelola Pengiriman <ArrowRight size={14}/></button>
+        <button onClick={() => onTab("Shipment")}>Kelola Pengiriman <ArrowRight size={14}/></button>
       </div>
     </section>
 
@@ -90,7 +90,7 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
     <section className="card product-cards">
       <div className="section-head">
         <div><h2>Product Status Cards</h2><p>Setiap produk menjelaskan kondisinya sendiri.</p></div>
-        <button onClick={() => onTab("Order (6)")}>Lihat semua</button>
+        <button onClick={() => onTab("Order")}>Lihat semua</button>
       </div>
       {ops.productCards.map(card => (
         <ProductCard key={card.id} card={card} onAction={handleAction} />
@@ -407,7 +407,12 @@ function ShipmentRow({ status, order, place, ready, ship }: { status: string; or
 function ShipmentPanel({ customer }: { customer: Customer }) {
   const [status, setStatus] = useState("Siap Kirim");
   const rows = customer.shipments.map(item => item.order === customer.overview.latestOrder.id ? { ...item, status } : item);
-  return <div className="content"><section className="card panel"><div className="section-head"><h2>Pengiriman Customer</h2><button>Terbaru dulu</button></div><p className="panel-hint">Status pengiriman terpisah dari status produksi/batch.</p><div className="shipment-filter"><label>Status utama<select value={status} onChange={event => setStatus(event.target.value)}><option>Siap Kirim</option><option>Sudah Packing</option><option>Perlu Packing</option><option>Hold Pengiriman</option><option>Menunggu Pick Up</option><option>Sudah Dikirim</option><option>Proses Retur</option><option>Refund</option></select></label><span>Ubah status contoh untuk {customer.overview.latestOrder.items.split("\n")[0]}</span></div>{rows.map(item => <ShipmentRow key={item.order} {...item} />)}</section></div>;
+  return <div className="content"><section className="card panel"><div className="section-head"><h2>Pengiriman Customer</h2><button>Terbaru dulu</button></div><p className="panel-hint">Status pengiriman terpisah dari status produksi/batch.</p>
+    {rows.length === 0 ? <p className="panel-hint" style={{ marginTop: 10 }}>Belum ada data pengiriman untuk customer ini.</p> : <>
+      <div className="shipment-filter"><label>Status utama<select value={status} onChange={event => setStatus(event.target.value)}><option>Siap Kirim</option><option>Sudah Packing</option><option>Perlu Packing</option><option>Hold Pengiriman</option><option>Menunggu Pick Up</option><option>Sudah Dikirim</option><option>Proses Retur</option><option>Refund</option></select></label></div>
+      {rows.map(item => <ShipmentRow key={item.order} {...item} />)}
+    </>}
+  </section></div>;
 }
 
 function PaymentPanel({ customer }: { customer: Customer }) {
@@ -416,6 +421,10 @@ function PaymentPanel({ customer }: { customer: Customer }) {
   const [notice, setNotice] = useState("");
   const [editingPayment, setEditingPayment] = useState<PaymentData | null>(null);
   const [payments, setPayments] = useState<PaymentData[]>(customer.payments);
+  // ===== HYDRATION FIX + data asli: customer.paid/outstanding statis "Rp 0" =====
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
+  useEffect(() => { setOrders(getOrdersForCustomer(customer.id)); }, [customer.id]);
+  const { totalPaid, totalOutstanding } = computePaymentTotals(orders);
   const act = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2500); };
 
   const handleSavePayment = (updated: PaymentData) => {
@@ -426,12 +435,13 @@ function PaymentPanel({ customer }: { customer: Customer }) {
 
   return <div className="content">
     <section className="card payment-panel">
-      <div className="section-head"><div><h2>Payment Customer</h2><p>{customer.paid} sudah diterima · {customer.outstanding} tersisa</p></div><button>Terbaru dulu</button></div>
+      <div className="section-head"><div><h2>Payment Customer</h2><p>{formatRupiah(totalPaid)} sudah diterima · {formatRupiah(totalOutstanding)} tersisa</p></div><button>Terbaru dulu</button></div>
       <div className="payment-summary">
-        <span>Total tagihan aktif <b>{customer.overview.ledgerTotal}</b></span>
-        <span>Sudah masuk <b>{customer.paid}</b></span>
-        <span>Sisa perlu ditangani <b>{customer.outstanding}</b></span>
+        <span>Total tagihan aktif <b>{formatRupiah(totalPaid + totalOutstanding)}</b></span>
+        <span>Sudah masuk <b>{formatRupiah(totalPaid)}</b></span>
+        <span>Sisa perlu ditangani <b>{formatRupiah(totalOutstanding)}</b></span>
       </div>
+      {payments.length === 0 && <p className="panel-hint" style={{ marginTop: 10 }}>Belum ada rincian tagihan per-invoice untuk customer ini.</p>}
       {payments.map((item, index) => (
         <PaymentRow key={item.invoice} {...item}
           followUp={index === 1 ? followUp : index === 2 ? secondFollowUp : undefined}

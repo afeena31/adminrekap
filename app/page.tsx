@@ -12,10 +12,10 @@ import { Overview, CustomerPanel } from "./components/panels";
 import { NewCustomerForm, EditCustomerForm, type EditableCustomerFields } from "./components/NewCustomerForm";
 import { BottomNav } from "./components/BottomNav";
 import { goBack } from "./lib/goBack";
-import { getCollections, getCollectionStats, addCollection, saveCollections, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
+import { getCollections, getAllCollections, seedCollections, getCollectionStats, addCollection, saveCollections, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "./data/demoSeed";
 
-import { formatRupiah, getOrdersForCustomer, saveProducts, saveMarketers, saveFees, type OrderRecord } from "./data/store";
+import { formatRupiah, getOrdersForCustomer, computePaymentTotals, saveProducts, getMarketers, saveMarketers, defaultMarketers, saveFees, type OrderRecord } from "./data/store";
 import { getOperations, type CustomerOperations } from "./data/operations";
 
 
@@ -37,9 +37,11 @@ function buildTabs(customer: Customer, orderCount: number): string[] {
 }
 
 function buildMetrics(customer: Customer, orders: OrderRecord[]) {
-  const paidOrders = orders.filter(o => o.status === "paid");
-  const totalPaid = paidOrders.reduce((sum, o) => sum + o.total, 0);
-  const totalOutstanding = orders.filter(o => o.status !== "paid").reduce((sum, o) => sum + (o.total - o.dp), 0);
+  const { totalPaid, totalOutstanding } = computePaymentTotals(orders);
+  // Lunas = status "paid" ATAU DP sudah menutupi total — status "paid" sendiri
+  // belum pernah dipakai di alur manapun, jadi kalau cuma mengandalkan status
+  // label ini akan selalu "0% invoice selesai" walau DP-nya sudah penuh.
+  const paidOrders = orders.filter(o => o.status === "paid" || o.dp >= o.total);
   const paidPercent = orders.length > 0 ? Math.round((paidOrders.length / orders.length) * 100) : 0;
   const outstandingCount = orders.length - paidOrders.length;
   return [
@@ -139,9 +141,14 @@ export default function HomePage() {
       if (!result.ok) softDeleteCustomer(id);
     }
     for (const a of demoAddresses) deleteCentralAddress(a.id);
-    saveCollections([]);
+    // Hanya hapus Collection & Marketer BAWAAN (seed) — bukan semuanya, supaya
+    // Collection "PO Batch" atau marketer asli yang sudah dibuat user tidak
+    // ikut kehapus kalau tombol ini dipakai lagi di kemudian hari.
+    const seedCollectionIds = new Set(seedCollections.map(c => c.id));
+    saveCollections(getAllCollections().filter(c => !seedCollectionIds.has(c.id)));
+    const seedMarketerIds = new Set(defaultMarketers.map(m => m.id));
+    saveMarketers(getMarketers().filter(m => !seedMarketerIds.has(m.id)));
     saveProducts([]);
-    saveMarketers([]);
     saveFees([]);
     setCustomer(loadFirstCustomer());
     notify("Semua data demo (customer, collection, produk, marketer) dihapus permanen");
@@ -295,8 +302,8 @@ export default function HomePage() {
 
       {/* ===== SITUATION STRIP — kondisi customer saat ini ===== */}
       <div className="situation-strip">
-        <div className="situation-item"><small>Lifetime Value</small><b>{customer.paid}</b></div>
-        <div className="situation-item"><small>Outstanding</small><b className="situation-warn">{customer.outstanding}</b></div>
+        <div className="situation-item"><small>Lifetime Value</small><b>{formatRupiah(computePaymentTotals(customerOrders).totalPaid)}</b></div>
+        <div className="situation-item"><small>Outstanding</small><b className="situation-warn">{formatRupiah(computePaymentTotals(customerOrders).totalOutstanding)}</b></div>
         <div className="situation-item"><small>Order Aktif</small><b>{ops.productCards.filter(c => c.nextAction !== "tidak-ada").length} produk</b></div>
         <div className="situation-item"><small>Produksi</small><b>{ops.productCards.filter(c => c.progressStatus === "produksi" || c.progressStatus === "qc").length} berjalan</b></div>
         <div className="situation-item"><small>Pengiriman</small><b>{ops.productCards.filter(c => c.shipmentStatus === "menunggu-pickup" || c.shipmentStatus === "dalam-perjalanan").length} aktif</b></div>

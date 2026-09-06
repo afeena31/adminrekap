@@ -13,6 +13,7 @@ import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
 import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, getOrders, getOrderById, saveFee, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
+import { getOrCreateBatchCollection, syncOrderBatchCollection } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
 import { MoneyInput } from "../components/MoneyInput";
 
@@ -263,7 +264,13 @@ function OrderPageInner() {
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const discountAmount = calculateDiscount(subtotal, discountType, discountValue);
   const ongkir = ongkirId === "custom" ? customOngkir : (ongkirOptions.find(o => o.id === ongkirId)?.price || 0);
-  const total = subtotal - discountAmount + ongkir - dpAmount;
+  // "total" adalah TOTAL UTUH invoice (dipakai buildInvoiceText & disimpan ke
+  // orderRecord.total) — JANGAN kurangi DP di sini. Sebelumnya DP ikut
+  // dikurangkan di sini, jadi order.total yang tersimpan jadi salah (bahkan
+  // bisa negatif kalau DP >= subtotal+ongkir), merusak semua yang baca
+  // order.total (Payment/Outstanding, Collection stats, invoice "Sisa
+  // Pelunasan" yang sendirinya menghitung total - dp lagi → dp kepotong dua kali).
+  const total = subtotal - discountAmount + ongkir;
   // Fee marketer: gunakan fee per produk jika tersedia, jika tidak gunakan defaultFee marketer
   const selectedMarketer = marketers.find(m => m.id === marketerId);
   const totalFee = items.reduce((sum, item) => {
@@ -543,7 +550,13 @@ function OrderPageInner() {
       }
     }
 
-
+    // ===== SINKRON COLLECTION "PO BATCH" =====
+    // Non-fatal — kegagalan di sini tidak boleh menggagalkan order yang sudah tersimpan.
+    try {
+      syncOrderBatchCollection(orderId, hasAmna ? batch : undefined, existingOrder?.batch);
+    } catch {
+      // ignore
+    }
 
     // ===== SAVE FEE RECORD =====
 
@@ -1003,6 +1016,7 @@ function OrderPageInner() {
               setBatchNames(updated);
               setBatch(name);
               setNewBatchInput("");
+              getOrCreateBatchCollection(name);
               notify(`Batch "${name}" ditambahkan`);
             }}
           >
@@ -1078,8 +1092,9 @@ function OrderPageInner() {
       <div className="summary-row"><span>Subtotal</span><b>{formatRupiah(subtotal)}</b></div>
       {discountAmount > 0 && <div className="summary-row"><span>Diskon</span><b>-{formatRupiah(discountAmount)}</b></div>}
       <div className="summary-row"><span>Ongkir</span><b>{ongkir > 0 ? formatRupiah(ongkir) : "—"}</b></div>
-      {dpAmount > 0 && <div className="summary-row"><span>DP / Deposit</span><b>-{formatRupiah(dpAmount)}</b></div>}
       <div className="summary-row total-row"><span>Total Tagihan</span><b>{formatRupiah(total)}</b></div>
+      {dpAmount > 0 && <div className="summary-row"><span>DP / Deposit</span><b>-{formatRupiah(dpAmount)}</b></div>}
+      {dpAmount > 0 && <div className="summary-row"><span>Sisa Pelunasan</span><b>{formatRupiah(total - dpAmount)}</b></div>}
       {marketerId && effectiveFee > 0 && <div className="summary-row fee-row"><span>Fee marketer (internal)</span><b>{formatRupiah(effectiveFee)}</b></div>}
     </div>
 

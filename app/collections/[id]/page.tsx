@@ -35,13 +35,13 @@ const tabs: { key: TabKey; label: string }[] = [
 export default function CollectionDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
-  const [collection, setCollection] = useState<Collection | null>(() => getCollection(id));
+  const [collection, setCollection] = useState<Collection | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("ringkasan");
   const [notice, setNotice] = useState("");
   const [showAddOrder, setShowAddOrder] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [orders, setOrders] = useState<OrderRecord[]>(() => getOrdersForCollection(id));
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [editForm, setEditForm] = useState({
     name: "",
     type: "custom" as CollectionType,

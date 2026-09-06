@@ -7,13 +7,13 @@ import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, Credit
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { createNewCustomer, toDisplayCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "./data/customers";
-import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentralCustomer, addAddress, updateAddress as updateCentralAddress, deleteAddress as deleteCentralAddress, getAddresses, getCustomerAddresses as getCentralCustomerAddresses, softDeleteCustomer, backupLocalStorage, listBackups, restoreBackup, type BackupInfo } from "./data/central";
+import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentralCustomer, addAddress, updateAddress as updateCentralAddress, deleteAddress as deleteCentralAddress, getAddresses, getCustomerAddresses as getCentralCustomerAddresses, softDeleteCustomer, hardDeleteCustomer, backupLocalStorage, listBackups, restoreBackup, type BackupInfo } from "./data/central";
 import { Overview, CustomerPanel } from "./components/panels";
 import { NewCustomerForm, EditCustomerForm, type EditableCustomerFields } from "./components/NewCustomerForm";
-import { getCollections, getCollectionStats, addCollection, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
+import { getCollections, getCollectionStats, addCollection, saveCollections, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "./data/demoSeed";
 
-import { formatRupiah, getOrdersForCustomer, type OrderRecord } from "./data/store";
+import { formatRupiah, getOrdersForCustomer, saveProducts, saveMarketers, saveFees, type OrderRecord } from "./data/store";
 import {
   getOperations,
   performAction,
@@ -90,6 +90,7 @@ export default function HomePage() {
   const [deleteCustomerConfirmOpen, setDeleteCustomerConfirmOpen] = useState(false);
   const [backups, setBackups] = useState<BackupInfo[]>([]);
   const [restoreConfirmKey, setRestoreConfirmKey] = useState<string | null>(null);
+  const [wipeDemoConfirmOpen, setWipeDemoConfirmOpen] = useState(false);
   const [ops, setOps] = useState<CustomerOperations>(() => getOperations("-"));
   const [customerOrders, setCustomerOrders] = useState<OrderRecord[]>([]);
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
@@ -139,6 +140,25 @@ export default function HomePage() {
     for (const id of demoCustomerIds) softDeleteCustomer(id);
     setCustomer(loadFirstCustomer());
     notify("Data demo disembunyikan");
+  };
+
+  // ===== HAPUS PERMANEN SEMUA DATA DEMO (customer, alamat, collection,
+  // produk, marketer) — beda dari "Sembunyikan" di atas yang cuma soft-delete
+  // 3 customer. Ini benar-benar menghapus, termasuk katalog produk contoh &
+  // daftar marketer contoh. Tetap dicadangkan dulu otomatis sebelum dihapus.
+  const wipeAllDemoData = () => {
+    backupLocalStorage();
+    for (const id of demoCustomerIds) {
+      const result = hardDeleteCustomer(id);
+      if (!result.ok) softDeleteCustomer(id);
+    }
+    for (const a of demoAddresses) deleteCentralAddress(a.id);
+    saveCollections([]);
+    saveProducts([]);
+    saveMarketers([]);
+    saveFees([]);
+    setCustomer(loadFirstCustomer());
+    notify("Semua data demo (customer, collection, produk, marketer) dihapus permanen");
   };
 
   // ===== EDIT PROFIL CUSTOMER =====
@@ -379,6 +399,10 @@ export default function HomePage() {
         <div className="form-actions" style={{ flexDirection: "column", gap: 8 }}>
           <button className="chat" onClick={() => { loadDemoData(); setSettingsOpen(false); }}>Muat Data Demo</button>
           <button className="quiet" onClick={() => { clearDemoData(); setSettingsOpen(false); }}>Sembunyikan Data Demo</button>
+          <button
+            onClick={() => setWipeDemoConfirmOpen(true)}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "1px solid #c0392b", background: "#fff", color: "#c0392b", borderRadius: 10, padding: "10px 15px", fontWeight: 600, cursor: "pointer" }}
+          ><Trash2 size={15} /> Hapus Semua Data Demo (Permanen)</button>
         </div>
 
         <p className="muted" style={{ marginTop: 22, marginBottom: 14 }}>Cadangan Data</p>
@@ -406,6 +430,19 @@ export default function HomePage() {
           <div className="confirm-actions">
             <button className="secondary" onClick={() => setRestoreConfirmKey(null)}>Batal</button>
             <button className="danger" onClick={() => handleRestoreBackup(restoreConfirmKey)}>Pulihkan</button>
+          </div>
+        </section>
+      </div>
+    )}
+    {wipeDemoConfirmOpen && (
+      <div className="overlay" onClick={() => setWipeDemoConfirmOpen(false)}>
+        <section className="modal confirm-modal" onClick={event => event.stopPropagation()}>
+          <h2>Hapus Semua Data Demo?</h2>
+          <p>Ini akan menghapus PERMANEN: 3 customer contoh + alamatnya, semua Collection contoh, semua produk di katalog, dan semua marketer contoh.</p>
+          <p className="muted">Kondisi sekarang otomatis dicadangkan dulu (lihat "Cadangan Data" di atas), jadi masih bisa dipulihkan kalau berubah pikiran.</p>
+          <div className="confirm-actions">
+            <button className="secondary" onClick={() => setWipeDemoConfirmOpen(false)}>Batal</button>
+            <button className="danger" onClick={() => { wipeAllDemoData(); setWipeDemoConfirmOpen(false); setSettingsOpen(false); }}><Trash2 size={15} /> Hapus Semua</button>
           </div>
         </section>
       </div>
@@ -565,8 +602,13 @@ function OrderDetailModal({ customer, ops, onClose, onAction }: { customer: Cust
 
 
 function CollectionWorkspaceSection() {
-  const [collections, setCollections] = useState<Collection[]>(() => getCollections());
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [showForm, setShowForm] = useState(false);
+
+  // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
+  useEffect(() => {
+    setCollections(getCollections());
+  }, []);
   const [form, setForm] = useState({
     name: "",
     type: "custom" as CollectionType,

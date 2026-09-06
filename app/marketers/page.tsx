@@ -23,7 +23,7 @@ const statusEmoji: Record<MarketerStatus, string> = {
 };
 
 export default function MarketersPage() {
-  const [marketerList, setMarketerList] = useState<Marketer[]>(() => getMarketers());
+  const [marketerList, setMarketerList] = useState<Marketer[]>([]);
   const [filterStatus, setFilterStatus] = useState<StatusFilter>("semua");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");

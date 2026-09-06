@@ -16,7 +16,7 @@ import { formatRupiah } from "../data/store";
 
 
 export default function CollectionsPage() {
-  const [collectionList, setCollectionList] = useState<Collection[]>(() => getCollections());
+  const [collectionList, setCollectionList] = useState<Collection[]>([]);
   const [notice, setNotice] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingCollection, setEditingCollection] = useState<Collection | null>(null);

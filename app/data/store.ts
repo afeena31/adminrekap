@@ -431,6 +431,10 @@ export function saveFee(fee: FeeRecord): FeeRecord[] {
   return updated;
 }
 
+export function saveFees(list: FeeRecord[]) {
+  save(KEYS.fees, list);
+}
+
 export function updateFeeStatus(id: string, status: "belum-diambil" | "sudah-diambil", paidDate: string | null, note?: string): FeeRecord[] {
   const list = getFees();
   const updated = list.map(f => f.id === id ? { ...f, status, paidDate, note: note ?? f.note } : f);

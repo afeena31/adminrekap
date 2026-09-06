@@ -7,14 +7,14 @@ import { useEffect, useState } from "react";
 import { getFees, updateFeeStatus, getMarketers, formatRupiah, type FeeRecord } from "../data/store";
 
 export default function FeesPage() {
-  const [feeList, setFeeList] = useState<FeeRecord[]>(() => getFees());
+  const [feeList, setFeeList] = useState<FeeRecord[]>([]);
   const [notice, setNotice] = useState("");
   const [filterStatus, setFilterStatus] = useState<"semua" | "belum-diambil" | "sudah-diambil">("semua");
   const [filterMarketer, setFilterMarketer] = useState("semua");
   const [search, setSearch] = useState("");
   const [detailFee, setDetailFee] = useState<FeeRecord | null>(null);
 
-  const [marketers, setMarketers] = useState(() => getMarketers());
+  const [marketers, setMarketers] = useState<ReturnType<typeof getMarketers>>([]);
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 

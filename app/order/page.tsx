@@ -126,7 +126,7 @@ function OrderPageInner() {
   // ===== EDIT ORDER state =====
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [showOrderList, setShowOrderList] = useState(false);
-  const [existingOrders, setExistingOrders] = useState<OrderRecord[]>(() => getOrders());
+  const [existingOrders, setExistingOrders] = useState<OrderRecord[]>([]);
 
 
 
@@ -152,8 +152,8 @@ function OrderPageInner() {
   const [jRequestPrice, setJRequestPrice] = useState(0);
 
 
-  const [productList, setProductList] = useState(() => getProducts());
-  const [marketers, setMarketers] = useState(() => getMarketers());
+  const [productList, setProductList] = useState<ReturnType<typeof getProducts>>([]);
+  const [marketers, setMarketers] = useState<ReturnType<typeof getMarketers>>([]);
   const [customerAddresses, setCustomerAddresses] = useState<CustomerAddress[]>(() => getCustomerAddresses(customer.id));
   // Kosong dulu di render pertama (server tidak punya localStorage) — diisi di
   // HYDRATION FIX effect di bawah, sama seperti productList/marketers.

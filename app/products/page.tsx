@@ -44,7 +44,7 @@ const emptyForm: ProductFormState = {
 const emojiOptions = ["📚", "📖", "🐝", "🧕", "🖤", "🧤", "🧦", "🌸", "🚚", "💰", "✨", "📦", "🎈", "🔤", "🔢", "🕌", "🌍", "✂️", "🧵", "🎀"];
 
 export default function ProductsPage() {
-  const [productList, setProductList] = useState<Product[]>(() => getProducts());
+  const [productList, setProductList] = useState<Product[]>([]);
   const [activeCategory, setActiveCategory] = useState("semua");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("terlaris");

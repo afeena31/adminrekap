@@ -335,12 +335,12 @@ export default function CollectionDetailPage() {
             </div>
           </div>
           {stats.unlinkedCustomers > 0 && (
-            <div className="collection-order-form .customer-unlinked-hint" style={{ marginTop: 14, fontSize: 12, color: "#6d5d8a", background: "#e8e4f0", borderRadius: 6, padding: "8px 12px" }}>
+            <div className="customer-unlinked-hint" style={{ marginTop: 14, fontSize: 12, color: "#6d5d8a", background: "#e8e4f0", borderRadius: 6, padding: "8px 12px" }}>
               ⚠️ {stats.unlinkedCustomers} order belum terhubung ke customer. Buka tab Customer untuk melihat detail.
             </div>
           )}
           {stats.draftOrders > 0 && (
-            <div className="collection-order-form .customer-unlinked-hint" style={{ marginTop: 8, fontSize: 12, color: "#966339", background: "#f7eadb", borderRadius: 6, padding: "8px 12px" }}>
+            <div className="draft-orders-hint" style={{ marginTop: 8, fontSize: 12, color: "#966339", background: "#f7eadb", borderRadius: 6, padding: "8px 12px" }}>
               📝 {stats.draftOrders} order masih berstatus draft.
             </div>
           )}

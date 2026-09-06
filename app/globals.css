@@ -22,6 +22,7 @@
 
   --line: #ece2d6;             /* hairline border */
   --line-soft: #f1e9de;
+  --card: #fdfaf5;             /* generic input/card fill (alias of --cream) */
 
   /* Accents */
   --brown: #745034;
@@ -105,6 +106,18 @@ body {
 .brand, h1, h2, h3 {
   font-family: var(--serif);
   letter-spacing: -0.01em;
+}
+
+/* Label kecil huruf besar di atas judul modal (mis. "ALAMAT BARU · Nama").
+   Dipakai 12+ form di seluruh app tapi sebelumnya tidak pernah punya CSS
+   sama sekali — tampil sebagai teks polos tanpa gaya. */
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--brown);
+  margin: 0 0 6px;
 }
 
 .brand {

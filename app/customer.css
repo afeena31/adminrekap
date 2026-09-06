@@ -807,21 +807,33 @@
   border-color: transparent;
 }
 
-/* ===== ADDRESS EDIT MODAL ===== */
-.address-edit-modal h2 { font-size: 24px; margin: 0 0 4px; }
-.address-edit-modal > p { font-size: 12px; color: var(--muted); margin: 0 0 14px; }
-.address-edit-modal label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; margin: 12px 0; }
-.address-edit-modal input, .address-edit-modal textarea {
+/* ===== TAMBAH/EDIT ALAMAT (modal di profil customer) =====
+   Sebelumnya CSS ini nama classnya "address-edit-modal" tapi JSX-nya (page.tsx)
+   memakai "address-form" — dua nama beda gara-gara refactor yang gak sinkron —
+   jadi form ini render TANPA gaya sama sekali (label & input numpuk jadi satu
+   baris, gak ke-grid). Disamakan ke nama yang benar-benar dipakai. */
+.address-form h2 { font-size: 22px; margin: 0 0 4px; }
+.address-form > p.eyebrow { margin-bottom: 4px; }
+.address-form label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 700; margin: 14px 0; }
+.address-form input, .address-form textarea {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
-  padding: 10px;
+  padding: 11px 13px;
   font: inherit;
+  font-size: 13.5px;
   color: var(--ink);
   width: 100%;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.address-edit-modal textarea { resize: vertical; min-height: 70px; }
-.address-edit-modal .form-actions { margin-top: 14px; }
+.address-form input:focus, .address-form textarea:focus {
+  outline: none;
+  border-color: var(--taupe);
+  box-shadow: 0 0 0 3px rgba(184, 169, 153, 0.18);
+}
+.address-form textarea { resize: vertical; min-height: 70px; }
+.address-form .form-actions { margin-top: 16px; }
+.address-form .form-actions .primary { width: 100%; justify-content: center; }
 .form-actions { display: flex; gap: 8px; }
 .form-actions button {
   border: 1px solid #eadfd5;

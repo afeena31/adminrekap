@@ -829,6 +829,59 @@ export function backupLocalStorage(): string {
   return backupKey;
 }
 
+export type BackupInfo = { key: string; timestamp: number; customerCount: number };
+
+// Daftar semua cadangan yang pernah dibuat backupLocalStorage(), terbaru dulu.
+// customerCount dihitung dari isi cadangan itu sendiri (bukan data sekarang),
+// supaya kelihatan cadangan mana yang paling relevan buat dipulihkan.
+export function listBackups(): BackupInfo[] {
+  if (typeof window === "undefined") return [];
+  const backups: BackupInfo[] = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i);
+    if (!key || !key.startsWith(KEYS.backupPrefix)) continue;
+    const timestamp = Number(key.slice(KEYS.backupPrefix.length));
+    if (!Number.isFinite(timestamp)) continue;
+    let customerCount = 0;
+    try {
+      const raw = window.localStorage.getItem(key);
+      const snapshot = raw ? JSON.parse(raw) : null;
+      const customers = snapshot?.[KEYS.customers];
+      if (Array.isArray(customers)) customerCount = customers.filter((c: { deletedAt?: unknown }) => !c?.deletedAt).length;
+    } catch {
+      // Cadangan gak kebaca — tetap ditampilkan, cuma jumlah customernya "?".
+      customerCount = -1;
+    }
+    backups.push({ key, timestamp, customerCount });
+  }
+  return backups.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+// Pulihkan SATU cadangan — timpa localStorage sekarang dengan isi cadangan itu.
+// Kondisi SEBELUM restore ikut dicadangkan dulu secara otomatis, jadi restore
+// juga tidak menghilangkan apa pun secara permanen.
+export function restoreBackup(backupKey: string): boolean {
+  if (typeof window === "undefined") return false;
+  const raw = window.localStorage.getItem(backupKey);
+  if (!raw) return false;
+  let snapshot: Record<string, unknown>;
+  try {
+    snapshot = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  backupLocalStorage();
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (key.startsWith(KEYS.backupPrefix)) continue;
+    if (value === null || value === undefined) {
+      window.localStorage.removeItem(key);
+    } else {
+      window.localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
+    }
+  }
+  return true;
+}
+
 // =====================================================================
 // GENERIC CRUD
 // =====================================================================

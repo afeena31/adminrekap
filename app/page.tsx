@@ -7,7 +7,7 @@ import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, Credit
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { createNewCustomer, toDisplayCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "./data/customers";
-import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentralCustomer, addAddress, updateAddress as updateCentralAddress, deleteAddress as deleteCentralAddress, getAddresses, getCustomerAddresses as getCentralCustomerAddresses, softDeleteCustomer, backupLocalStorage } from "./data/central";
+import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentralCustomer, addAddress, updateAddress as updateCentralAddress, deleteAddress as deleteCentralAddress, getAddresses, getCustomerAddresses as getCentralCustomerAddresses, softDeleteCustomer, backupLocalStorage, listBackups, restoreBackup, type BackupInfo } from "./data/central";
 import { Overview, CustomerPanel } from "./components/panels";
 import { NewCustomerForm, EditCustomerForm, type EditableCustomerFields } from "./components/NewCustomerForm";
 import { getCollections, getCollectionStats, addCollection, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
@@ -88,6 +88,8 @@ export default function HomePage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editCustomerOpen, setEditCustomerOpen] = useState(false);
   const [deleteCustomerConfirmOpen, setDeleteCustomerConfirmOpen] = useState(false);
+  const [backups, setBackups] = useState<BackupInfo[]>([]);
+  const [restoreConfirmKey, setRestoreConfirmKey] = useState<string | null>(null);
   const [ops, setOps] = useState<CustomerOperations>(() => getOperations("-"));
   const [customerOrders, setCustomerOrders] = useState<OrderRecord[]>([]);
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
@@ -157,6 +159,20 @@ export default function HomePage() {
     setDeleteCustomerConfirmOpen(false);
     setCustomer(loadFirstCustomer());
     notify("Customer dihapus");
+  };
+
+  const openSettings = () => {
+    setBackups(listBackups());
+    setSettingsOpen(true);
+  };
+
+  // ===== PULIHKAN CADANGAN =====
+  const handleRestoreBackup = (key: string) => {
+    const ok = restoreBackup(key);
+    setRestoreConfirmKey(null);
+    setSettingsOpen(false);
+    setCustomer(loadFirstCustomer());
+    notify(ok ? "Cadangan berhasil dipulihkan" : "Gagal memulihkan cadangan");
   };
 
   // ===== OPERATIONS: AKSI → STATUS (state machine) =====
@@ -251,7 +267,7 @@ export default function HomePage() {
     return <main className="app-shell">
       <header className="topbar">
         <div className="brand">UmayasLa<span>·</span></div>
-        <div className="header-actions"><button className="icon-btn" onClick={() => setSettingsOpen(true)}><MoreHorizontal size={21} /></button></div>
+        <div className="header-actions"><button className="icon-btn" onClick={openSettings}><MoreHorizontal size={21} /></button></div>
       </header>
       <div className="empty-state" style={{ marginTop: 40 }}>
         <span>👋</span>
@@ -271,7 +287,7 @@ export default function HomePage() {
       <button className="icon-btn" aria-label="Kembali" onClick={() => window.history.back()}><ArrowLeft size={21} /></button>
 
       <div className="brand">UmayasLa<span>·</span></div>
-      <div className="header-actions"><Link href="/products" className="icon-btn" aria-label="Katalog produk"><ShoppingBag size={19} /></Link><button className="icon-btn"><Bell size={19} /></button><button className="icon-btn" onClick={() => setSettingsOpen(true)}><MoreHorizontal size={21} /></button></div>
+      <div className="header-actions"><Link href="/products" className="icon-btn" aria-label="Katalog produk"><ShoppingBag size={19} /></Link><button className="icon-btn"><Bell size={19} /></button><button className="icon-btn" onClick={openSettings}><MoreHorizontal size={21} /></button></div>
     </header>
     <button className="customer-finder" onClick={() => setFinderOpen(true)}><Search size={17}/><span>Cari atau pindah customer...</span><kbd>⌘ K</kbd></button>
 
@@ -364,8 +380,36 @@ export default function HomePage() {
           <button className="chat" onClick={() => { loadDemoData(); setSettingsOpen(false); }}>Muat Data Demo</button>
           <button className="quiet" onClick={() => { clearDemoData(); setSettingsOpen(false); }}>Sembunyikan Data Demo</button>
         </div>
+
+        <p className="muted" style={{ marginTop: 22, marginBottom: 14 }}>Cadangan Data</p>
+        <p style={{ fontSize: 13, color: "#8a7c6c", marginBottom: 14 }}>Setiap kali data demo dimuat/disembunyikan atau customer dihapus, aplikasi otomatis menyimpan cadangan kondisi sebelumnya di HP ini. Kalau data tiba-tiba kosong/hilang, coba pulihkan salah satu di bawah.</p>
+        {backups.length === 0 && <p className="panel-hint">Belum ada cadangan tersimpan di HP ini.</p>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 220, overflowY: "auto" }}>
+          {backups.map(b => (
+            <div key={b.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{new Date(b.timestamp).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{b.customerCount < 0 ? "Jumlah customer tidak terbaca" : `${b.customerCount} customer tersimpan`}</div>
+              </div>
+              <button className="secondary" onClick={() => setRestoreConfirmKey(b.key)}>Pulihkan</button>
+            </div>
+          ))}
+        </div>
       </section>
     </div>}
+    {restoreConfirmKey && (
+      <div className="overlay" onClick={() => setRestoreConfirmKey(null)}>
+        <section className="modal confirm-modal" onClick={event => event.stopPropagation()}>
+          <h2>Pulihkan Cadangan Ini?</h2>
+          <p>Data yang ada SEKARANG akan ditimpa dengan isi cadangan dari <b>{new Date(Number(restoreConfirmKey.replace("umayasla_backup_", ""))).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</b>.</p>
+          <p className="muted">Kondisi sebelum ini juga otomatis dicadangkan dulu, jadi tetap bisa dibatalkan nanti.</p>
+          <div className="confirm-actions">
+            <button className="secondary" onClick={() => setRestoreConfirmKey(null)}>Batal</button>
+            <button className="danger" onClick={() => handleRestoreBackup(restoreConfirmKey)}>Pulihkan</button>
+          </div>
+        </section>
+      </div>
+    )}
     {editCustomerOpen && <EditCustomerForm customer={customer} onClose={() => setEditCustomerOpen(false)} onSave={handleUpdateCustomer} />}
     {deleteCustomerConfirmOpen && (
       <div className="overlay" onClick={() => setDeleteCustomerConfirmOpen(false)}>

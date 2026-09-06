@@ -7,13 +7,13 @@ import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, Credit
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { createNewCustomer, toDisplayCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "./data/customers";
-import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentralCustomer, addAddress, updateAddress as updateCentralAddress, deleteAddress as deleteCentralAddress, getCustomerAddresses as getCentralCustomerAddresses, softDeleteCustomer, backupLocalStorage } from "./data/central";
+import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentralCustomer, addAddress, updateAddress as updateCentralAddress, deleteAddress as deleteCentralAddress, getAddresses, getCustomerAddresses as getCentralCustomerAddresses, softDeleteCustomer, backupLocalStorage } from "./data/central";
 import { Overview, CustomerPanel } from "./components/panels";
 import { NewCustomerForm, EditCustomerForm, type EditableCustomerFields } from "./components/NewCustomerForm";
 import { getCollections, getCollectionStats, addCollection, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "./data/demoSeed";
 
-import { formatRupiah } from "./data/store";
+import { formatRupiah, getOrdersForCustomer, type OrderRecord } from "./data/store";
 import {
   getOperations,
   performAction,
@@ -37,10 +37,10 @@ import {
 // buildTabs/buildMetrics) — dulu hardcode ("Order (6)", "6 order sepanjang
 // hubungan", dst) jadi kelihatan seperti data customer lain "nempel" padahal
 // cuma teks tetap yang lupa disesuaikan.
-function buildTabs(customer: Customer): string[] {
+function buildTabs(customer: Customer, orderCount: number): string[] {
   return [
     "Ringkasan",
-    `Order (${customer.orderRows.length})`,
+    `Order (${orderCount})`,
     `Payment (${customer.payments.length})`,
     `Shipment (${customer.shipments.length})`,
     "Marketer", "Batch", "Resi", "Alamat Pengiriman",
@@ -49,14 +49,16 @@ function buildTabs(customer: Customer): string[] {
   ];
 }
 
-function buildMetrics(customer: Customer) {
-  const paidCount = customer.payments.filter(p => p.status === "Lunas").length;
-  const paidPercent = customer.payments.length > 0 ? Math.round((paidCount / customer.payments.length) * 100) : 0;
-  const outstandingCount = customer.payments.length - paidCount;
+function buildMetrics(customer: Customer, orders: OrderRecord[]) {
+  const paidOrders = orders.filter(o => o.status === "paid");
+  const totalPaid = paidOrders.reduce((sum, o) => sum + o.total, 0);
+  const totalOutstanding = orders.filter(o => o.status !== "paid").reduce((sum, o) => sum + (o.total - o.dp), 0);
+  const paidPercent = orders.length > 0 ? Math.round((paidOrders.length / orders.length) * 100) : 0;
+  const outstandingCount = orders.length - paidOrders.length;
   return [
-    { label: "Total Order", value: customer.orders, note: `${customer.orderRows.length} order sepanjang hubungan`, icon: ClipboardList, tone: "olive", progress: 100 },
-    { label: "Total Payment", value: customer.paid, note: `${paidPercent}% invoice selesai`, icon: CreditCard, tone: "brown", progress: paidPercent },
-    { label: "Outstanding", value: customer.outstanding, note: `${outstandingCount} invoice menunggu`, icon: Box, tone: "sand", progress: outstandingCount > 0 ? 40 : 0 },
+    { label: "Total Order", value: String(orders.length), note: `${orders.length} order sepanjang hubungan`, icon: ClipboardList, tone: "olive", progress: 100 },
+    { label: "Total Payment", value: formatRupiah(totalPaid), note: `${paidPercent}% invoice selesai`, icon: CreditCard, tone: "brown", progress: paidPercent },
+    { label: "Outstanding", value: formatRupiah(totalOutstanding), note: `${outstandingCount} invoice menunggu`, icon: Box, tone: "sand", progress: outstandingCount > 0 ? 40 : 0 },
     { label: "Total Shipment", value: customer.shipment, note: `${customer.shipments.length} paket tercatat`, icon: Truck, tone: "olive", progress: 100 },
   ];
 }
@@ -73,7 +75,6 @@ export default function HomePage() {
   const [orderOpen, setOrderOpen] = useState(false);
   const [finderOpen, setFinderOpen] = useState(false);
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
-  const [newOrderOpen, setNewOrderOpen] = useState(false);
   // Mulai dari EMPTY_CUSTOMER (bukan langsung baca localStorage) supaya render
   // pertama di server & di client SAMA — localStorage cuma ada di browser, jadi
   // kalau dibaca langsung di sini akan bikin hydration mismatch. Data asli dimuat
@@ -88,12 +89,19 @@ export default function HomePage() {
   const [editCustomerOpen, setEditCustomerOpen] = useState(false);
   const [deleteCustomerConfirmOpen, setDeleteCustomerConfirmOpen] = useState(false);
   const [ops, setOps] = useState<CustomerOperations>(() => getOperations("-"));
+  const [customerOrders, setCustomerOrders] = useState<OrderRecord[]>([]);
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
   // ===== HYDRATION FIX: muat customer asli dari localStorage setelah mount =====
   useEffect(() => {
     setCustomer(loadFirstCustomer());
   }, []);
+
+  // Order asli customer ini (dibuat lewat halaman /order) — dimuat ulang tiap
+  // ganti customer, supaya Total Order/tab Order gak nyangkut punya customer lain.
+  useEffect(() => {
+    setCustomerOrders(customer.id ? getOrdersForCustomer(customer.id) : []);
+  }, [customer.id]);
 
   // Setiap kali customer yang aktif berganti (pindah profil / bikin customer baru),
   // muat ulang operasinya sendiri — jangan biarkan ops customer sebelumnya "nempel".
@@ -116,8 +124,9 @@ export default function HomePage() {
     for (const c of demoCustomers) {
       if (!existingIds.has(c.id)) { addCustomer(c); added++; }
     }
+    const existingAddrIds = new Set(getAddresses().map(a => a.id));
     for (const a of demoAddresses) {
-      addAddress(a);
+      if (!existingAddrIds.has(a.id)) addAddress(a);
     }
     setCustomer(loadFirstCustomer());
     notify(added > 0 ? `Data demo dimuat (${added} customer)` : "Data demo sudah dimuat sebelumnya");
@@ -283,11 +292,11 @@ export default function HomePage() {
       </div>
     </section>
 
-    <section className="metrics" aria-label="Ringkasan customer">{buildMetrics(customer).map(({ label, value, note, icon: Icon, tone, progress }) => <article className="metric" key={label}><div className={`metric-icon ${tone}`}><Icon size={21} /></div><small>{label}</small><strong>{value}</strong><em>{note}</em><div className="metric-track"><div className={`metric-fill ${tone}`} style={{ width: `${progress}%` }} /></div></article>)}</section>
+    <section className="metrics" aria-label="Ringkasan customer">{buildMetrics(customer, customerOrders).map(({ label, value, note, icon: Icon, tone, progress }) => <article className="metric" key={label}><div className={`metric-icon ${tone}`}><Icon size={21} /></div><small>{label}</small><strong>{value}</strong><em>{note}</em><div className="metric-track"><div className={`metric-fill ${tone}`} style={{ width: `${progress}%` }} /></div></article>)}</section>
 
 
-    <nav className="tabs" aria-label="Navigasi profil">{buildTabs(customer).map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}</nav>
-    <button className="mobile-add-order" onClick={() => setNewOrderOpen(true)}><Plus size={17}/> Tambah Order untuk {customer.name}</button>
+    <nav className="tabs" aria-label="Navigasi profil">{buildTabs(customer, customerOrders.length).map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}</nav>
+    <Link href={`/order?customerId=${customer.id}`} className="mobile-add-order"><Plus size={17}/> Tambah Order untuk {customer.name}</Link>
 
     {activeTab === "Alamat Pengiriman" ? (
       <section className="address-section">
@@ -371,7 +380,6 @@ export default function HomePage() {
         </section>
       </div>
     )}
-    {newOrderOpen && <NewOrderForm customerName={customer.name} onClose={() => setNewOrderOpen(false)} onSave={(total) => { setNewOrderOpen(false); setActiveTab(`Order (${customer.orderRows.length})`); notify(`Order baru dibuat · Total Rp ${total.toLocaleString("id-ID")}`); }}/>}
     {chatOpen && <div className="overlay" onClick={() => setChatOpen(false)}><section className="modal" onClick={event => event.stopPropagation()}><button className="close" onClick={() => setChatOpen(false)}>×</button><div className="chat-title"><span className="mini-avatar">{customer.initials}</span><div><b>{customer.name}</b><small>WhatsApp customer</small></div></div><div className="message">Assalamu'alaikum {customer.name.split(" ")[0]}, ada yang bisa kami bantu?</div><div className="composer"><input placeholder="Tulis pesan..."/><button onClick={() => { setChatOpen(false); notify("Pesan siap dikirim ke WhatsApp"); }}>Kirim</button></div></section></div>}
     {orderOpen && <OrderDetailModal customer={customer} ops={ops} onClose={() => setOrderOpen(false)} onAction={handleOrderAction} />}
 
@@ -419,161 +427,6 @@ export default function HomePage() {
 
 
 
-function NewOrderForm({ customerName, onClose, onSave }: { customerName: string; onClose: () => void; onSave: (total: number) => void }) { 
-  const [brand, setBrand] = useState("Afeena");
-  const [product, setProduct] = useState("Amna Jilbab");
-  const [qty, setQty] = useState(1);
-  const [ongkir, setOngkir] = useState(0);
-  const [catatan, setCatatan] = useState("");
-
-  // Atribut Afeena
-  const [size, setSize] = useState("L"); 
-  const [handZip, setHandZip] = useState(false); 
-  const [middleZip, setMiddleZip] = useState(false); 
-  const [ties, setTies] = useState(false); 
-
-  // Atribut YasLa
-  const [bookType, setBookType] = useState("PO");
-
-  const afeenaProducts = ["Amna Jilbab", "Niqab Khadijah", "Manset Basic"];
-  const yaslaProducts = ["Buku Si Pensil Kecil", "Buku Persis Sepertimu", "Box Set 25 Buku", "Buku ASAQU!"];
-
-  let unitPrice = 0;
-  if (brand === "Afeena") {
-    const basePrices: Record<string, number> = { M: 250000, L: 260000, XL: 260000, XXL: 270000 }; 
-    unitPrice = (basePrices[size] || 250000) + (handZip ? 20000 : 0) + (middleZip ? 20000 : 0) + (ties ? 8000 : 0); 
-  } else {
-    const bookPrices: Record<string, number> = { "PO": 149000, "Ready Stock": 155000, "Early Bird": 147000 };
-    unitPrice = bookPrices[bookType] || 149000;
-  }
-  
-  const totalProduk = unitPrice * qty;
-  const grandTotal = totalProduk + Number(ongkir);
-
-  return (
-    <div className="overlay" onClick={onClose}>
-      <section 
-        className="modal order-form" 
-        onClick={event => event.stopPropagation()}
-        style={{ maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px' }}
-      >
-        <button className="close" onClick={onClose} style={{ position: 'absolute', right: '15px', top: '15px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>×</button>
-        
-        <div>
-          <p className="eyebrow" style={{ fontSize: '12px', color: '#888', fontWeight: 'bold' }}>ORDER BARU · {customerName}</p>
-          <h2 style={{ margin: '4px 0', fontSize: '20px' }}>Pilih Produk & Detail</h2>
-        </div>
-
-        {/* Pemilihan Brand */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Pilih Brand</label>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
-              type="button"
-              className={brand === "Afeena" ? "primary" : "secondary"} 
-              style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', border: '1px solid #745034', background: brand === "Afeena" ? '#745034' : '#fff', color: brand === "Afeena" ? '#fff' : '#745034' }}
-              onClick={() => { setBrand("Afeena"); setProduct(afeenaProducts[0]); }}
-            >Afeena</button>
-            <button 
-              type="button"
-              className={brand === "YasLa" ? "primary" : "secondary"} 
-              style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', border: '1px solid #745034', background: brand === "YasLa" ? '#745034' : '#fff', color: brand === "YasLa" ? '#fff' : '#745034' }}
-              onClick={() => { setBrand("YasLa"); setProduct(yaslaProducts[0]); }}
-            >Etalase YasLa</button>
-          </div>
-        </div>
-
-        {/* Pemilihan Produk Dinamis */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Produk</label>
-          <select value={product} onChange={e => setProduct(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}>
-            {brand === "Afeena" 
-              ? afeenaProducts.map(p => <option key={p} value={p}>{p}</option>)
-              : yaslaProducts.map(p => <option key={p} value={p}>{p}</option>)
-            }
-          </select>
-        </div>
-
-        {/* Atribut Dinamis */}
-        {brand === "Afeena" ? (
-          <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Size</label>
-              <select value={size} onChange={e => setSize(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}>
-                {["M", "L", "XL", "XXL"].map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <fieldset style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '8px', margin: 0 }}>
-              <legend style={{ padding: '0 4px', fontSize: '14px', fontWeight: 'bold' }}>Modifikasi Jilbab</legend>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginTop: '8px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                  <input type="checkbox" checked={handZip} onChange={e => setHandZip(e.target.checked)}/> 
-                  <span>Lubang tangan rits <b>+ Rp 20.000</b></span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                  <input type="checkbox" checked={middleZip} onChange={e => setMiddleZip(e.target.checked)}/> 
-                  <span>Rits tengah busui <b>+ Rp 20.000</b></span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                  <input type="checkbox" checked={ties} onChange={e => setTies(e.target.checked)}/> 
-                  <span>Tali kecil dalam <b>+ Rp 8.000</b></span>
-                </label>
-              </div>
-            </fieldset>
-          </>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Jenis Harga Buku</label>
-            <select value={bookType} onChange={e => setBookType(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}>
-              {["PO", "Early Bird", "Ready Stock"].map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Jumlah (Qty)</label>
-            <input type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, Number(e.target.value) || 1))} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}/>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Ongkos Kirim</label>
-            <input type="number" min="0" value={ongkir} onChange={e => setOngkir(Number(e.target.value))} placeholder="Contoh: 15000" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}/>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Catatan order</label>
-          <textarea value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Contoh: Kirim bareng Batch 8" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', minHeight: '60px' }}/>
-        </div>
-
-        <div style={{ background: '#f9f6f0', padding: '12px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-            <span>Harga Satuan:</span> <b>Rp {unitPrice.toLocaleString("id-ID")}</b>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-            <span>Total Produk ({qty} pcs):</span> <b>Rp {totalProduk.toLocaleString("id-ID")}</b>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-            <span>Ongkos Kirim:</span> <b>Rp {Number(ongkir).toLocaleString("id-ID")}</b>
-          </div>
-          <hr style={{ borderTop: '1px dashed #ccc', margin: '4px 0' }}/>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', color: '#745034' }}>
-            <strong>GRAND TOTAL:</strong> <strong>Rp {grandTotal.toLocaleString("id-ID")}</strong>
-          </div>
-        </div>
-
-        <button 
-          type="button" 
-          className="primary" 
-          onClick={() => onSave(grandTotal)} 
-          style={{ padding: '12px', width: '100%', background: '#745034', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
-        >
-          Tambahkan ke Order {customerName}
-        </button>
-      </section>
-    </div>
-  );
-}
 // Menentukan SATU kondisi utama per item, dari 5 dimensi status di ProductStatusCard.
 // Prioritas: fulfillment bermasalah > pembayaran belum lunas > hold > progres produksi > pengiriman > selesai.
 function derivePrimaryCondition(card: ProductStatusCard): { name: string; emoji: string; tone: string } {

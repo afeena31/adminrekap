@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 import { productCategories, formatRupiah, modifikasiInfo, ongkirInfo, splitShopeeInfo, rekeningInfo, type Product } from "../data/products";
 import { getProducts, addProduct, updateProduct, deleteProduct, calculateProductMetrics } from "../data/store";
+import { MoneyInput } from "../components/MoneyInput";
 
 type ProductFormState = {
   id: string;
@@ -414,25 +415,25 @@ export default function ProductsPage() {
 
           <div className="form-grid-2">
             <label>Harga Jual (Rp) *
-              <input type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="250000" />
+              <MoneyInput value={Number(form.price) || 0} onChange={n => setForm({ ...form, price: n ? String(n) : "" })} placeholder="250.000" />
             </label>
             <label>Harga Normal (Rp)
-              <input type="number" min="0" value={form.originalPrice} onChange={e => setForm({ ...form, originalPrice: e.target.value })} placeholder="Opsional" />
+              <MoneyInput value={Number(form.originalPrice) || 0} onChange={n => setForm({ ...form, originalPrice: n ? String(n) : "" })} placeholder="Opsional" />
             </label>
           </div>
 
           <div className="form-grid-2">
             <label>Modal Kotor (Rp)
-              <input type="number" min="0" value={form.modalKotor} onChange={e => setForm({ ...form, modalKotor: e.target.value })} placeholder="150000" />
+              <MoneyInput value={Number(form.modalKotor) || 0} onChange={n => setForm({ ...form, modalKotor: n ? String(n) : "" })} placeholder="150.000" />
             </label>
             <label>Biaya Operasional (Rp)
-              <input type="number" min="0" value={form.biayaOperasional} onChange={e => setForm({ ...form, biayaOperasional: e.target.value })} placeholder="30000" />
+              <MoneyInput value={Number(form.biayaOperasional) || 0} onChange={n => setForm({ ...form, biayaOperasional: n ? String(n) : "" })} placeholder="30.000" />
             </label>
           </div>
           <div className="hpp-total-preview">Total HPP: <b>{formatRupiah((Number(form.modalKotor) || 0) + (Number(form.biayaOperasional) || 0))}</b></div>
 
           <label>Fee Marketer (Rp/pcs)
-            <input type="number" min="0" value={form.feeMarketer} onChange={e => setForm({ ...form, feeMarketer: e.target.value })} placeholder="Kosongkan / 0 kalau produk ini tidak pakai fee marketer" />
+            <MoneyInput value={Number(form.feeMarketer) || 0} onChange={n => setForm({ ...form, feeMarketer: n ? String(n) : "" })} placeholder="Kosongkan / 0 kalau produk ini tidak pakai fee marketer" />
           </label>
 
           <label>Diskon Default
@@ -441,7 +442,11 @@ export default function ProductsPage() {
                 <option value="percent">Persen (%)</option>
                 <option value="nominal">Nominal (Rp)</option>
               </select>
-              <input type="number" min="0" value={form.discountDefault} onChange={e => setForm({ ...form, discountDefault: e.target.value })} placeholder={form.discountType === "percent" ? "10" : "20000"} />
+              {form.discountType === "percent" ? (
+                <input type="number" min="0" max="100" value={form.discountDefault} onChange={e => setForm({ ...form, discountDefault: e.target.value })} placeholder="10" />
+              ) : (
+                <MoneyInput value={Number(form.discountDefault) || 0} onChange={n => setForm({ ...form, discountDefault: n ? String(n) : "" })} placeholder="20.000" />
+              )}
             </div>
           </label>
 

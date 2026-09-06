@@ -2,7 +2,9 @@
 
 import { AlertCircle, Check, ChevronRight, ClipboardList, MapPin, UserRound, Boxes, Truck, Package, Zap, Clock, MessageCircle, ArrowRight, PackageCheck } from "lucide-react";
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import type { Customer, PaymentData } from "../data/customers";
+import { getOrdersForCustomer, formatRupiah, type OrderRecord } from "../data/store";
 
 import {
   getOperations,
@@ -266,13 +268,46 @@ function ProductCard({ card, onAction }: { card: ProductStatusCard; onAction: (c
 
 // ===== CUSTOMER PANEL (untuk tab lain) =====
 export function CustomerPanel({ customer, tab, onOrder }: { customer: Customer; tab: string; onOrder: () => void }) {
+  if (tab.startsWith("Order")) return <OrderPanel customer={customer} />;
   if (tab.startsWith("Payment")) return <PaymentPanel customer={customer} />;
   if (tab.startsWith("Shipment")) return <ShipmentPanel customer={customer} onOrder={onOrder}/>;
   if (tab.startsWith("Marketer")) return <MarketerPanel customer={customer} />;
   if (tab.startsWith("Batch")) return <BatchPanel customer={customer} />;
   if (tab.startsWith("Resi")) return <ResiPanel customer={customer} />;
-  const rows = tab.startsWith("Catatan") ? customer.notes : tab === "Aktivitas" ? customer.activities : customer.orderRows;
+  const rows = tab.startsWith("Catatan") ? customer.notes : customer.activities;
   return <div className="content"><section className="card panel"><div className="section-head"><h2>{tab}</h2><button>Terbaru dulu</button></div>{rows.map((row, index) => <button key={index} className="panel-row" onClick={onOrder}><span className={`round ${index === 1 ? "sand" : "olive"}`}><Check size={17}/></span><span>{row}</span><ChevronRight size={18}/></button>)}</section></div>;
+}
+
+// ===== ORDER PANEL — order asli dari central data (store.ts), bukan lagi
+// customer.orderRows yang cuma keisi buat 3 customer demo lama =====
+const orderStatusLabel: Record<string, string> = { draft: "Draft", confirmed: "Confirmed", paid: "Lunas" };
+const orderStatusTone: Record<string, string> = { draft: "sand", confirmed: "sand", paid: "olive" };
+
+function OrderPanel({ customer }: { customer: Customer }) {
+  const [orders, setOrders] = useState<OrderRecord[]>(() => getOrdersForCustomer(customer.id));
+
+  useEffect(() => {
+    setOrders(getOrdersForCustomer(customer.id));
+  }, [customer.id]);
+
+  const sorted = [...orders].sort((a, b) => b.createdAt - a.createdAt);
+
+  return <div className="content">
+    <section className="card panel">
+      <div className="section-head"><h2>Order</h2><Link href={`/order?customerId=${customer.id}`}>+ Order Baru</Link></div>
+      {sorted.length === 0 && <p className="panel-hint" style={{ marginTop: 10 }}>Belum ada order untuk customer ini.</p>}
+      {sorted.map(order => (
+        <Link key={order.id} href={`/order?orderId=${order.id}`} className="panel-row">
+          <span className={`round ${orderStatusTone[order.status] || "sand"}`}><Check size={17}/></span>
+          <span>
+            <b>{order.items.map(i => i.name).join(", ") || order.number}</b><br/>
+            <small>{order.number} · {formatRupiah(order.total)} · {orderStatusLabel[order.status] || order.status}</small>
+          </span>
+          <ChevronRight size={18}/>
+        </Link>
+      ))}
+    </section>
+  </div>;
 }
 
 // ===== MARKETER PANEL =====

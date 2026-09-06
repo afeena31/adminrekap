@@ -516,7 +516,7 @@ body {
   font-size: 12.5px;
   line-height: 1.5;
 }
-.section-head button {
+.section-head button, .section-head a {
   border: 0;
   background: none;
   color: var(--brown);
@@ -527,8 +527,9 @@ body {
   border-radius: 8px;
   transition: background 0.2s ease;
   white-space: nowrap;
+  text-decoration: none;
 }
-.section-head button:hover { background: rgba(116, 80, 52, 0.08); }
+.section-head button:hover, .section-head a:hover { background: rgba(116, 80, 52, 0.08); }
 
 .ready {
   font-size: 11px;

@@ -24,12 +24,15 @@ export default function DashboardPage() {
   const [notice, setNotice] = useState("");
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
-  const [orders, setOrders] = useState(() => getOrders());
-  const [fees, setFees] = useState(() => getFees());
-  const [marketers, setMarketers] = useState(() => getMarketers());
-  const [products, setProducts] = useState(() => getProducts());
-  const [allOps, setAllOps] = useState(() => loadAllDisplayCustomers().map(c => ({ customer: c, ops: getOperations(c.id) })));
-  const [workQueue, setWorkQueue] = useState(() => getDashboardWorkQueue());
+  // Semua state di bawah ini dimulai kosong (bukan langsung baca localStorage)
+  // supaya render pertama di server & di client sama, lalu diisi data asli
+  // lewat HYDRATION FIX useEffect setelah mount.
+  const [orders, setOrders] = useState<ReturnType<typeof getOrders>>([]);
+  const [fees, setFees] = useState<ReturnType<typeof getFees>>([]);
+  const [marketers, setMarketers] = useState<ReturnType<typeof getMarketers>>([]);
+  const [products, setProducts] = useState<ReturnType<typeof getProducts>>([]);
+  const [allOps, setAllOps] = useState<{ customer: ReturnType<typeof toDisplayCustomer>; ops: ReturnType<typeof getOperations> }[]>([]);
+  const [workQueue, setWorkQueue] = useState<ReturnType<typeof getDashboardWorkQueue>>({ perluTindakan: [], bisaDikerjakan: [], segera: [], menunggu: [], ringkasan: [] });
   const [totalCustomers, setTotalCustomers] = useState(0);
 
   // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====

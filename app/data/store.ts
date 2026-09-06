@@ -150,6 +150,7 @@ const KEYS = {
   inventory: "umayasla_inventory",
   invoiceCounter: "umayasla_invoice_counter",
   addresses: "umayasla_addresses",
+  batchNames: "umayasla_batch_names",
 };
 
 
@@ -325,6 +326,11 @@ export function saveOrder(order: OrderRecord): OrderRecord[] {
 // Ambil satu order berdasarkan ID
 export function getOrderById(id: string): OrderRecord | undefined {
   return getOrders().find(o => o.id === id);
+}
+
+// Semua order milik satu customer — dipakai profil customer (tab Order, dsb.)
+export function getOrdersForCustomer(customerId: string): OrderRecord[] {
+  return getOrders().filter(o => o.customerId === customerId);
 }
 
 // Perbarui order yang sudah ada (misal saat edit order)
@@ -538,6 +544,20 @@ export function reserveStock(productId: string, warehouseId: string, qty: number
 
 // ===== INVOICE NUMBER =====
 
+
+// ===== BATCH PRODUKSI (nama batch saja — dipilih saat bikin order Amna) =====
+
+export function getBatchNames(): string[] {
+  return load<string[]>(KEYS.batchNames, ["Batch 7", "Batch 8"]);
+}
+
+export function addBatchName(name: string): string[] {
+  const list = getBatchNames();
+  if (list.includes(name)) return list;
+  const updated = [...list, name];
+  save(KEYS.batchNames, updated);
+  return updated;
+}
 
 export function getNextInvoiceNumber(): string {
   const counter = load<number>(KEYS.invoiceCounter, 1000);

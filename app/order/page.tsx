@@ -3,14 +3,16 @@
 
 import { ArrowLeft, Bell, Check, ChevronRight, Copy, FileText, Home, MessageCircle, Minus, Plus, Search, ShoppingBag, Trash2, Users, UserRound, Wallet } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, rekeningByCategory, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
-import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, getOrders, getOrderById, saveFee, getNextInvoiceNumber, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
+import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, getOrders, getOrderById, saveFee, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
 import { NewCustomerForm } from "../components/NewCustomerForm";
+import { MoneyInput } from "../components/MoneyInput";
 
 const NEW_CUSTOMER_OPTION = "__new_customer__";
 
@@ -74,6 +76,14 @@ type Invoice = {
 const fmt = (v: number) => v.toLocaleString("id-ID");
 
 export default function OrderPage() {
+  return <Suspense fallback={null}><OrderPageInner /></Suspense>;
+}
+
+function OrderPageInner() {
+  const searchParams = useSearchParams();
+  const initialCustomerId = searchParams.get("customerId");
+  const initialOrderId = searchParams.get("orderId");
+  const [orderIdLoaded, setOrderIdLoaded] = useState(false);
   // Mulai dari EMPTY_CUSTOMER (bukan langsung baca localStorage) supaya render
   // pertama di server & di client sama — data asli dimuat lewat HYDRATION FIX
   // useEffect di bawah, sama seperti productList/marketers/existingOrders.
@@ -97,6 +107,8 @@ export default function OrderPage() {
   const [note, setNote] = useState("");
   const [amnaStatus, setAmnaStatus] = useState<"po" | "lunas">("po");
   const [batch, setBatch] = useState("Batch 7");
+  const [batchNames, setBatchNames] = useState<string[]>(["Batch 7", "Batch 8"]);
+  const [newBatchInput, setNewBatchInput] = useState("");
   const [discountType, setDiscountType] = useState<DiscountType>("percent");
 
   const [discountValue, setDiscountValue] = useState(0);
@@ -152,7 +164,10 @@ export default function OrderPage() {
   // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
   useEffect(() => {
     if (customer.id === "") {
-      const first = loadFirstCustomer();
+      // Kalau datang dari profil customer (?customerId=...), langsung pilihkan
+      // customer itu — bukan customer pertama di daftar.
+      const fromParam = initialCustomerId ? getCentralCustomer(initialCustomerId) : undefined;
+      const first = fromParam ? toDisplayCustomer(fromParam, getCustomerAddresses(fromParam.id)) : loadFirstCustomer();
       setCustomer(first);
       setSelectedAddressId(first.defaultAddressId || "");
       return; // effect ini jalan lagi begitu customer.id berubah, lanjutkan di sana
@@ -162,6 +177,7 @@ export default function OrderPage() {
     setMarketers(getMarketers());
     setCustomerAddresses(getCustomerAddresses(customer.id));
     setCustomerList(getCustomers());
+    setBatchNames(getBatchNames());
   }, [customer.id]);
 
   // ===== CUSTOMER & SHIPPING ADDRESS =====
@@ -612,6 +628,7 @@ export default function OrderPage() {
     setNote(order.note);
     setMarketerId(order.marketerId || "");
     setFeeOverride(order.marketerId ? order.totalFee : null);
+    if (order.batch) setBatchNames(addBatchName(order.batch));
     setBatch(order.batch || "Batch 7");
 
     // Set editing mode
@@ -620,6 +637,15 @@ export default function OrderPage() {
     notify(`Order ${order.number} dimuat untuk diedit`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  // Datang dari tab Order di profil customer (?orderId=...) — langsung buka
+  // order itu dalam mode edit, sekali saja.
+  useEffect(() => {
+    if (orderIdLoaded || !initialOrderId) return;
+    const order = getOrderById(initialOrderId);
+    if (order) loadOrderIntoForm(order);
+    setOrderIdLoaded(true);
+  }, [initialOrderId, orderIdLoaded]);
 
   const copyInvoice = () => {
     if (!invoice) return;
@@ -823,13 +849,11 @@ export default function OrderPage() {
       {marketerId && (
         <div className="marketer-fee-preview">
           <label htmlFor="marketer-fee-input">Fee marketer untuk order ini</label>
-          <input
+          <MoneyInput
             id="marketer-fee-input"
-            type="number"
-            min="0"
-            value={feeOverride ?? 0}
-            onChange={e => setFeeOverride(Math.max(0, Number(e.target.value) || 0))}
-            placeholder="Contoh: 15000, atau 0 kalau sudah dipotong sistem"
+            value={feeOverride || 0}
+            onChange={setFeeOverride}
+            placeholder="Contoh: 15.000, atau 0 kalau sudah dipotong sistem"
           />
           <small>Internal · tidak tampil di invoice customer. Bisa diisi 0 kalau fee sudah dipotong langsung.</small>
         </div>
@@ -845,7 +869,7 @@ export default function OrderPage() {
           <input value={mkName} onChange={e => setMkName(e.target.value)} placeholder="Nama marketer" />
         </label>
         <label>Fee Default (opsional)
-          <input type="number" min="0" value={mkFee || ""} placeholder="Contoh: 15000" onChange={e => setMkFee(Math.max(0, Number(e.target.value) || 0))} />
+          <MoneyInput value={mkFee} onChange={setMkFee} placeholder="Contoh: 15.000" />
         </label>
         <label>Status</label>
         <div className="segmented">
@@ -957,10 +981,33 @@ export default function OrderPage() {
       {hasAmna && <div className="setting-row">
         <label>Batch Produksi</label>
         <select value={batch} onChange={e => setBatch(e.target.value)}>
-          <option value="Batch 7">Batch 7</option>
-          <option value="Batch 8">Batch 8</option>
+          {batchNames.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
-        <small className="batch-hint">Pilih batch produksi untuk order ini</small>
+        <div className="add-batch-row" style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <input
+            type="text"
+            value={newBatchInput}
+            onChange={e => setNewBatchInput(e.target.value)}
+            placeholder="Sudah sampai Batch 10? Ketik di sini"
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              const name = newBatchInput.trim();
+              if (!name) return;
+              const updated = addBatchName(name);
+              setBatchNames(updated);
+              setBatch(name);
+              setNewBatchInput("");
+              notify(`Batch "${name}" ditambahkan`);
+            }}
+          >
+            <Plus size={15} /> Tambah Batch
+          </button>
+        </div>
+        <small className="batch-hint">Pilih batch produksi untuk order ini, atau tambahkan batch baru kalau belum ada di daftar.</small>
       </div>}
 
       {/* ===== DISCOUNT ===== */}
@@ -972,13 +1019,18 @@ export default function OrderPage() {
             <option value="percent">Persen (%)</option>
             <option value="nominal">Nominal (Rp)</option>
           </select>
-          <input
-            type="number"
-            min="0"
-            value={discountValue || ""}
-            placeholder={discountType === "percent" ? "10" : "20000"}
-            onChange={e => setDiscountValue(Math.max(0, Number(e.target.value) || 0))}
-          />
+          {discountType === "percent" ? (
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={discountValue || ""}
+              placeholder="10"
+              onChange={e => setDiscountValue(Math.max(0, Number(e.target.value) || 0))}
+            />
+          ) : (
+            <MoneyInput value={discountValue} onChange={setDiscountValue} placeholder="20.000" />
+          )}
         </div>
         {discountAmount > 0 && <div className="discount-preview">Diskon: <b>-{formatRupiah(discountAmount)}</b></div>}
       </div>
@@ -990,7 +1042,7 @@ export default function OrderPage() {
         </select>
         {ongkirId === "custom" && <>
           <input type="text" value={customOngkirLabel} placeholder="Nama ekspedisi (contoh: JNE, SiCepat)" onChange={e => setCustomOngkirLabel(e.target.value)} style={{ marginBottom: 8 }} />
-          <input type="number" min="0" placeholder="Nominal ongkir" value={customOngkir || ""} onChange={e => setCustomOngkir(Math.max(0, Number(e.target.value) || 0))} />
+          <MoneyInput placeholder="Nominal ongkir" value={customOngkir} onChange={setCustomOngkir} />
         </>}
         {ongkirId !== "custom" && <div className="ongkir-preview">Ongkir: <b>{formatRupiah(ongkir)}</b></div>}
       </div>
@@ -1010,7 +1062,7 @@ export default function OrderPage() {
 
       <div className="setting-row">
         <label>DP / Deposit (Rp)</label>
-        <input type="number" min="0" step="1000" value={dpAmount || ""} placeholder="0" onChange={e => setDpAmount(Math.max(0, Number(e.target.value) || 0))} />
+        <MoneyInput value={dpAmount} onChange={setDpAmount} placeholder="0" />
       </div>
 
       <div className="setting-row">
@@ -1080,7 +1132,7 @@ export default function OrderPage() {
             <input value={jRequestName} onChange={e => setJRequestName(e.target.value)} placeholder="Contoh: Lebar wajah 30 cm, Tali kanan kiri bagian dalam, Panjang custom, dll." />
           </label>
           <label>Harga Tambahan (Rp)
-            <input type="number" min="0" value={jRequestPrice || ""} placeholder="Contoh: 8000" onChange={e => setJRequestPrice(Math.max(0, Number(e.target.value) || 0))} />
+            <MoneyInput value={jRequestPrice} onChange={setJRequestPrice} placeholder="Contoh: 8.000" />
           </label>
         </div>}
 

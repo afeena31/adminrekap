@@ -1,10 +1,12 @@
 "use client";
 
 
-import { ArrowLeft, Bell, Check, ChevronRight, Copy, FileText, Home, MessageCircle, Minus, Plus, Search, ShoppingBag, Trash2, Users, UserRound, Wallet } from "lucide-react";
+import { ArrowLeft, Bell, Check, ChevronRight, Copy, FileText, MessageCircle, Minus, Plus, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { BottomNav } from "../components/BottomNav";
+import { goBack } from "../lib/goBack";
 
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, rekeningByCategory, type Product, type InvoiceType } from "../data/products";
@@ -667,7 +669,7 @@ function OrderPageInner() {
 
   return <main className="app-shell order-page">
     <header className="topbar">
-      <button className="icon-btn" aria-label="Kembali" onClick={() => window.history.back()}><ArrowLeft size={21} /></button>
+      <button className="icon-btn" aria-label="Kembali" onClick={goBack}><ArrowLeft size={21} /></button>
 
       <div className="brand">UmayasLa<span>·</span> Order</div>
       <div className="header-actions"><button className="icon-btn"><Bell size={19} /></button></div>
@@ -1269,13 +1271,7 @@ function OrderPageInner() {
       </section>
     </div>}
 
-    <nav className="bottom-nav">
-      <Link href="/dashboard" className="nav-link"><Home /><span>Dashboard</span></Link>
-      <button className="current"><ShoppingBag /><span>Order</span></button>
-      <Link href="/" className="nav-link"><Users /><span>Customer</span></Link>
-      <Link href="/fees" className="nav-link"><Wallet /><span>Fee</span></Link>
-      <Link href="/marketers" className="nav-link"><UserRound /><span>Marketer</span></Link>
-    </nav>
+    <BottomNav />
 
 
 

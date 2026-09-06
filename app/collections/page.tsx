@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Bell, Check, Home, Plus, ShoppingBag, Users, UserRound, Wallet } from "lucide-react";
+import { ArrowLeft, Bell, Check, Plus } from "lucide-react";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -13,6 +13,8 @@ import {
   type Collection, type CollectionType, type CollectionStatus,
 } from "../data/collections";
 import { formatRupiah } from "../data/store";
+import { BottomNav } from "../components/BottomNav";
+import { goBack } from "../lib/goBack";
 
 
 export default function CollectionsPage() {
@@ -135,7 +137,7 @@ export default function CollectionsPage() {
 
   return <main className="app-shell collections-page">
     <header className="topbar">
-      <button className="icon-btn" aria-label="Kembali" onClick={() => window.history.back()}><ArrowLeft size={21} /></button>
+      <button className="icon-btn" aria-label="Kembali" onClick={goBack}><ArrowLeft size={21} /></button>
 
       <div className="brand">UmayasLa<span>·</span> Collection</div>
       <div className="header-actions"><button className="icon-btn"><Bell size={19} /></button></div>
@@ -323,13 +325,7 @@ export default function CollectionsPage() {
       </div>
     )}
 
-    <nav className="bottom-nav">
-      <Link href="/dashboard" className="nav-link"><Home /><span>Dashboard</span></Link>
-      <Link href="/order" className="nav-link"><ShoppingBag /><span>Order</span></Link>
-      <Link href="/" className="nav-link"><Users /><span>Customer</span></Link>
-      <Link href="/fees" className="nav-link"><Wallet /><span>Fee</span></Link>
-      <Link href="/marketers" className="nav-link"><UserRound /><span>Marketer</span></Link>
-    </nav>
+    <BottomNav />
 
     {notice && <div className="toast"><Check size={17} />{notice}</div>}
   </main>;

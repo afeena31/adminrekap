@@ -1,7 +1,7 @@
 "use client";
 
 
-import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, CreditCard, Heart, Home, MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Search, ShoppingBag, Trash2, Truck, UserRound, Users, Wallet } from "lucide-react";
+import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, CreditCard, Heart, MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Search, ShoppingBag, Trash2, Truck } from "lucide-react";
 
 
 import Link from "next/link";
@@ -10,26 +10,13 @@ import { createNewCustomer, toDisplayCustomer, EMPTY_CUSTOMER, type Customer, ty
 import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentralCustomer, addAddress, updateAddress as updateCentralAddress, deleteAddress as deleteCentralAddress, getAddresses, getCustomerAddresses as getCentralCustomerAddresses, softDeleteCustomer, hardDeleteCustomer, backupLocalStorage, listBackups, restoreBackup, type BackupInfo } from "./data/central";
 import { Overview, CustomerPanel } from "./components/panels";
 import { NewCustomerForm, EditCustomerForm, type EditableCustomerFields } from "./components/NewCustomerForm";
+import { BottomNav } from "./components/BottomNav";
+import { goBack } from "./lib/goBack";
 import { getCollections, getCollectionStats, addCollection, saveCollections, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "./data/demoSeed";
 
 import { formatRupiah, getOrdersForCustomer, saveProducts, saveMarketers, saveFees, type OrderRecord } from "./data/store";
-import {
-  getOperations,
-  performAction,
-  getAvailableActions,
-  type CustomerOperations,
-  type ProductStatusCard,
-  type ActionType,
-  paymentStatusInfo,
-  progressStatusInfo,
-  locationInfo,
-  shippingPlanInfo,
-  nextActionInfo,
-  fulfillmentDecisionInfo,
-  shipmentStatusInfo,
-  actionTypeInfo,
-} from "./data/operations";
+import { getOperations, type CustomerOperations } from "./data/operations";
 
 
 
@@ -72,7 +59,6 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState("Ringkasan");
   const [saved, setSaved] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const [orderOpen, setOrderOpen] = useState(false);
   const [finderOpen, setFinderOpen] = useState(false);
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   // Mulai dari EMPTY_CUSTOMER (bukan langsung baca localStorage) supaya render
@@ -195,16 +181,6 @@ export default function HomePage() {
     notify(ok ? "Cadangan berhasil dipulihkan" : "Gagal memulihkan cadangan");
   };
 
-  // ===== OPERATIONS: AKSI → STATUS (state machine) =====
-  // Filosofi: Admin tidak memilih status — admin memilih AKSI, sistem mengubah status.
-  const handleOrderAction = (cardId: string, action: ActionType) => {
-    const updated = performAction(customer.id, cardId, action);
-    setOps(updated);
-    notify(`${actionTypeInfo[action].name} diterapkan`);
-  };
-
-
-
   // ===== ALAMAT PENGIRIMAN =====
   const openAddAddress = () => {
     setEditingAddress(null);
@@ -286,6 +262,7 @@ export default function HomePage() {
   if (customer.id === "") {
     return <main className="app-shell">
       <header className="topbar">
+        <button className="icon-btn" aria-label="Kembali" onClick={goBack}><ArrowLeft size={21} /></button>
         <div className="brand">UmayasLa<span>·</span></div>
         <div className="header-actions"><button className="icon-btn" onClick={openSettings}><MoreHorizontal size={21} /></button></div>
       </header>
@@ -304,7 +281,7 @@ export default function HomePage() {
   return <main className="app-shell">
 
     <header className="topbar">
-      <button className="icon-btn" aria-label="Kembali" onClick={() => window.history.back()}><ArrowLeft size={21} /></button>
+      <button className="icon-btn" aria-label="Kembali" onClick={goBack}><ArrowLeft size={21} /></button>
 
       <div className="brand">UmayasLa<span>·</span></div>
       <div className="header-actions"><Link href="/products" className="icon-btn" aria-label="Katalog produk"><ShoppingBag size={19} /></Link><button className="icon-btn"><Bell size={19} /></button><button className="icon-btn" onClick={openSettings}><MoreHorizontal size={21} /></button></div>
@@ -363,12 +340,12 @@ export default function HomePage() {
           </article>
         ))}
       </section>
-    ) : activeTab === "Ringkasan" ? <Overview customer={customer} onTab={setActiveTab} onOrder={() => setOrderOpen(true)} /> : <CustomerPanel customer={customer} tab={activeTab} onOrder={() => setOrderOpen(true)} />}
+    ) : activeTab === "Ringkasan" ? <Overview customer={customer} onTab={setActiveTab} /> : <CustomerPanel customer={customer} tab={activeTab} />}
 
     {/* ===== COLLECTION WORKSPACE SECTION ===== */}
     <CollectionWorkspaceSection />
 
-    <nav className="bottom-nav"><Link href="/dashboard" className="nav-link"><Home /><span>Dashboard</span></Link><Link href="/order" className="nav-link"><ShoppingBag /><span>Order</span></Link><button className="current" onClick={() => setActiveTab("Ringkasan")}><Users /><span>Customer</span></button><Link href="/fees" className="nav-link"><Wallet /><span>Fee</span></Link><Link href="/marketers" className="nav-link"><UserRound /><span>Marketer</span></Link></nav>
+    <BottomNav onCustomerClick={() => setActiveTab("Ringkasan")} />
 
 
 
@@ -462,7 +439,6 @@ export default function HomePage() {
       </div>
     )}
     {chatOpen && <div className="overlay" onClick={() => setChatOpen(false)}><section className="modal" onClick={event => event.stopPropagation()}><button className="close" onClick={() => setChatOpen(false)}>×</button><div className="chat-title"><span className="mini-avatar">{customer.initials}</span><div><b>{customer.name}</b><small>WhatsApp customer</small></div></div><div className="message">Assalamu'alaikum {customer.name.split(" ")[0]}, ada yang bisa kami bantu?</div><div className="composer"><input placeholder="Tulis pesan..."/><button onClick={() => { setChatOpen(false); notify("Pesan siap dikirim ke WhatsApp"); }}>Kirim</button></div></section></div>}
-    {orderOpen && <OrderDetailModal customer={customer} ops={ops} onClose={() => setOrderOpen(false)} onAction={handleOrderAction} />}
 
 
     {/* ===== ADDRESS FORM MODAL ===== */}
@@ -507,98 +483,6 @@ export default function HomePage() {
 }
 
 
-
-// Menentukan SATU kondisi utama per item, dari 5 dimensi status di ProductStatusCard.
-// Prioritas: fulfillment bermasalah > pembayaran belum lunas > hold > progres produksi > pengiriman > selesai.
-function derivePrimaryCondition(card: ProductStatusCard): { name: string; emoji: string; tone: string } {
-  if (
-    card.progressStatus === "retur" ||
-    card.fulfillmentDecision === "retur" ||
-    card.fulfillmentDecision === "batal" ||
-    card.fulfillmentDecision === "cancel-po" ||
-    card.fulfillmentDecision === "cancel-tanpa-konfirmasi"
-  ) {
-    return fulfillmentDecisionInfo[card.fulfillmentDecision] ?? progressStatusInfo["retur"];
-  }
-  if (card.paymentStatus !== "lunas" && card.paymentStatus !== "refund") {
-    return paymentStatusInfo[card.paymentStatus];
-  }
-  if (card.fulfillmentDecision === "hold-customer" || card.fulfillmentDecision === "hold-admin") {
-    return fulfillmentDecisionInfo[card.fulfillmentDecision];
-  }
-  if (card.progressStatus !== "selesai") {
-    return progressStatusInfo[card.progressStatus];
-  }
-  if (card.shipmentStatus !== "delivered") {
-    return shipmentStatusInfo[card.shipmentStatus];
-  }
-  return progressStatusInfo["selesai"];
-}
-
-// ===== ORDER DETAIL MODAL =====
-// Menampilkan status order dari state machine (operations.ts).
-// Admin tidak memilih status — admin memilih AKSI, sistem mengubah status otomatis.
-function OrderDetailModal({ customer, ops, onClose, onAction }: { customer: Customer; ops: CustomerOperations; onClose: () => void; onAction: (cardId: string, action: ActionType) => void }) {
-  const cards = ops.productCards;
-  const latest = customer.overview.latestOrder;
-
-  return <div className="overlay" onClick={onClose}>
-    <section className="modal order-modal" onClick={event => event.stopPropagation()}>
-      <button className="close" onClick={onClose}>×</button>
-
-      <div className="order-modal-head">
-        <h2>{latest.items.split("\n")[0]}</h2>
-        <p className="muted">Dibuat {latest.date} · {latest.items.split("\n").length} item</p>
-      </div>
-
-      {latest.items.split("\n").map((item, index) => (
-        <div className="line-item" key={index}><span>{item}</span><b>{latest.total}</b></div>
-      ))}
-
-      <div className="total"><span>Total</span><b>{latest.total}</b></div>
-
-      {/* ===== STATUS ORDER — satu kondisi utama + satu aksi (anti-duplikasi) ===== */}
-      {cards.length > 0 && (
-        <div className="order-status-section">
-          <p className="panel-hint">Satu kondisi utama per item — dikelola sistem dari aksi yang admin pilih.</p>
-          {cards.map(card => {
-            const primary = derivePrimaryCondition(card);
-            const next = nextActionInfo[card.nextAction];
-            const available = getAvailableActions(card);
-            return (
-              <div className="order-status-card" key={card.id}>
-                <div className="order-status-title">
-                  <span className="order-status-emoji">{card.emoji}</span>
-                  <div>
-                    <b>{card.productName}</b>
-                    <small>{card.qty} pcs · {card.orderNumber}</small>
-                  </div>
-                </div>
-                <div className="order-status-primary">
-                  <span className={`psc-value ${primary.tone}`}>{primary.emoji} {primary.name}</span>
-                  <span className="order-status-next"><small>⚡ Aksi</small><b className={`psc-value ${next.tone}`}>{next.emoji} {next.name}</b></span>
-                </div>
-                {card.blocker && <div className="order-status-blocker"><Clock size={14}/> {card.blocker}</div>}
-                <div className="order-status-actions">
-                  <p className="panel-hint">Pilih aksi — sistem akan mengubah status otomatis.</p>
-                  <div className="action-buttons">
-                    {available.map(a => (
-                      <button key={a} className="action-btn" onClick={() => onAction(card.id, a)}>
-                        {actionTypeInfo[a].emoji} {actionTypeInfo[a].name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <button className="secondary" onClick={onClose}><Check size={16} /> Tutup</button>
-    </section>
-  </div>;
-}
 
 
 function CollectionWorkspaceSection() {

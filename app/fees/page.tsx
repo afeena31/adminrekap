@@ -1,10 +1,12 @@
 "use client";
 
-import { ArrowLeft, Bell, Check, ChevronRight, Home, Search, ShoppingBag, Users, UserRound, Wallet, CheckCircle2, Clock, Filter } from "lucide-react";
+import { ArrowLeft, Bell, Check, ChevronRight, Search, Wallet, CheckCircle2, Clock, Filter } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { getFees, updateFeeStatus, getMarketers, formatRupiah, type FeeRecord } from "../data/store";
+import { BottomNav } from "../components/BottomNav";
+import { goBack } from "../lib/goBack";
 
 export default function FeesPage() {
   const [feeList, setFeeList] = useState<FeeRecord[]>([]);
@@ -61,7 +63,7 @@ export default function FeesPage() {
 
   return <main className="app-shell fees-page">
     <header className="topbar">
-      <button className="icon-btn" aria-label="Kembali" onClick={() => window.history.back()}><ArrowLeft size={21} /></button>
+      <button className="icon-btn" aria-label="Kembali" onClick={goBack}><ArrowLeft size={21} /></button>
 
       <div className="brand">UmayasLa<span>·</span> Fee Marketer</div>
       <div className="header-actions"><button className="icon-btn"><Bell size={19} /></button></div>
@@ -240,13 +242,7 @@ export default function FeesPage() {
       </div>
     )}
 
-    <nav className="bottom-nav">
-      <Link href="/dashboard" className="nav-link"><Home /><span>Dashboard</span></Link>
-      <Link href="/order" className="nav-link"><ShoppingBag /><span>Order</span></Link>
-      <button className="current"><Wallet /><span>Fee</span></button>
-      <Link href="/" className="nav-link"><Users /><span>Customer</span></Link>
-      <Link href="/marketers" className="nav-link"><UserRound /><span>Marketer</span></Link>
-    </nav>
+    <BottomNav />
 
 
     {notice && <div className="toast"><Check size={17} />{notice}</div>}

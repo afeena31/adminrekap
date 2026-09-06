@@ -2,8 +2,8 @@
 
 import {
   ArrowLeft, Bell, Boxes, Check, ChevronRight, ClipboardList, CreditCard,
-  Home, Package, PackageCheck, Plus, ShoppingBag, Truck, UserPlus, Users,
-  UserRound, Wallet, AlertCircle, Factory, PackageOpen,
+  Package, PackageCheck, Plus, ShoppingBag, Truck, UserPlus, Users,
+  UserRound, AlertCircle, Factory, PackageOpen,
   FileText, HandCoins, Send, Clock, CircleDot, TrendingUp, StickyNote,
   Settings, Sparkles, ArrowUpRight, MessageCircle, CalendarDays
 } from "lucide-react";
@@ -13,6 +13,8 @@ import { useEffect, useState } from "react";
 
 import { toDisplayCustomer } from "../data/customers";
 import { getOrders, getFees, getMarketers, getProducts, formatRupiah } from "../data/store";
+import { BottomNav } from "../components/BottomNav";
+import { goBack } from "../lib/goBack";
 import { getOperations } from "../data/operations";
 import { getCustomers, getCustomerAddresses as getCentralCustomerAddresses, getDashboardWorkQueue, type WorkQueueItem, type PrimaryCondition } from "../data/central";
 
@@ -129,7 +131,7 @@ export default function DashboardPage() {
 
   return <main className="app-shell dashboard-page">
     <header className="topbar">
-      <button className="icon-btn" aria-label="Kembali" onClick={() => window.history.back()}><ArrowLeft size={21} /></button>
+      <button className="icon-btn" aria-label="Kembali" onClick={goBack}><ArrowLeft size={21} /></button>
       <div className="brand">UmayasLa<span>·</span> <em className="brand-sub">Headquarters</em></div>
       <div className="header-actions">
         <button className="icon-btn" aria-label="Notifikasi"><Bell size={19} /></button>
@@ -303,13 +305,7 @@ export default function DashboardPage() {
     </section>
 
     {/* ===== BOTTOM NAV ===== */}
-    <nav className="bottom-nav">
-      <Link href="/dashboard" className="nav-link current"><Home /><span>Dashboard</span></Link>
-      <Link href="/order" className="nav-link"><ShoppingBag /><span>Order</span></Link>
-      <Link href="/" className="nav-link"><Users /><span>Customer</span></Link>
-      <Link href="/fees" className="nav-link"><Wallet /><span>Fee</span></Link>
-      <Link href="/marketers" className="nav-link"><UserRound /><span>Marketer</span></Link>
-    </nav>
+    <BottomNav />
 
     {notice && <div className="toast"><Check size={17} />{notice}</div>}
   </main>;

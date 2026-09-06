@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Bell, Check, ChevronRight, Copy, Heart, Home, MoreHorizontal, Pencil, Plus, Search, ShoppingBag, ShoppingCart, SlidersHorizontal, Trash2, Users, UserRound, Wallet } from "lucide-react";
+import { ArrowLeft, Bell, Check, ChevronRight, Copy, Heart, MoreHorizontal, Pencil, Plus, Search, ShoppingCart, SlidersHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -8,6 +8,8 @@ import { useEffect, useState } from "react";
 import { productCategories, formatRupiah, modifikasiInfo, ongkirInfo, splitShopeeInfo, rekeningInfo, type Product } from "../data/products";
 import { getProducts, addProduct, updateProduct, deleteProduct, calculateProductMetrics } from "../data/store";
 import { MoneyInput } from "../components/MoneyInput";
+import { BottomNav } from "../components/BottomNav";
+import { goBack } from "../lib/goBack";
 
 type ProductFormState = {
   id: string;
@@ -174,7 +176,7 @@ export default function ProductsPage() {
 
   return <main className="app-shell products-page">
     <header className="topbar">
-      <button className="icon-btn" aria-label="Kembali" onClick={() => window.history.back()}><ArrowLeft size={21} /></button>
+      <button className="icon-btn" aria-label="Kembali" onClick={goBack}><ArrowLeft size={21} /></button>
 
       <div className="brand">UmayasLa<span>·</span> Katalog</div>
       <div className="header-actions">
@@ -344,13 +346,7 @@ export default function ProductsPage() {
       </div>
     )}
 
-    <nav className="bottom-nav">
-      <button onClick={() => notify("Dashboard")}><Home /><span>Dashboard</span></button>
-      <button className="current"><ShoppingBag /><span>Katalog</span></button>
-      <Link href="/" className="nav-link"><Users /><span>Customer</span></Link>
-      <Link href="/fees" className="nav-link"><Wallet /><span>Fee</span></Link>
-      <button onClick={() => notify("Akun")}><UserRound /><span>Akun</span></button>
-    </nav>
+    <BottomNav />
 
 
     {notice && <div className="toast"><Check size={17} />{notice}</div>}

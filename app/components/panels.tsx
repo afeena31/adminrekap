@@ -29,7 +29,7 @@ import {
 // Semua modul hanyalah sudut pandang berbeda terhadap customer.
 // =====================================================================
 
-export function Overview({ customer, onTab, onOrder }: { customer: Customer; onTab: (tab: string) => void; onOrder: () => void }) {
+export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab: string) => void }) {
   const [ops, setOps] = useState<CustomerOperations>(() => getOperations(customer.id));
   const [notice, setNotice] = useState("");
 
@@ -65,7 +65,7 @@ export function Overview({ customer, onTab, onOrder }: { customer: Customer; onT
         <div><h2>Perlu Perhatian</h2><p>{ops.attention.length} hal agar pesanan {customer.name.split(" ")[0]} tetap lancar.</p></div>
       </div>
       {ops.attention.length === 0 && <p className="panel-hint" style={{ marginTop: 10 }}>Semua berjalan lancar. Tidak ada yang perlu perhatian. ✨</p>}
-      {ops.attention.map(item => <button key={item.title}><b>{item.title}</b><span>{item.desc}</span><ChevronRight size={17}/></button>)}
+      {ops.attention.map(item => <button key={item.title} onClick={() => onTab("Order")}><b>{item.title}</b><span>{item.desc}</span><ChevronRight size={17}/></button>)}
     </section>
 
     {/* ===== FULFILLMENT DECISION — premium recommendation ===== */}
@@ -158,6 +158,29 @@ export function Overview({ customer, onTab, onOrder }: { customer: Customer; onT
   </div>;
 }
 
+// Action Center item.action datang dari NextAction ("tagih-pelunasan", dst),
+// bukan ActionType admin ("catat-dp", "catat-pelunasan", dst) — sebelumnya
+// dicocokkan lewat tebak-tebakan potongan nama string, yang gagal total untuk
+// "tagih-pelunasan"/"serahkan-kurir"/"hubungi-customer" (klik jadi diam saja,
+// gak ngapa-ngapain — bikin orang kira tombolnya rusak/nyasar ke halaman lain).
+// Pemetaan eksplisit ini menjamin aksi yang benar-benar dijalankan.
+function resolveActionForNextAction(card: ProductStatusCard): ActionType | null {
+  if (card.paymentStatus === "belum-bayar") return "catat-dp";
+  if (card.paymentStatus === "dp" || card.paymentStatus === "lunas-sebagian") return "catat-pelunasan";
+  switch (card.progressStatus) {
+    case "po":
+    case "menunggu-batch":
+      return "mulai-produksi";
+    case "ready-gudang":
+    case "siap-packing":
+      return "mulai-packing";
+    case "perlu-input-resi":
+      return "input-resi";
+  }
+  if (card.shipmentStatus === "menunggu-pickup") return "kurir-pickup";
+  return null;
+}
+
 // ===== ACTION CENTER =====
 function ActionCenter({ ops, onAction }: { ops: CustomerOperations; onAction: (cardId: string, action: ActionType) => void }) {
   const priorityLabel: Record<string, string> = { red: "🔴", yellow: "🟡", green: "🟢", blue: "🔵" };
@@ -171,12 +194,9 @@ function ActionCenter({ ops, onAction }: { ops: CustomerOperations; onAction: (c
       <button key={item.id} className="action-item" onClick={() => {
         const card = ops.productCards.find(c => c.id === item.productId);
         if (!card) return;
+        const action = resolveActionForNextAction(card);
         const available = getAvailableActions(card);
-        const action = available.find(a => {
-          const info = actionTypeInfo[a];
-          return info.name.toLowerCase().includes(item.action.replace(/-/g, " ").split(" ")[0]);
-        });
-        if (action) onAction(card.id, action);
+        if (action && available.includes(action)) onAction(card.id, action);
       }}>
         <span className="action-priority">{priorityLabel[item.priority]}</span>
         <div className="action-copy"><b>{item.title}</b>{item.desc && <small>{item.desc}</small>}</div>
@@ -267,15 +287,15 @@ function ProductCard({ card, onAction }: { card: ProductStatusCard; onAction: (c
 }
 
 // ===== CUSTOMER PANEL (untuk tab lain) =====
-export function CustomerPanel({ customer, tab, onOrder }: { customer: Customer; tab: string; onOrder: () => void }) {
+export function CustomerPanel({ customer, tab }: { customer: Customer; tab: string }) {
   if (tab.startsWith("Order")) return <OrderPanel customer={customer} />;
   if (tab.startsWith("Payment")) return <PaymentPanel customer={customer} />;
-  if (tab.startsWith("Shipment")) return <ShipmentPanel customer={customer} onOrder={onOrder}/>;
+  if (tab.startsWith("Shipment")) return <ShipmentPanel customer={customer} />;
   if (tab.startsWith("Marketer")) return <MarketerPanel customer={customer} />;
   if (tab.startsWith("Batch")) return <BatchPanel customer={customer} />;
   if (tab.startsWith("Resi")) return <ResiPanel customer={customer} />;
   const rows = tab.startsWith("Catatan") ? customer.notes : customer.activities;
-  return <div className="content"><section className="card panel"><div className="section-head"><h2>{tab}</h2><button>Terbaru dulu</button></div>{rows.map((row, index) => <button key={index} className="panel-row" onClick={onOrder}><span className={`round ${index === 1 ? "sand" : "olive"}`}><Check size={17}/></span><span>{row}</span><ChevronRight size={18}/></button>)}</section></div>;
+  return <div className="content"><section className="card panel"><div className="section-head"><h2>{tab}</h2><button>Terbaru dulu</button></div>{rows.length === 0 && <p className="panel-hint" style={{ marginTop: 10 }}>Belum ada data.</p>}{rows.map((row, index) => <div key={index} className="panel-row"><span className={`round ${index === 1 ? "sand" : "olive"}`}><Check size={17}/></span><span>{row}</span></div>)}</section></div>;
 }
 
 // ===== ORDER PANEL — order asli dari central data (store.ts), bukan lagi
@@ -380,14 +400,14 @@ function ResiPanel({ customer }: { customer: Customer }) {
   </div>;
 }
 
-function ShipmentRow({ status, order, place, ready, ship, onClick }: { status: string; order: string; place: string; ready: string; ship: string; onClick: () => void }) {
-  return <button className="shipment-row" onClick={onClick}><div><b>{order} <span className="ready">{status}</span></b><p><MapPin size={14}/>{place}</p></div><div className="estimate"><span>{ready}</span><b>{ship}</b></div><ChevronRight size={18}/></button>;
+function ShipmentRow({ status, order, place, ready, ship }: { status: string; order: string; place: string; ready: string; ship: string }) {
+  return <div className="shipment-row"><div><b>{order} <span className="ready">{status}</span></b><p><MapPin size={14}/>{place}</p></div><div className="estimate"><span>{ready}</span><b>{ship}</b></div></div>;
 }
 
-function ShipmentPanel({ customer, onOrder }: { customer: Customer; onOrder: () => void }) {
+function ShipmentPanel({ customer }: { customer: Customer }) {
   const [status, setStatus] = useState("Siap Kirim");
   const rows = customer.shipments.map(item => item.order === customer.overview.latestOrder.id ? { ...item, status } : item);
-  return <div className="content"><section className="card panel"><div className="section-head"><h2>Pengiriman Customer</h2><button>Terbaru dulu</button></div><p className="panel-hint">Status pengiriman terpisah dari status produksi/batch.</p><div className="shipment-filter"><label>Status utama<select value={status} onChange={event => setStatus(event.target.value)}><option>Siap Kirim</option><option>Sudah Packing</option><option>Perlu Packing</option><option>Hold Pengiriman</option><option>Menunggu Pick Up</option><option>Sudah Dikirim</option><option>Proses Retur</option><option>Refund</option></select></label><span>Ubah status contoh untuk {customer.overview.latestOrder.items.split("\n")[0]}</span></div>{rows.map(item => <ShipmentRow key={item.order} {...item} onClick={onOrder}/>)}</section></div>;
+  return <div className="content"><section className="card panel"><div className="section-head"><h2>Pengiriman Customer</h2><button>Terbaru dulu</button></div><p className="panel-hint">Status pengiriman terpisah dari status produksi/batch.</p><div className="shipment-filter"><label>Status utama<select value={status} onChange={event => setStatus(event.target.value)}><option>Siap Kirim</option><option>Sudah Packing</option><option>Perlu Packing</option><option>Hold Pengiriman</option><option>Menunggu Pick Up</option><option>Sudah Dikirim</option><option>Proses Retur</option><option>Refund</option></select></label><span>Ubah status contoh untuk {customer.overview.latestOrder.items.split("\n")[0]}</span></div>{rows.map(item => <ShipmentRow key={item.order} {...item} />)}</section></div>;
 }
 
 function PaymentPanel({ customer }: { customer: Customer }) {

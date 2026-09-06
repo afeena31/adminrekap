@@ -1,11 +1,13 @@
 "use client";
 
-import { ArrowLeft, Bell, Check, ChevronRight, Home, Pencil, Phone, Plus, Search, ShoppingBag, Trash2, Users, UserRound, Wallet, CalendarDays, StickyNote, TrendingUp, Package, Coins, Clock } from "lucide-react";
+import { ArrowLeft, Bell, Check, ChevronRight, Pencil, Phone, Plus, Search, Trash2, Users, CalendarDays, StickyNote, TrendingUp, Package, Coins, Clock } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 
 import { getMarketers, saveMarketers, updateMarketer, deleteMarketer, getMarketerStats, getOrders, formatRupiah, type Marketer, type MarketerStatus } from "../data/store";
+import { BottomNav } from "../components/BottomNav";
+import { goBack } from "../lib/goBack";
 
 
 type StatusFilter = "semua" | MarketerStatus;
@@ -130,7 +132,7 @@ export default function MarketersPage() {
 
   return <main className="app-shell marketers-page">
     <header className="topbar">
-      <button className="icon-btn" aria-label="Kembali" onClick={() => window.history.back()}><ArrowLeft size={21} /></button>
+      <button className="icon-btn" aria-label="Kembali" onClick={goBack}><ArrowLeft size={21} /></button>
 
       <div className="brand">UmayasLa<span>·</span> Marketer</div>
       <div className="header-actions"><button className="icon-btn"><Bell size={19} /></button></div>
@@ -354,13 +356,7 @@ export default function MarketersPage() {
       </div>
     )}
 
-    <nav className="bottom-nav">
-      <Link href="/dashboard" className="nav-link"><Home /><span>Dashboard</span></Link>
-      <Link href="/order" className="nav-link"><ShoppingBag /><span>Order</span></Link>
-      <Link href="/" className="nav-link"><Users /><span>Customer</span></Link>
-      <Link href="/fees" className="nav-link"><Wallet /><span>Fee</span></Link>
-      <button className="current"><UserRound /><span>Marketer</span></button>
-    </nav>
+    <BottomNav />
 
     {notice && <div className="toast"><Check size={17} />{notice}</div>}
   </main>;

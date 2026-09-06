@@ -63,19 +63,22 @@ export const products: Product[] = [
   { id: "amna-xxl-polos", name: "Amna Jilbab XXL · Polos", category: "amna-jilbab", price: 270000, emoji: "🧕", hpp: 190000, feeMarketer: 15000, active: true },
   { id: "amna-xxl-rits", name: "Amna Jilbab XXL · Rits", category: "amna-jilbab", price: 290000, emoji: "🧕", hpp: 210000, feeMarketer: 15000, active: true },
 
-  // NIQAB (fee 10.000/pcs)
+  // NIQAB (fee 10.000/pcs) — harga sesuai Master Data Bisnis (2026-09).
+  // "Niqab Poni Banat" tidak tercantum di Master Data — dibiarkan apa adanya,
+  // perlu konfirmasi owner apakah produk ini masih berlaku.
   { id: "niqab-poni-banat", name: "Niqab Poni Banat", category: "niqab", price: 45000, emoji: "🖤", hpp: 30000, feeMarketer: 10000, active: true },
   { id: "niqab-poni-basic", name: "Niqab Poni Basic", category: "niqab", price: 95000, emoji: "🖤", hpp: 70000, feeMarketer: 10000, active: true },
-  { id: "niqab-bandana-basic", name: "Niqab Bandana Basic", category: "niqab", price: 95000, emoji: "🖤", hpp: 70000, feeMarketer: 10000, active: true },
-  { id: "niqab-bandana-aroby", name: "Niqab Bandana Aroby", category: "niqab", price: 100000, emoji: "🖤", hpp: 75000, feeMarketer: 10000, active: true },
+  { id: "niqab-poni-aroby", name: "Niqab Poni Aroby", category: "niqab", price: 100000, emoji: "🖤", hpp: 75000, feeMarketer: 10000, active: true },
   { id: "niqab-poni-muqowwa", name: "Niqab Poni Muqowwa", category: "niqab", price: 110000, emoji: "🖤", hpp: 80000, feeMarketer: 10000, active: true },
-  { id: "niqab-bandana-muqowwa", name: "Niqab Bandana Muqowwa", category: "niqab", price: 110000, emoji: "🖤", hpp: 80000, feeMarketer: 10000, active: true },
+  { id: "niqab-bandana-basic", name: "Niqab Bandana Basic", category: "niqab", price: 90000, emoji: "🖤", hpp: 65000, feeMarketer: 10000, active: true },
+  { id: "niqab-bandana-aroby", name: "Niqab Bandana Aroby", category: "niqab", price: 95000, emoji: "🖤", hpp: 70000, feeMarketer: 10000, active: true },
+  { id: "niqab-bandana-muqowwa", name: "Niqab Bandana Muqowwa", category: "niqab", price: 105000, emoji: "🖤", hpp: 75000, feeMarketer: 10000, active: true },
 
-  // AKSESORIS (handsock 5.000, kaos kaki 2.000, linen spray 5.000)
-  { id: "handsock-standar", name: "Handsock Standar", category: "aksesoris", price: 25000, emoji: "🧤", variants: ["Hitam", "Navy", "Latte (Mocca)", "Cream", "Brown"], hpp: 15000, feeMarketer: 5000, active: true },
-  { id: "handsock-long", name: "Handsock Long", category: "aksesoris", price: 32000, emoji: "🧤", variants: ["Hitam", "Navy", "Latte (Mocca)", "Cream", "Brown"], hpp: 20000, feeMarketer: 5000, active: true },
-  { id: "kaos-kaki", name: "Kaos Kaki", category: "aksesoris", price: 24000, emoji: "🧦", hpp: 15000, feeMarketer: 2000, active: true },
-  { id: "linen-spray", name: "Linen Spray", category: "aksesoris", price: 35000, emoji: "🌸", hpp: 25000, feeMarketer: 5000, active: true },
+  // AKSESORIS — harga & varian sesuai Master Data Bisnis (2026-09).
+  { id: "handsock-standar", name: "Manset / Handsock Standar", category: "aksesoris", price: 25000, emoji: "🧤", variants: ["Hitam", "Navy", "Brown", "Latte", "Cream"], hpp: 15000, feeMarketer: 5000, active: true },
+  { id: "handsock-long", name: "Manset / Handsock Long", category: "aksesoris", price: 32000, emoji: "🧤", variants: ["Hitam"], hpp: 20000, feeMarketer: 5000, active: true },
+  { id: "kaos-kaki", name: "Kaos Kaki", category: "aksesoris", price: 25000, emoji: "🧦", variants: ["Hitam"], hpp: 15000, feeMarketer: 2000, active: true },
+  { id: "linen-spray", name: "Afeena Linen Spray", category: "aksesoris", price: 35000, emoji: "🌸", hpp: 25000, feeMarketer: 5000, active: true },
 
   // LAINNYA
   { id: "ongkir-id-express", name: "Ongkir ID Express Jawa", category: "lainnya", price: 8500, emoji: "🚚", description: "ID Express Pulau Jawa", active: true },
@@ -103,18 +106,83 @@ export const ongkirInfo = [
   { name: "J&T 40%", price: null, note: "Menyesuaikan tarif", emoji: "📦" },
 ];
 
+// ===== SHOPEE SPLIT BILL (sumber: Master Data Bisnis, 2026-09) =====
+// Split Bill BUKAN full payment via Shopee — hanya Rp1.500 (nominal produk
+// Split Bill) yang mengurangi Total Invoice, BUKAN total checkout Shopee
+// (yang termasuk biaya admin). Rumus transfer manual SELALU:
+// Total Invoice - Rp1.500.
+export const SPLIT_BILL_PRODUK = 1500;
+
 export const splitShopeeInfo = [
-  { name: "Buku", emoji: "📚", shopee: 3385, detail: "Rp1.500 harga produk + Rp1.885 biaya admin", transfer: "Total Invoice - Rp1.500" },
-  { name: "Produk Afeena (Jilbab, Niqab, Handsock, Kaos Kaki, Linen Spray)", emoji: "🧕", shopee: 3500, detail: "Rp1.500 harga produk + Rp2.000 biaya admin", transfer: "Total Invoice - Rp1.500" },
+  {
+    name: "Split Bill Afeena — 1 kg",
+    emoji: "🧕",
+    link: "https://s.shopee.co.id/4qEZTr7ffz",
+    shopee: 3500,
+    detail: "Rp1.500 harga produk + Rp2.000 biaya admin",
+    transfer: "Total Invoice - Rp1.500",
+    note: "Jilbab, Niqab, Manset/Handsock, Kaos Kaki, Linen Spray",
+  },
+  {
+    name: "Split Bill Afeena — 2 kg",
+    emoji: "🧕",
+    link: "https://s.shopee.co.id/1qb9L5wKnp",
+    shopee: 3500,
+    detail: "Rp1.500 harga produk + Rp2.000 biaya admin",
+    transfer: "Total Invoice - Rp1.500",
+    note: "Order Afeena maksimal 2 kg — cukup checkout 1x meski beberapa produk sekaligus",
+  },
+  {
+    name: "Split Bill Buku Etalase YasLa — dari Bekasi",
+    emoji: "📚",
+    link: "https://s.shopee.co.id/1gHowlnUIB",
+    shopee: null,
+    detail: "Nominal Split Bill Rp1.500 (biaya admin belum diatur di Master Data)",
+    transfer: "Total Invoice - Rp1.500",
+    note: "Buku dari Etalase YasLa, dikirim dari Bekasi",
+  },
+  {
+    name: "Split Bill Buku Parenting — 1 kg",
+    emoji: "📚",
+    link: "https://s.shopee.co.id/5fmj9BG5VQ",
+    shopee: 3385,
+    detail: "Rp1.500 harga produk + Rp1.885 biaya admin",
+    transfer: "Total Invoice - Rp1.500",
+    note: "Buku Parenting, dikirim dari Purwakarta",
+  },
 ];
 
-export const rekeningInfo = [
-  { name: "Buku Parenting", bank: "Jago Syariah / Jago UUS (542)", number: "505321407794", owner: "Rizki Muhammad", emoji: "�" },
-  { name: "Boardbook PO", bank: "Jago Syariah / Jago UUS (542)", number: "508828328822", owner: "Gina Rizqi", emoji: "📖" },
-  { name: "Amna Jilbab Batch 7", bank: "Jago Syariah / Jago UUS (542)", number: "506687861938", owner: "Rizki Muhammad", emoji: "🧕" },
-  { name: "Amna Jilbab Batch 8", bank: "Jago Syariah / Jago UUS (542)", number: "508249874973", owner: "Rizki Muhammad", emoji: "🧕" },
-  { name: "Pembelian Kain", bank: "Jago Syariah / Jago UUS (542)", number: "508419126333", owner: "Rizki Muhammad", emoji: "🧵" },
-];
+// ===== REKENING PEMBAYARAN (sumber: Master Data Bisnis, 2026-09) =====
+export const rekeningBoardbook = { name: "Buku Anak / Boardbook PO", bank: "Jago Syariah (542)", number: "508828328822", owner: "Gina Rizqi A", emoji: "📖" };
+export const rekeningAfeena = { name: "Produk Afeena (Jilbab, Niqab, Manset, Kaos Kaki, Linen Spray)", bank: "Jago Syariah (542)", number: "503496110351", owner: "Rizki Muhammad R", emoji: "🧕" };
+export const rekeningGabungan = { name: "Buku Parenting & Order Gabungan", bank: "Jago Syariah (542)", number: "506608360610", owner: "Rizki Muhammad R", emoji: "📚" };
+
+export const rekeningInfo = [rekeningBoardbook, rekeningAfeena, rekeningGabungan];
+
+// Kategori produk yang termasuk "Produk Afeena" per Master Data.
+const AFEENA_CATEGORIES = ["amna-jilbab", "niqab", "aksesoris"];
+// Kategori "buku" — kalau digabung dengan Afeena dalam satu order, jadi
+// Order Gabungan (Rule 4). CATATAN: "lebah-asaqu" tidak eksplisit disebut di
+// Master Data — sementara diperlakukan sebagai kategori buku untuk deteksi
+// gabungan (paling mendekati boardbook/parenting), perlu konfirmasi owner.
+const BUKU_CATEGORIES = ["buku-parenting", "boardbook", "lebah-asaqu"];
+
+// Routing rekening pembayaran berdasarkan isi order — sesuai 4 aturan di
+// Master Data Bisnis. Order gabungan (buku + Afeena) SELALU ke satu rekening
+// (Rekening Gabungan), TIDAK dipecah ke dua rekening.
+export function determineRekening(categories: string[]): typeof rekeningBoardbook | null {
+  const uniqueCats = Array.from(new Set(categories.filter(c => c && c !== "lainnya")));
+  if (uniqueCats.length === 0) return null; // BELUM DIATUR — gak ada kategori produk yang jelas
+
+  const onlyBoardbook = uniqueCats.every(c => c === "boardbook");
+  const onlyAfeena = uniqueCats.every(c => AFEENA_CATEGORIES.includes(c));
+  const hasBuku = uniqueCats.some(c => BUKU_CATEGORIES.includes(c));
+
+  if (onlyBoardbook) return rekeningBoardbook;   // Rule 1
+  if (onlyAfeena) return rekeningAfeena;          // Rule 2
+  if (hasBuku) return rekeningGabungan;           // Rule 3 (buku parenting saja) + Rule 4 (buku + Afeena)
+  return null; // kombinasi di luar cakupan Master Data — BELUM DIATUR, jangan menebak
+}
 
 // ===== DATA JILBAB (untuk form order) =====
 
@@ -134,9 +202,13 @@ export const jilbabPads = [
   { id: "niqabis", name: "Niqabis", price: 0 },
 ];
 
+// Sesuai Master Data Bisnis (2026-09) — sebelumnya "Tali Ikat Dalam/Luar"
+// cuma ada di modifikasiInfo (info-only), belum pernah bisa dipilih beneran
+// saat bikin order Amna Jilbab.
 export const jilbabModifikasi = [
-  { id: "lubang-tangan", name: "Lubang Tangan Rits", price: 20000 },
-  { id: "rits-tengah", name: "Rits Tengah Busui / Sleting Tengah Jilbab", price: 20000 },
+  { id: "lubang-tangan", name: "Fitur Lubang Tangan + Rits", price: 20000 },
+  { id: "rits-tengah", name: "Rits Tengah Busui 40 cm", price: 20000 },
+  { id: "tali-ikat", name: "Tali Ikat Dalam/Luar Jilbab", price: 8000 },
   { id: "request-khusus", name: "Request Khusus", price: 0 },
 ];
 
@@ -161,13 +233,3 @@ export const invoiceTypeInfo: Record<InvoiceType, { name: string; desc: string }
   "gabungan": { name: "Invoice Gabungan", desc: "Beberapa kategori sekaligus" },
 };
 
-// Rekening per kategori (sesuai manual)
-export const rekeningByCategory: Record<string, { name: string; bank: string; number: string; owner: string }> = {
-  "buku-parenting": { name: "Buku Parenting", bank: "Jago Syariah / Jago UUS (542)", number: "505321407794", owner: "Rizki Muhammad" },
-  "boardbook": { name: "Boardbook PO", bank: "Jago Syariah / Jago UUS (542)", number: "508828328822", owner: "Gina Rizqi" },
-  "amna-jilbab": { name: "Amna Jilbab Batch 7", bank: "Jago Syariah / Jago UUS (542)", number: "506687861938", owner: "Rizki Muhammad" },
-
-  "niqab": { name: "Produk Afeena", bank: "Jago Syariah / Jago UUS (542)", number: "508249874973", owner: "Rizki Muhammad" },
-  "aksesoris": { name: "Produk Afeena", bank: "Jago Syariah / Jago UUS (542)", number: "508249874973", owner: "Rizki Muhammad" },
-  "lainnya": { name: "Produk Afeena", bank: "Jago Syariah / Jago UUS (542)", number: "508249874973", owner: "Rizki Muhammad" },
-};

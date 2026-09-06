@@ -9,7 +9,7 @@ import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
 
 
-import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, rekeningByCategory, type Product, type InvoiceType } from "../data/products";
+import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, determineRekening, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
 import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
@@ -429,7 +429,7 @@ function OrderPageInner() {
     }
     lines.push("");
     lines.push("Pembayaran:");
-    const rek = rekeningByCategory[inv.items[0]?.category || "lainnya"];
+    const rek = determineRekening(inv.items.map(i => i.category || "lainnya"));
     if (rek) {
       lines.push(rek.name);
       lines.push(rek.bank);

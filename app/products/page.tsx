@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Bell, Check, ChevronRight, Copy, Heart, MoreHorizontal, Pencil, Plus, Search, ShoppingCart, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ArrowLeft, Bell, Check, ChevronRight, Copy, ExternalLink, Heart, MoreHorizontal, Pencil, Plus, Search, ShoppingCart, SlidersHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -301,9 +301,11 @@ export default function ProductsPage() {
           <span className="info-emoji">{item.emoji}</span>
           <div className="info-main">
             <b>{item.name}</b>
+            <small>{item.note}</small>
             <small>{item.detail}</small>
-            <div className="shopee-row"><span>Shopee</span><b>{formatRupiah(item.shopee)}</b></div>
+            {item.shopee != null && <div className="shopee-row"><span>Total Checkout Shopee</span><b>{formatRupiah(item.shopee)}</b></div>}
             <div className="shopee-row"><span>Transfer Manual</span><b>{item.transfer}</b></div>
+            <a href={item.link} target="_blank" rel="noreferrer" className="shopee-link">Buka Link Shopee <ExternalLink size={12} /></a>
           </div>
         </div>
       ))}

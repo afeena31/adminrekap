@@ -78,6 +78,17 @@ a.icon-btn { text-decoration: none; display: inline-flex; align-items: center; j
 .shopee-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
 .shopee-row span { color: var(--muted); font-size: 12px; }
 .shopee-row b { color: var(--ink); font-size: 13px; margin: 0; }
+.shopee-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  color: var(--brown);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.shopee-link:hover { text-decoration: underline; }
 
 .info-note { background: #fbf6ee; border: 1px solid #f0e6d8; border-radius: 13px; padding: 15px 16px; }
 .info-note b { font-size: 13px; }

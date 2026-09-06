@@ -180,8 +180,12 @@ function save<T>(key: string, value: T) {
 
 // ===== PRODUCT STORE =====
 
+// Katalog produk contoh (seedProducts) SENGAJA tidak dipakai sebagai default —
+// user sudah konfirmasi eksplisit itu bukan data bisnis asli. Kalau localStorage
+// kosong (device baru/cache dibersihkan), katalog harus kosong, bukan diam-diam
+// terisi 32 produk contoh lagi.
 export function getProducts(): Product[] {
-  return load<Product[]>(KEYS.products, seedProducts);
+  return load<Product[]>(KEYS.products, []);
 }
 
 export function saveProducts(list: Product[]) {
@@ -437,8 +441,13 @@ export const seedFees: FeeRecord[] = [
   },
 ];
 
+// Sama seperti getProducts() — seedFees (fee dari order contoh, mis. "Order
+// Siti Aisyah") TIDAK dipakai sebagai default. Tanpa ini, halaman Fee bisa
+// menampilkan angka fiktif ("Belum Diambil Rp 35.000") di device manapun
+// yang belum pernah menulis ke localStorage sama sekali, padahal customer &
+// marketer contoh sudah lama dihapus.
 export function getFees(): FeeRecord[] {
-  return load<FeeRecord[]>(KEYS.fees, seedFees);
+  return load<FeeRecord[]>(KEYS.fees, []);
 }
 
 

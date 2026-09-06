@@ -205,13 +205,17 @@ export const seedCollections: Collection[] = [
 
 // ===== COLLECTION STORE =====
 
+// seedCollections (mis. "PO Batch 7", "Linen Spray") TIDAK dipakai sebagai
+// default lagi — itu contoh, bukan Collection asli. Tanpa ini, device baru
+// atau localStorage yang baru dikosongkan akan diam-diam terisi Collection
+// contoh lagi, padahal user sudah minta app benar-benar bersih dari data demo.
 export function getCollections(): Collection[] {
-  const list = load<Collection[]>(KEYS.collections, seedCollections);
+  const list = load<Collection[]>(KEYS.collections, []);
   return list.filter(c => c.deletedAt === null);
 }
 
 export function getAllCollections(): Collection[] {
-  return load<Collection[]>(KEYS.collections, seedCollections);
+  return load<Collection[]>(KEYS.collections, []);
 }
 
 export function saveCollections(list: Collection[]) {

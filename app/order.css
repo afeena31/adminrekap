@@ -499,6 +499,21 @@ a.nav-link:hover { background: #f5ece5; color: #694628; transform: translateY(-1
   flex-shrink: 0;
 }
 .cancel-edit-btn:hover { border-color: #c0392b; color: #c0392b; }
+.delete-order-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e8c9c2;
+  border-radius: 8px;
+  background: #fff;
+  color: #c0392b;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s ease;
+}
+.delete-order-btn:hover { background: #fdf1ef; }
 .order-list {
   margin-top: 8px;
   border: 1px solid var(--line);

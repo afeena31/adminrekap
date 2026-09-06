@@ -363,6 +363,15 @@ export function updateOrder(order: OrderRecord): OrderRecord[] {
   return updated;
 }
 
+// Hapus order permanen. Pemanggil (order/page.tsx) bertanggung jawab juga
+// membersihkan data terkait (removeFeeForOrder, removeOrderFromAllCollections)
+// supaya tidak ada fee/collection yang nyangkut menunjuk ke order yang sudah hilang.
+export function deleteOrder(id: string): OrderRecord[] {
+  const updated = getOrders().filter(o => o.id !== id);
+  save(KEYS.orders, updated);
+  return updated;
+}
+
 // ===== FEE STORE =====
 
 // Seed fee records agar halaman Fee langsung menampilkan data
@@ -485,6 +494,27 @@ export function saveFees(list: FeeRecord[]) {
 export function updateFeeStatus(id: string, status: "belum-diambil" | "sudah-diambil", paidDate: string | null, note?: string): FeeRecord[] {
   const list = getFees();
   const updated = list.map(f => f.id === id ? { ...f, status, paidDate, note: note ?? f.note } : f);
+  save(KEYS.fees, updated);
+  return updated;
+}
+
+// Koreksi manual nominal fee (mis. kesepakatan berubah setelah tercatat) —
+// mengganti rincian item dengan satu baris "Penyesuaian manual" supaya
+// breakdown-nya gak menyesatkan (nggak nyisa angka lama yang beda dari total).
+export function updateFeeAmount(id: string, totalFee: number, note?: string): FeeRecord[] {
+  const list = getFees();
+  const updated = list.map(f => f.id === id ? {
+    ...f,
+    totalFee,
+    items: [{ productName: "Penyesuaian manual", qty: 1, feePerUnit: totalFee, feeTotal: totalFee }],
+    note: note ?? f.note,
+  } : f);
+  save(KEYS.fees, updated);
+  return updated;
+}
+
+export function deleteFee(id: string): FeeRecord[] {
+  const updated = getFees().filter(f => f.id !== id);
   save(KEYS.fees, updated);
   return updated;
 }

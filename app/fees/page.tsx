@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowLeft, Bell, Check, ChevronRight, Search, Wallet, CheckCircle2, Clock, Filter } from "lucide-react";
+import { ArrowLeft, Bell, Check, ChevronRight, Search, Wallet, CheckCircle2, Clock, Filter, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { getFees, updateFeeStatus, getMarketers, formatRupiah, type FeeRecord } from "../data/store";
+import { getFees, updateFeeStatus, updateFeeAmount, deleteFee, getMarketers, formatRupiah, type FeeRecord } from "../data/store";
 import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
+import { MoneyInput } from "../components/MoneyInput";
 
 export default function FeesPage() {
   const [feeList, setFeeList] = useState<FeeRecord[]>([]);
@@ -15,6 +16,9 @@ export default function FeesPage() {
   const [filterMarketer, setFilterMarketer] = useState("semua");
   const [search, setSearch] = useState("");
   const [detailFee, setDetailFee] = useState<FeeRecord | null>(null);
+  const [editingAmount, setEditingAmount] = useState(false);
+  const [amountDraft, setAmountDraft] = useState(0);
+  const [deleteConfirmFee, setDeleteConfirmFee] = useState<FeeRecord | null>(null);
 
   const [marketers, setMarketers] = useState<ReturnType<typeof getMarketers>>([]);
 
@@ -59,6 +63,28 @@ export default function FeesPage() {
     setFeeList(updated);
     setDetailFee(null);
     notify(`Fee ${fee.marketerName} dikembalikan ke belum diambil`);
+  };
+
+  const startEditAmount = (fee: FeeRecord) => {
+    setAmountDraft(fee.totalFee);
+    setEditingAmount(true);
+  };
+
+  const saveEditedAmount = () => {
+    if (!detailFee) return;
+    const updated = updateFeeAmount(detailFee.id, amountDraft);
+    setFeeList(updated);
+    setDetailFee(updated.find(f => f.id === detailFee.id) || null);
+    setEditingAmount(false);
+    notify(`Nominal fee ${detailFee.marketerName} diperbarui`);
+  };
+
+  const handleDeleteFee = (fee: FeeRecord) => {
+    const updated = deleteFee(fee.id);
+    setFeeList(updated);
+    setDetailFee(null);
+    setDeleteConfirmFee(null);
+    notify(`Fee ${fee.marketerName} dihapus`);
   };
 
   return <main className="app-shell fees-page">
@@ -210,10 +236,24 @@ export default function FeesPage() {
             ))}
           </div>
 
-          <div className="fee-detail-total">
-            <span>Total Fee</span>
-            <b>{formatRupiah(detailFee.totalFee)}</b>
-          </div>
+          {editingAmount ? (
+            <div className="fee-detail-total fee-edit-amount">
+              <span>Nominal Fee</span>
+              <div className="fee-edit-amount-controls">
+                <MoneyInput value={amountDraft} onChange={setAmountDraft} placeholder="0" />
+                <button className="primary" onClick={saveEditedAmount}><Check size={15} /> Simpan</button>
+                <button className="secondary" onClick={() => setEditingAmount(false)}>Batal</button>
+              </div>
+            </div>
+          ) : (
+            <div className="fee-detail-total">
+              <span>Total Fee</span>
+              <div className="fee-edit-amount-controls">
+                <b>{formatRupiah(detailFee.totalFee)}</b>
+                <button className="icon-btn" aria-label="Edit nominal fee" onClick={() => startEditAmount(detailFee)}><Pencil size={15} /></button>
+              </div>
+            </div>
+          )}
 
           <div className="fee-detail-status">
             <span>Status</span>
@@ -237,6 +277,23 @@ export default function FeesPage() {
                 <Clock size={16} /> Kembalikan ke Belum Diambil
               </button>
             )}
+            <button className="fee-delete-btn" onClick={() => setDeleteConfirmFee(detailFee)}>
+              <Trash2 size={16} /> Hapus Fee Ini
+            </button>
+          </div>
+        </section>
+      </div>
+    )}
+
+    {/* ===== KONFIRMASI HAPUS FEE ===== */}
+    {deleteConfirmFee && (
+      <div className="overlay" onClick={() => setDeleteConfirmFee(null)}>
+        <section className="modal confirm-modal" onClick={e => e.stopPropagation()}>
+          <h2>Hapus Fee Ini?</h2>
+          <p>Fee <b>{formatRupiah(deleteConfirmFee.totalFee)}</b> untuk <b>{deleteConfirmFee.marketerName}</b> akan dihapus permanen. Order aslinya tidak ikut terhapus — cuma catatan fee-nya.</p>
+          <div className="confirm-actions">
+            <button className="secondary" onClick={() => setDeleteConfirmFee(null)}>Batal</button>
+            <button className="danger" onClick={() => handleDeleteFee(deleteConfirmFee)}><Trash2 size={15} /> Hapus</button>
           </div>
         </section>
       </div>

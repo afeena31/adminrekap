@@ -11,9 +11,9 @@ import { goBack } from "../lib/goBack";
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, rekeningByCategory, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
-import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
+import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
-import { getOrCreateBatchCollection, syncOrderBatchCollection } from "../data/collections";
+import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
 import { MoneyInput } from "../components/MoneyInput";
 
@@ -131,6 +131,7 @@ function OrderPageInner() {
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [showOrderList, setShowOrderList] = useState(false);
   const [existingOrders, setExistingOrders] = useState<OrderRecord[]>([]);
+  const [deleteOrderConfirmOpen, setDeleteOrderConfirmOpen] = useState(false);
 
 
 
@@ -660,6 +661,29 @@ function OrderPageInner() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // ===== HAPUS ORDER =====
+  // Ikut membersihkan FeeRecord & tautan Collection order ini supaya tidak
+  // ada catatan lain yang menunjuk ke order yang sudah tidak ada.
+  const handleDeleteOrder = () => {
+    if (!editingOrderId) return;
+    const deletedId = editingOrderId;
+    const deletedNumber = existingOrders.find(o => o.id === deletedId)?.number || "";
+    deleteOrder(deletedId);
+    removeFeeForOrder(deletedId);
+    try { removeOrderFromAllCollections(deletedId); } catch { /* non-fatal */ }
+    setEditingOrderId(null);
+    setItems([]);
+    setDpAmount(0);
+    setNote("");
+    setInternalNote("");
+    setDiscountValue(0);
+    setMarketerId("");
+    setBatch("Batch 7");
+    setDeleteOrderConfirmOpen(false);
+    setExistingOrders(getOrders());
+    notify(`Order ${deletedNumber} dihapus permanen`);
+  };
+
   // Datang dari tab Order di profil customer (?orderId=...) — langsung buka
   // order itu dalam mode edit, sekali saja.
   useEffect(() => {
@@ -709,6 +733,7 @@ function OrderPageInner() {
             <b>Sedang mengedit order</b>
             <small>{existingOrders.find(o => o.id === editingOrderId)?.number || ""} · {existingOrders.find(o => o.id === editingOrderId)?.customer || ""}</small>
           </div>
+          <button className="delete-order-btn" onClick={() => setDeleteOrderConfirmOpen(true)} aria-label="Hapus order"><Trash2 size={14} /></button>
           <button className="cancel-edit-btn" onClick={() => {
             setEditingOrderId(null);
             setItems([]);
@@ -1301,6 +1326,19 @@ function OrderPageInner() {
         </div>
       </section>
     </div>}
+
+    {deleteOrderConfirmOpen && (
+      <div className="overlay" onClick={() => setDeleteOrderConfirmOpen(false)}>
+        <section className="modal confirm-modal" onClick={e => e.stopPropagation()}>
+          <h2>Hapus Order Ini?</h2>
+          <p>Order <b>{existingOrders.find(o => o.id === editingOrderId)?.number}</b> akan dihapus permanen, termasuk fee marketer dan tautan Collection yang terkait. Tindakan ini tidak bisa dibatalkan.</p>
+          <div className="confirm-actions">
+            <button className="secondary" onClick={() => setDeleteOrderConfirmOpen(false)}>Batal</button>
+            <button className="danger" onClick={handleDeleteOrder}><Trash2 size={15} /> Hapus</button>
+          </div>
+        </section>
+      </div>
+    )}
 
     <BottomNav />
 

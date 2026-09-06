@@ -357,6 +357,15 @@ export function removeOrderFromCollection(collectionId: string, orderId: string)
   return updated;
 }
 
+// Lepaskan order dari SEMUA Collection sekaligus — dipakai saat order itu
+// sendiri dihapus permanen, supaya tidak ada Collection yang masih menghitung
+// order yang sudah tidak ada.
+export function removeOrderFromAllCollections(orderId: string): CollectionOrder[] {
+  const updated = getCollectionOrders().filter(r => r.orderId !== orderId);
+  saveCollectionOrders(updated);
+  return updated;
+}
+
 // ===== COLLECTION STATS =====
 
 export type CollectionStats = {

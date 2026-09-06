@@ -211,6 +211,45 @@
   transition: background 0.2s ease;
 }
 .fee-detail-actions .secondary:hover { background: #fbf6ee; }
+.fee-detail-actions { display: grid; gap: 8px; }
+
+.fee-edit-amount-controls { display: flex; align-items: center; gap: 8px; }
+.fee-detail-total .fee-edit-amount-controls { flex: 1; justify-content: flex-end; }
+.fee-edit-amount input {
+  width: 130px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 15px;
+  text-align: right;
+  background: #fff;
+}
+.fee-edit-amount-controls .primary, .fee-edit-amount-controls .secondary {
+  width: auto;
+  padding: 8px 12px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.fee-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  border: 1px solid #e8c9c2;
+  background: #fff;
+  color: #c0392b;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+.fee-delete-btn:hover { background: #fdf1ef; transform: translateY(-1px); }
 
 @media (max-width: 600px) {
   .fees-hero { padding: 22px 18px; }

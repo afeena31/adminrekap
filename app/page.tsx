@@ -1,7 +1,7 @@
 "use client";
 
 
-import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, CreditCard, Heart, Home, MapPin, MessageCircle, MoreHorizontal, Plus, Search, ShoppingBag, Truck, UserRound, Users, Wallet } from "lucide-react";
+import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, CreditCard, Heart, Home, MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Search, ShoppingBag, Trash2, Truck, UserRound, Users, Wallet } from "lucide-react";
 
 
 import Link from "next/link";
@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 import { createNewCustomer, toDisplayCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "./data/customers";
 import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentralCustomer, addAddress, updateAddress as updateCentralAddress, deleteAddress as deleteCentralAddress, getCustomerAddresses as getCentralCustomerAddresses, softDeleteCustomer, backupLocalStorage } from "./data/central";
 import { Overview, CustomerPanel } from "./components/panels";
-import { NewCustomerForm } from "./components/NewCustomerForm";
+import { NewCustomerForm, EditCustomerForm, type EditableCustomerFields } from "./components/NewCustomerForm";
 import { getCollections, getCollectionStats, addCollection, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "./data/demoSeed";
 
@@ -68,6 +68,8 @@ export default function HomePage() {
   const [addrForm, setAddrForm] = useState({ label: "", recipientName: "", phone: "", address: "", landmark: "", courier: "", note: "", isDefault: false });
   const [searchQuery, setSearchQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editCustomerOpen, setEditCustomerOpen] = useState(false);
+  const [deleteCustomerConfirmOpen, setDeleteCustomerConfirmOpen] = useState(false);
   const [ops, setOps] = useState<CustomerOperations>(() => getOperations("-"));
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
@@ -109,6 +111,26 @@ export default function HomePage() {
     for (const id of demoCustomerIds) softDeleteCustomer(id);
     setCustomer(loadFirstCustomer());
     notify("Data demo disembunyikan");
+  };
+
+  // ===== EDIT PROFIL CUSTOMER =====
+  const handleUpdateCustomer = (data: EditableCustomerFields) => {
+    const central = getCustomer(customer.id);
+    if (!central) return;
+    const updated = { ...central, ...data };
+    updateCentralCustomer(updated);
+    setCustomer(toDisplayCustomer(updated, customer.addresses));
+    setEditCustomerOpen(false);
+    notify("Profil customer diperbarui");
+  };
+
+  // ===== HAPUS CUSTOMER (soft delete — bisa dipulihkan dari backup) =====
+  const handleDeleteCustomer = () => {
+    backupLocalStorage();
+    softDeleteCustomer(customer.id);
+    setDeleteCustomerConfirmOpen(false);
+    setCustomer(loadFirstCustomer());
+    notify("Customer dihapus");
   };
 
   // ===== OPERATIONS: AKSI → STATUS (state machine) =====
@@ -230,7 +252,7 @@ export default function HomePage() {
     <section className="profile">
       <div className="avatar"><div className="hijab">◖</div><span>✦</span></div>
       <div className="profile-copy"><h1>{customer.name}</h1><p className="badge"><Heart size={13} fill="currentColor" /> {customer.orders === "0" ? "Customer Baru" : "Repeat Customer"}</p><p><MapPin size={15} /> {customer.city}</p><p><ClipboardList size={14} /> Sejak {customer.since}</p></div>
-      <div className="profile-actions"><button className="chat" onClick={() => setChatOpen(true)}><MessageCircle size={17} /> Chat</button><Link href="/order" className="add-order"><Plus size={17} /> Order</Link><button onClick={() => { setSaved(!saved); notify(!saved ? "Customer disimpan ke favorit" : "Customer dihapus dari favorit"); }} className={saved ? "saved" : "save"} aria-label="Simpan customer"><Heart size={18} fill={saved ? "currentColor" : "none"} /></button></div>
+      <div className="profile-actions"><button className="chat" onClick={() => setChatOpen(true)}><MessageCircle size={17} /> Chat</button><Link href="/order" className="add-order"><Plus size={17} /> Order</Link><button onClick={() => setEditCustomerOpen(true)} className="save" aria-label="Edit profil customer"><Pencil size={16} /></button><button onClick={() => setDeleteCustomerConfirmOpen(true)} className="save" aria-label="Hapus customer"><Trash2 size={16} /></button><button onClick={() => { setSaved(!saved); notify(!saved ? "Customer disimpan ke favorit" : "Customer dihapus dari favorit"); }} className={saved ? "saved" : "save"} aria-label="Simpan customer"><Heart size={18} fill={saved ? "currentColor" : "none"} /></button></div>
 
       {/* ===== SITUATION STRIP — kondisi customer saat ini ===== */}
       <div className="situation-strip">
@@ -318,6 +340,20 @@ export default function HomePage() {
         </div>
       </section>
     </div>}
+    {editCustomerOpen && <EditCustomerForm customer={customer} onClose={() => setEditCustomerOpen(false)} onSave={handleUpdateCustomer} />}
+    {deleteCustomerConfirmOpen && (
+      <div className="overlay" onClick={() => setDeleteCustomerConfirmOpen(false)}>
+        <section className="modal confirm-modal" onClick={event => event.stopPropagation()}>
+          <h2>Hapus Customer?</h2>
+          <p>Profil <b>{customer.name}</b> akan disembunyikan dari daftar customer.</p>
+          <p className="muted">Ini bisa dipulihkan dari backup lokal kalau diperlukan lagi — riwayat order/pembayaran tidak ikut terhapus.</p>
+          <div className="confirm-actions">
+            <button className="secondary" onClick={() => setDeleteCustomerConfirmOpen(false)}>Batal</button>
+            <button className="danger" onClick={handleDeleteCustomer}><Trash2 size={15} /> Hapus</button>
+          </div>
+        </section>
+      </div>
+    )}
     {newOrderOpen && <NewOrderForm customerName={customer.name} onClose={() => setNewOrderOpen(false)} onSave={(total) => { setNewOrderOpen(false); setActiveTab("Order (6)"); notify(`Order baru dibuat · Total Rp ${total.toLocaleString("id-ID")}`); }}/>}
     {chatOpen && <div className="overlay" onClick={() => setChatOpen(false)}><section className="modal" onClick={event => event.stopPropagation()}><button className="close" onClick={() => setChatOpen(false)}>×</button><div className="chat-title"><span className="mini-avatar">{customer.initials}</span><div><b>{customer.name}</b><small>WhatsApp customer</small></div></div><div className="message">Assalamu'alaikum {customer.name.split(" ")[0]}, ada yang bisa kami bantu?</div><div className="composer"><input placeholder="Tulis pesan..."/><button onClick={() => { setChatOpen(false); notify("Pesan siap dikirim ke WhatsApp"); }}>Kirim</button></div></section></div>}
     {orderOpen && <OrderDetailModal customer={customer} ops={ops} onClose={() => setOrderOpen(false)} onAction={handleOrderAction} />}

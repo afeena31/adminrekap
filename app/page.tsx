@@ -15,7 +15,8 @@ import { goBack } from "./lib/goBack";
 import { getCollections, getAllCollections, seedCollections, getCollectionStats, addCollection, saveCollections, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "./data/demoSeed";
 
-import { formatRupiah, getOrdersForCustomer, computePaymentTotals, saveProducts, getMarketers, saveMarketers, defaultMarketers, saveFees, type OrderRecord } from "./data/store";
+import { formatRupiah, getOrdersForCustomer, computePaymentTotals, getProducts, saveProducts, getMarketers, saveMarketers, defaultMarketers, saveFees, type OrderRecord } from "./data/store";
+import { products as seedCatalogProducts, nonBookMasterCatalog } from "./data/products";
 import { getOperations, type CustomerOperations } from "./data/operations";
 
 
@@ -148,7 +149,16 @@ export default function HomePage() {
     saveCollections(getAllCollections().filter(c => !seedCollectionIds.has(c.id)));
     const seedMarketerIds = new Set(defaultMarketers.map(m => m.id));
     saveMarketers(getMarketers().filter(m => !seedMarketerIds.has(m.id)));
-    saveProducts([]);
+    // Hanya hapus produk seed DEMO LAMA (Parenting A/B/C, Boardbook, dst) —
+    // BUKAN seluruh katalog. nonBookMasterCatalog (dimuat lewat "Muat Katalog
+    // Master Data") sengaja pakai beberapa id yang sama dengan seed lama
+    // (niqab-poni-basic, handsock-standar, dst, karena memang produk yang
+    // sama) — id yang overlap itu DIKECUALIKAN dari penghapusan supaya
+    // katalog asli yang sudah dimuat user tidak ikut lenyap kalau tombol ini
+    // dipakai lagi nanti.
+    const realCatalogIds = new Set(nonBookMasterCatalog.map(p => p.id));
+    const seedOnlyProductIds = new Set(seedCatalogProducts.filter(p => !realCatalogIds.has(p.id)).map(p => p.id));
+    saveProducts(getProducts().filter(p => !seedOnlyProductIds.has(p.id)));
     saveFees([]);
     setCustomer(loadFirstCustomer());
     notify("Semua data demo (customer, collection, produk, marketer) dihapus permanen");
@@ -264,6 +274,72 @@ export default function HomePage() {
     notify("Alamat default diperbarui");
   };
 
+  // Settings/Cadangan/Wipe-demo tidak butuh data customer sama sekali — dipakai
+  // di DUA tempat (layar kosong & layar profil normal) supaya tetap bisa
+  // diakses walau customer.id === "" (mis. mau pulihkan backup setelah semua
+  // data ke-hapus). Sebelumnya cuma ada di layar profil normal, jadi kalau
+  // customer sudah 0, tombol "..." di layar kosong keliatan ada tapi diam
+  // total — gak ada jalan buka Pengaturan/pulihkan Cadangan sama sekali.
+  const settingsAndBackupModals = <>
+    {settingsOpen && <div className="overlay" onClick={() => setSettingsOpen(false)}>
+      <section className="modal" onClick={event => event.stopPropagation()}>
+        <button className="close" onClick={() => setSettingsOpen(false)}>×</button>
+        <h2>Pengaturan</h2>
+        <p className="muted" style={{ marginBottom: 14 }}>Data Demo</p>
+        <p style={{ fontSize: 13, color: "#8a7c6c", marginBottom: 14 }}>Muat 3 contoh customer untuk melihat tampilan aplikasi, atau sembunyikan kalau sudah tidak diperlukan. Bisa dipulihkan dari backup lokal kapan saja.</p>
+        <div className="form-actions" style={{ flexDirection: "column", gap: 8 }}>
+          <button className="chat" onClick={() => { loadDemoData(); setSettingsOpen(false); }}>Muat Data Demo</button>
+          <button className="quiet" onClick={() => { clearDemoData(); setSettingsOpen(false); }}>Sembunyikan Data Demo</button>
+          <button
+            onClick={() => setWipeDemoConfirmOpen(true)}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "1px solid #c0392b", background: "#fff", color: "#c0392b", borderRadius: 10, padding: "10px 15px", fontWeight: 600, cursor: "pointer" }}
+          ><Trash2 size={15} /> Hapus Semua Data Demo (Permanen)</button>
+        </div>
+
+        <p className="muted" style={{ marginTop: 22, marginBottom: 14 }}>Cadangan Data</p>
+        <p style={{ fontSize: 13, color: "#8a7c6c", marginBottom: 14 }}>Setiap kali data demo dimuat/disembunyikan atau customer dihapus, aplikasi otomatis menyimpan cadangan kondisi sebelumnya di HP ini. Kalau data tiba-tiba kosong/hilang, coba pulihkan salah satu di bawah.</p>
+        {backups.length === 0 && <p className="panel-hint">Belum ada cadangan tersimpan di HP ini.</p>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 220, overflowY: "auto" }}>
+          {backups.map(b => (
+            <div key={b.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{new Date(b.timestamp).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{b.customerCount < 0 ? "Jumlah customer tidak terbaca" : `${b.customerCount} customer tersimpan`}</div>
+              </div>
+              <button className="secondary" onClick={() => setRestoreConfirmKey(b.key)}>Pulihkan</button>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>}
+    {restoreConfirmKey && (
+      <div className="overlay" onClick={() => setRestoreConfirmKey(null)}>
+        <section className="modal confirm-modal" onClick={event => event.stopPropagation()}>
+          <h2>Pulihkan Cadangan Ini?</h2>
+          <p>Data yang ada SEKARANG akan ditimpa dengan isi cadangan dari <b>{new Date(Number(restoreConfirmKey.replace("umayasla_backup_", ""))).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</b>.</p>
+          <p className="muted">Kondisi sebelum ini juga otomatis dicadangkan dulu, jadi tetap bisa dibatalkan nanti.</p>
+          <div className="confirm-actions">
+            <button className="secondary" onClick={() => setRestoreConfirmKey(null)}>Batal</button>
+            <button className="danger" onClick={() => handleRestoreBackup(restoreConfirmKey)}>Pulihkan</button>
+          </div>
+        </section>
+      </div>
+    )}
+    {wipeDemoConfirmOpen && (
+      <div className="overlay" onClick={() => setWipeDemoConfirmOpen(false)}>
+        <section className="modal confirm-modal" onClick={event => event.stopPropagation()}>
+          <h2>Hapus Semua Data Demo?</h2>
+          <p>Ini akan menghapus PERMANEN: 3 customer contoh + alamatnya, semua Collection contoh, semua produk di katalog, dan semua marketer contoh.</p>
+          <p className="muted">Kondisi sekarang otomatis dicadangkan dulu (lihat "Cadangan Data" di atas), jadi masih bisa dipulihkan kalau berubah pikiran.</p>
+          <div className="confirm-actions">
+            <button className="secondary" onClick={() => setWipeDemoConfirmOpen(false)}>Batal</button>
+            <button className="danger" onClick={() => { wipeAllDemoData(); setWipeDemoConfirmOpen(false); setSettingsOpen(false); }}><Trash2 size={15} /> Hapus Semua</button>
+          </div>
+        </section>
+      </div>
+    )}
+  </>;
+
   // Belum ada customer sama sekali (localStorage kosong) — tampilkan layar
   // kosong yang jelas, bukan crash atau halaman utama yang isinya string kosong.
   if (customer.id === "") {
@@ -281,6 +357,7 @@ export default function HomePage() {
         <button className="quiet" style={{ marginTop: 8 }} onClick={loadDemoData}>Muat Data Demo</button>
       </div>
       {newCustomerOpen && <NewCustomerForm onClose={() => setNewCustomerOpen(false)} onSave={(name, city) => { handleCreateCustomer(name, city); setNewCustomerOpen(false); notify(`Profil ${name} berhasil dibuat`); }}/>}
+      {settingsAndBackupModals}
       {notice && <div className="toast"><Check size={17}/>{notice}</div>}
     </main>;
   }
@@ -374,63 +451,7 @@ export default function HomePage() {
     </section></div>}
 
     {newCustomerOpen && <NewCustomerForm onClose={() => setNewCustomerOpen(false)} onSave={(name, city) => { handleCreateCustomer(name, city); setNewCustomerOpen(false); setActiveTab("Ringkasan"); notify(`Profil ${name} berhasil dibuat`); }}/>}
-    {settingsOpen && <div className="overlay" onClick={() => setSettingsOpen(false)}>
-      <section className="modal" onClick={event => event.stopPropagation()}>
-        <button className="close" onClick={() => setSettingsOpen(false)}>×</button>
-        <h2>Pengaturan</h2>
-        <p className="muted" style={{ marginBottom: 14 }}>Data Demo</p>
-        <p style={{ fontSize: 13, color: "#8a7c6c", marginBottom: 14 }}>Muat 3 contoh customer untuk melihat tampilan aplikasi, atau sembunyikan kalau sudah tidak diperlukan. Bisa dipulihkan dari backup lokal kapan saja.</p>
-        <div className="form-actions" style={{ flexDirection: "column", gap: 8 }}>
-          <button className="chat" onClick={() => { loadDemoData(); setSettingsOpen(false); }}>Muat Data Demo</button>
-          <button className="quiet" onClick={() => { clearDemoData(); setSettingsOpen(false); }}>Sembunyikan Data Demo</button>
-          <button
-            onClick={() => setWipeDemoConfirmOpen(true)}
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "1px solid #c0392b", background: "#fff", color: "#c0392b", borderRadius: 10, padding: "10px 15px", fontWeight: 600, cursor: "pointer" }}
-          ><Trash2 size={15} /> Hapus Semua Data Demo (Permanen)</button>
-        </div>
-
-        <p className="muted" style={{ marginTop: 22, marginBottom: 14 }}>Cadangan Data</p>
-        <p style={{ fontSize: 13, color: "#8a7c6c", marginBottom: 14 }}>Setiap kali data demo dimuat/disembunyikan atau customer dihapus, aplikasi otomatis menyimpan cadangan kondisi sebelumnya di HP ini. Kalau data tiba-tiba kosong/hilang, coba pulihkan salah satu di bawah.</p>
-        {backups.length === 0 && <p className="panel-hint">Belum ada cadangan tersimpan di HP ini.</p>}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 220, overflowY: "auto" }}>
-          {backups.map(b => (
-            <div key={b.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px" }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{new Date(b.timestamp).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</div>
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>{b.customerCount < 0 ? "Jumlah customer tidak terbaca" : `${b.customerCount} customer tersimpan`}</div>
-              </div>
-              <button className="secondary" onClick={() => setRestoreConfirmKey(b.key)}>Pulihkan</button>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>}
-    {restoreConfirmKey && (
-      <div className="overlay" onClick={() => setRestoreConfirmKey(null)}>
-        <section className="modal confirm-modal" onClick={event => event.stopPropagation()}>
-          <h2>Pulihkan Cadangan Ini?</h2>
-          <p>Data yang ada SEKARANG akan ditimpa dengan isi cadangan dari <b>{new Date(Number(restoreConfirmKey.replace("umayasla_backup_", ""))).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</b>.</p>
-          <p className="muted">Kondisi sebelum ini juga otomatis dicadangkan dulu, jadi tetap bisa dibatalkan nanti.</p>
-          <div className="confirm-actions">
-            <button className="secondary" onClick={() => setRestoreConfirmKey(null)}>Batal</button>
-            <button className="danger" onClick={() => handleRestoreBackup(restoreConfirmKey)}>Pulihkan</button>
-          </div>
-        </section>
-      </div>
-    )}
-    {wipeDemoConfirmOpen && (
-      <div className="overlay" onClick={() => setWipeDemoConfirmOpen(false)}>
-        <section className="modal confirm-modal" onClick={event => event.stopPropagation()}>
-          <h2>Hapus Semua Data Demo?</h2>
-          <p>Ini akan menghapus PERMANEN: 3 customer contoh + alamatnya, semua Collection contoh, semua produk di katalog, dan semua marketer contoh.</p>
-          <p className="muted">Kondisi sekarang otomatis dicadangkan dulu (lihat "Cadangan Data" di atas), jadi masih bisa dipulihkan kalau berubah pikiran.</p>
-          <div className="confirm-actions">
-            <button className="secondary" onClick={() => setWipeDemoConfirmOpen(false)}>Batal</button>
-            <button className="danger" onClick={() => { wipeAllDemoData(); setWipeDemoConfirmOpen(false); setSettingsOpen(false); }}><Trash2 size={15} /> Hapus Semua</button>
-          </div>
-        </section>
-      </div>
-    )}
+    {settingsAndBackupModals}
     {editCustomerOpen && <EditCustomerForm customer={customer} onClose={() => setEditCustomerOpen(false)} onSave={handleUpdateCustomer} />}
     {deleteCustomerConfirmOpen && (
       <div className="overlay" onClick={() => setDeleteCustomerConfirmOpen(false)}>

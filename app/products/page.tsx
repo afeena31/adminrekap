@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 
-import { productCategories, formatRupiah, modifikasiInfo, ongkirInfo, splitShopeeInfo, rekeningInfo, type Product } from "../data/products";
+import { productCategories, formatRupiah, modifikasiInfo, ongkirInfo, splitShopeeInfo, rekeningInfo, nonBookMasterCatalog, type Product } from "../data/products";
 import { getProducts, addProduct, updateProduct, deleteProduct, calculateProductMetrics } from "../data/store";
 import { MoneyInput } from "../components/MoneyInput";
 import { BottomNav } from "../components/BottomNav";
@@ -65,6 +65,19 @@ export default function ProductsPage() {
   useEffect(() => {
     setProductList(getProducts());
   }, []);
+
+  // Isi katalog ASLI (bukan demo) dari Master Data Bisnis — sengaja tidak
+  // termasuk buku sama sekali. Dicek dulu per-ID biar aman diklik berkali-kali
+  // tanpa bikin dobel.
+  const loadMasterCatalog = () => {
+    const existingIds = new Set(getProducts().map(p => p.id));
+    let added = 0;
+    for (const p of nonBookMasterCatalog) {
+      if (!existingIds.has(p.id)) { addProduct(p); added++; }
+    }
+    setProductList(getProducts());
+    notify(added > 0 ? `${added} produk dari Master Data dimuat` : "Katalog Master Data sudah lengkap");
+  };
 
   const filtered = productList.filter(p => {
 
@@ -260,7 +273,15 @@ export default function ProductsPage() {
         })}
       </div>
 
-      {sorted.length === 0 && <div className="empty-state"><span>🔍</span><h3>Tidak ada produk ditemukan</h3><p>Coba kata kunci atau kategori lain</p></div>}
+      {sorted.length === 0 && productList.length === 0 && (
+        <div className="empty-state">
+          <span>🛍️</span>
+          <h3>Katalog masih kosong</h3>
+          <p>Muat produk Jilbab, Niqab, Manset, Kaos Kaki & Linen Spray sesuai Master Data — buku belum termasuk, input manual lewat "Tambah Produk".</p>
+          <button className="primary" style={{ marginTop: 14 }} onClick={loadMasterCatalog}>Muat Katalog Master Data (Non-Buku)</button>
+        </div>
+      )}
+      {sorted.length === 0 && productList.length > 0 && <div className="empty-state"><span>🔍</span><h3>Tidak ada produk ditemukan</h3><p>Coba kata kunci atau kategori lain</p></div>}
     </>}
 
     {infoTab === "modifikasi" && <div className="info-section">

@@ -86,6 +86,33 @@ export const products: Product[] = [
   { id: "dp-amna", name: "DP Amna Jilbab", category: "lainnya", price: 100000, emoji: "💰", description: "DP standar per pcs", active: true },
 ];
 
+// ===== KATALOG ASLI NON-BUKU (dari Master Data Bisnis, 2026-09) =====
+// Dipakai untuk mengisi katalog produk yang BENERAN dipakai di app
+// (getProducts()/halaman Katalog) lewat tombol "Muat Katalog Master Data"
+// — BUKAN data demo/contoh, jadi TIDAK ikut kena "Hapus Semua Data Demo" dan
+// tidak akan diam-diam muncul sendiri (harus diklik manual sekali, dicek
+// dulu biar gak dobel kalau diklik lagi). Sengaja tidak termasuk kategori
+// buku sama sekali sesuai instruksi ("belum diisi hanya buku").
+// CATATAN: nilai hpp/feeMarketer di bawah ini estimasi internal lama,
+// BUKAN dari Master Data (dokumennya tidak mencantumkan modal/fee) —
+// sesuaikan lewat Edit Produk kalau perlu.
+export const nonBookMasterCatalog: Product[] = [
+  { id: "amna-jilbab-m", name: "Amna Jilbab M", category: "amna-jilbab", price: 250000, emoji: "🧕", hpp: 180000, feeMarketer: 15000, active: true },
+  { id: "amna-jilbab-l", name: "Amna Jilbab L", category: "amna-jilbab", price: 260000, emoji: "🧕", hpp: 185000, feeMarketer: 15000, active: true },
+  { id: "amna-jilbab-xl", name: "Amna Jilbab XL", category: "amna-jilbab", price: 260000, emoji: "🧕", hpp: 185000, feeMarketer: 15000, active: true },
+  { id: "amna-jilbab-xxl", name: "Amna Jilbab XXL", category: "amna-jilbab", price: 270000, emoji: "🧕", hpp: 190000, feeMarketer: 15000, active: true },
+  { id: "niqab-poni-basic", name: "Niqab Poni Basic", category: "niqab", price: 95000, emoji: "🖤", hpp: 70000, feeMarketer: 10000, active: true },
+  { id: "niqab-poni-aroby", name: "Niqab Poni Aroby", category: "niqab", price: 100000, emoji: "🖤", hpp: 75000, feeMarketer: 10000, active: true },
+  { id: "niqab-poni-muqowwa", name: "Niqab Poni Muqowwa", category: "niqab", price: 110000, emoji: "🖤", hpp: 80000, feeMarketer: 10000, active: true },
+  { id: "niqab-bandana-basic", name: "Niqab Bandana Basic", category: "niqab", price: 90000, emoji: "🖤", hpp: 65000, feeMarketer: 10000, active: true },
+  { id: "niqab-bandana-aroby", name: "Niqab Bandana Aroby", category: "niqab", price: 95000, emoji: "🖤", hpp: 70000, feeMarketer: 10000, active: true },
+  { id: "niqab-bandana-muqowwa", name: "Niqab Bandana Muqowwa", category: "niqab", price: 105000, emoji: "🖤", hpp: 75000, feeMarketer: 10000, active: true },
+  { id: "handsock-standar", name: "Manset / Handsock Standar", category: "aksesoris", price: 25000, emoji: "🧤", variants: ["Hitam", "Navy", "Brown", "Latte", "Cream"], hpp: 15000, feeMarketer: 5000, active: true },
+  { id: "handsock-long", name: "Manset / Handsock Long", category: "aksesoris", price: 32000, emoji: "🧤", variants: ["Hitam"], hpp: 20000, feeMarketer: 5000, active: true },
+  { id: "kaos-kaki", name: "Kaos Kaki", category: "aksesoris", price: 25000, emoji: "🧦", variants: ["Hitam"], hpp: 15000, feeMarketer: 2000, active: true },
+  { id: "linen-spray", name: "Afeena Linen Spray", category: "aksesoris", price: 35000, emoji: "🌸", hpp: 25000, feeMarketer: 5000, active: true },
+];
+
 
 export const formatRupiah = (value: number) => "Rp " + value.toLocaleString("id-ID");
 

@@ -783,10 +783,15 @@ function OrderPageInner() {
 
     <div className="order-customer">
       <label>Customer</label>
-      <select value={customer.id} onChange={e => handleCustomerChange(e.target.value)}>
-        {customerList.map(c => <option key={c.id} value={c.id}>{c.name} · {c.city}</option>)}
-        <option value={NEW_CUSTOMER_OPTION}>+ Tambah Customer Baru</option>
-      </select>
+      <div className="address-select-row">
+        <select value={customer.id} onChange={e => handleCustomerChange(e.target.value)}>
+          {customerList.length === 0 && <option value="">— Belum ada customer —</option>}
+          {customerList.map(c => <option key={c.id} value={c.id}>{c.name} · {c.city}</option>)}
+        </select>
+        <button type="button" className="add-address-btn" onClick={() => setNewCustomerOpen(true)}>
+          <Plus size={15} /> Baru
+        </button>
+      </div>
       <small className="customer-wa">Nama WA: {customer.waName}</small>
 
       <label>Shipping Address</label>

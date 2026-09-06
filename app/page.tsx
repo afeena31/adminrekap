@@ -33,16 +33,33 @@ import {
 
 
 
-const tabs = ["Ringkasan", "Order (6)", "Payment (4)", "Shipment (4)", "Marketer", "Batch", "Resi", "Alamat Pengiriman", "Catatan (3)", "Aktivitas"];
+// Label tab & catatan metrik dihitung per-customer di dalam komponen (lihat
+// buildTabs/buildMetrics) — dulu hardcode ("Order (6)", "6 order sepanjang
+// hubungan", dst) jadi kelihatan seperti data customer lain "nempel" padahal
+// cuma teks tetap yang lupa disesuaikan.
+function buildTabs(customer: Customer): string[] {
+  return [
+    "Ringkasan",
+    `Order (${customer.orderRows.length})`,
+    `Payment (${customer.payments.length})`,
+    `Shipment (${customer.shipments.length})`,
+    "Marketer", "Batch", "Resi", "Alamat Pengiriman",
+    `Catatan (${customer.notes.length})`,
+    "Aktivitas",
+  ];
+}
 
-
-
-const metrics = [
-  { label: "Total Order", value: "6", note: "6 order sepanjang hubungan", icon: ClipboardList, tone: "olive", progress: 100 },
-  { label: "Total Payment", value: "Rp 1.245.000", note: "75% invoice selesai", icon: CreditCard, tone: "brown", progress: 75 },
-  { label: "Outstanding", value: "Rp 212.000", note: "2 invoice menunggu", icon: Box, tone: "sand", progress: 40 },
-  { label: "Total Shipment", value: "4", note: "4 paket terkirim", icon: Truck, tone: "olive", progress: 100 },
-];
+function buildMetrics(customer: Customer) {
+  const paidCount = customer.payments.filter(p => p.status === "Lunas").length;
+  const paidPercent = customer.payments.length > 0 ? Math.round((paidCount / customer.payments.length) * 100) : 0;
+  const outstandingCount = customer.payments.length - paidCount;
+  return [
+    { label: "Total Order", value: customer.orders, note: `${customer.orderRows.length} order sepanjang hubungan`, icon: ClipboardList, tone: "olive", progress: 100 },
+    { label: "Total Payment", value: customer.paid, note: `${paidPercent}% invoice selesai`, icon: CreditCard, tone: "brown", progress: paidPercent },
+    { label: "Outstanding", value: customer.outstanding, note: `${outstandingCount} invoice menunggu`, icon: Box, tone: "sand", progress: outstandingCount > 0 ? 40 : 0 },
+    { label: "Total Shipment", value: customer.shipment, note: `${customer.shipments.length} paket tercatat`, icon: Truck, tone: "olive", progress: 100 },
+  ];
+}
 
 function loadFirstCustomer(): Customer {
   const first = getCustomers()[0];
@@ -266,10 +283,10 @@ export default function HomePage() {
       </div>
     </section>
 
-    <section className="metrics" aria-label="Ringkasan customer">{metrics.map(({ label, value, note, icon: Icon, tone, progress }) => { const currentValue = label === "Total Order" ? customer.orders : label === "Total Payment" ? customer.paid : label === "Outstanding" ? customer.outstanding : label === "Total Shipment" ? customer.shipment : value; return <article className="metric" key={label}><div className={`metric-icon ${tone}`}><Icon size={21} /></div><small>{label}</small><strong>{currentValue}</strong><em>{note}</em><div className="metric-track"><div className={`metric-fill ${tone}`} style={{ width: `${progress}%` }} /></div></article>})}</section>
+    <section className="metrics" aria-label="Ringkasan customer">{buildMetrics(customer).map(({ label, value, note, icon: Icon, tone, progress }) => <article className="metric" key={label}><div className={`metric-icon ${tone}`}><Icon size={21} /></div><small>{label}</small><strong>{value}</strong><em>{note}</em><div className="metric-track"><div className={`metric-fill ${tone}`} style={{ width: `${progress}%` }} /></div></article>)}</section>
 
 
-    <nav className="tabs" aria-label="Navigasi profil">{tabs.map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}</nav>
+    <nav className="tabs" aria-label="Navigasi profil">{buildTabs(customer).map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}</nav>
     <button className="mobile-add-order" onClick={() => setNewOrderOpen(true)}><Plus size={17}/> Tambah Order untuk {customer.name}</button>
 
     {activeTab === "Alamat Pengiriman" ? (
@@ -354,7 +371,7 @@ export default function HomePage() {
         </section>
       </div>
     )}
-    {newOrderOpen && <NewOrderForm customerName={customer.name} onClose={() => setNewOrderOpen(false)} onSave={(total) => { setNewOrderOpen(false); setActiveTab("Order (6)"); notify(`Order baru dibuat · Total Rp ${total.toLocaleString("id-ID")}`); }}/>}
+    {newOrderOpen && <NewOrderForm customerName={customer.name} onClose={() => setNewOrderOpen(false)} onSave={(total) => { setNewOrderOpen(false); setActiveTab(`Order (${customer.orderRows.length})`); notify(`Order baru dibuat · Total Rp ${total.toLocaleString("id-ID")}`); }}/>}
     {chatOpen && <div className="overlay" onClick={() => setChatOpen(false)}><section className="modal" onClick={event => event.stopPropagation()}><button className="close" onClick={() => setChatOpen(false)}>×</button><div className="chat-title"><span className="mini-avatar">{customer.initials}</span><div><b>{customer.name}</b><small>WhatsApp customer</small></div></div><div className="message">Assalamu'alaikum {customer.name.split(" ")[0]}, ada yang bisa kami bantu?</div><div className="composer"><input placeholder="Tulis pesan..."/><button onClick={() => { setChatOpen(false); notify("Pesan siap dikirim ke WhatsApp"); }}>Kirim</button></div></section></div>}
     {orderOpen && <OrderDetailModal customer={customer} ops={ops} onClose={() => setOrderOpen(false)} onAction={handleOrderAction} />}
 

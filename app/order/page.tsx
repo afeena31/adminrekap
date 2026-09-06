@@ -1,7 +1,7 @@
 "use client";
 
 
-import { ArrowLeft, Bell, Check, ChevronRight, Copy, FileText, Home, Minus, Plus, Search, ShoppingBag, Trash2, Users, UserRound, Wallet } from "lucide-react";
+import { ArrowLeft, Bell, Check, ChevronRight, Copy, FileText, Home, MessageCircle, Minus, Plus, Search, ShoppingBag, Trash2, Users, UserRound, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -91,6 +91,7 @@ export default function OrderPage() {
   const [productSearch, setProductSearch] = useState("");
   const [ongkirId, setOngkirId] = useState("id-jawa");
   const [customOngkir, setCustomOngkir] = useState(0);
+  const [customOngkirLabel, setCustomOngkirLabel] = useState("");
   const [splitShopee, setSplitShopee] = useState(false);
   const [dpAmount, setDpAmount] = useState(0);
   const [note, setNote] = useState("");
@@ -418,7 +419,7 @@ export default function OrderPage() {
     const now = new Date();
     const number = getNextInvoiceNumber();
     const type = determineType();
-    const ongkirLabel = ongkirId === "custom" ? "Ongkir custom" : (ongkirOptions.find(o => o.id === ongkirId)?.name || "");
+    const ongkirLabel = ongkirId === "custom" ? (customOngkirLabel.trim() || "Ongkir lainnya") : (ongkirOptions.find(o => o.id === ongkirId)?.name || "");
     const marketer = marketers.find(m => m.id === marketerId);
 
     const inv: Invoice = {
@@ -606,6 +607,7 @@ export default function OrderPage() {
     const matchedOngkir = ongkirOptions.find(o => o.name === order.ongkirLabel);
     setOngkirId(matchedOngkir ? matchedOngkir.id : "custom");
     setCustomOngkir(order.ongkir);
+    setCustomOngkirLabel(matchedOngkir ? "" : order.ongkirLabel);
     setDpAmount(order.dp);
     setNote(order.note);
     setMarketerId(order.marketerId || "");
@@ -624,6 +626,16 @@ export default function OrderPage() {
     const text = buildInvoiceText(invoice);
     navigator.clipboard?.writeText(text);
     notify("Invoice disalin ke clipboard");
+  };
+
+  // ===== KIRIM INVOICE LANGSUNG KE WHATSAPP CUSTOMER =====
+  const sendInvoiceToWhatsApp = () => {
+    if (!invoice) return;
+    const digits = (invoice.phone || "").replace(/[^0-9]/g, "");
+    if (!digits) { notify("Nomor HP customer belum diisi"); return; }
+    const waNumber = digits.startsWith("0") ? "62" + digits.slice(1) : digits;
+    const text = buildInvoiceText(invoice);
+    window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(text)}`, "_blank");
   };
 
 
@@ -976,7 +988,10 @@ export default function OrderPage() {
         <select value={ongkirId} onChange={e => setOngkirId(e.target.value)}>
           {ongkirOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
-        {ongkirId === "custom" && <input type="number" min="0" placeholder="Nominal ongkir" value={customOngkir || ""} onChange={e => setCustomOngkir(Math.max(0, Number(e.target.value) || 0))} />}
+        {ongkirId === "custom" && <>
+          <input type="text" value={customOngkirLabel} placeholder="Nama ekspedisi (contoh: JNE, SiCepat)" onChange={e => setCustomOngkirLabel(e.target.value)} style={{ marginBottom: 8 }} />
+          <input type="number" min="0" placeholder="Nominal ongkir" value={customOngkir || ""} onChange={e => setCustomOngkir(Math.max(0, Number(e.target.value) || 0))} />
+        </>}
         {ongkirId !== "custom" && <div className="ongkir-preview">Ongkir: <b>{formatRupiah(ongkir)}</b></div>}
       </div>
 
@@ -1193,7 +1208,10 @@ export default function OrderPage() {
         </div>
         {invoice.note && <div className="invoice-note"><b>Catatan:</b> {invoice.note}</div>}
         <div className="invoice-actions">
-          <button className="primary" onClick={copyInvoice}><Copy size={16} /> Salin Invoice</button>
+          <button className="primary" onClick={sendInvoiceToWhatsApp}><MessageCircle size={16} /> Kirim ke WhatsApp</button>
+          <button className="secondary" onClick={copyInvoice}><Copy size={16} /> Salin Invoice</button>
+        </div>
+        <div className="invoice-actions">
           <button className="secondary" onClick={() => { setInvoice(null); setItems([]); setDpAmount(0); setNote(""); setDiscountValue(0); setMarketerId(""); setEditingOrderId(null); notify("Order baru siap dibuat"); }}><Check size={16} /> Selesai</button>
         </div>
       </section>

@@ -8,8 +8,10 @@ export type Product = {
   emoji: string;
   badge?: string;
   variants?: string[];
-  hpp?: number;          // Harga Pokok Penjualan (modal)
-  feeMarketer?: number;  // Fee marketer per pcs
+  modalKotor?: number;    // Modal kotor bahan/produk (sebelum biaya operasional)
+  biayaOperasional?: number; // Biaya operasional per pcs (packing, transaksi, dll)
+  hpp?: number;          // Total HPP = modalKotor + biayaOperasional (Harga Pokok Penjualan)
+  feeMarketer?: number;  // Fee marketer per pcs — kosongkan/0 kalau produk ini tidak pakai fee marketer
   discountDefault?: number;  // Diskon default (persen atau nominal)
   discountType?: "percent" | "nominal";  // Jenis diskon default
   active?: boolean;      // Status aktif / nonaktif
@@ -146,7 +148,9 @@ export const ongkirOptions = [
   { id: "id-jawa", name: "ID Express Pulau Jawa (flat 9.000/kg)", price: 9000 },
   { id: "id-jawa-2kg", name: "ID Express Pulau Jawa 2 kg", price: 17000 },
   { id: "id-sumatera", name: "ID Express Sumatera (11.000/kg)", price: 11000 },
-  { id: "custom", name: "Custom (luar Jawa-Sumatera / J&T)", price: null },
+  { id: "cod", name: "COD", price: 0 },
+  { id: "shopee", name: "Shopee", price: 0 },
+  { id: "custom", name: "Lainnya (isi manual)", price: null },
 ];
 
 export const invoiceTypeInfo: Record<InvoiceType, { name: string; desc: string }> = {

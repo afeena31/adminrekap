@@ -130,6 +130,8 @@ a.icon-btn { text-decoration: none; display: inline-flex; align-items: center; j
 .product-form input, .product-form select, .product-form textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 14px; margin-top: 6px; background: #fff; color: var(--ink); }
 .product-form textarea { min-height: 70px; resize: vertical; }
 .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hpp-total-preview { background: #f7f2ea; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+.hpp-total-preview b { color: var(--ink); font-family: var(--serif); font-size: 15px; }
 .discount-input-row { display: flex; gap: 8px; margin-top: 6px; }
 .discount-input-row select { flex: 0 0 130px; margin-top: 0; }
 .discount-input-row input { flex: 1; margin-top: 0; }

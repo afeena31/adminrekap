@@ -14,7 +14,8 @@ type ProductFormState = {
   category: string;
   price: string;
   originalPrice: string;
-  hpp: string;
+  modalKotor: string;
+  biayaOperasional: string;
   feeMarketer: string;
   discountDefault: string;
   discountType: "percent" | "nominal";
@@ -29,7 +30,8 @@ const emptyForm: ProductFormState = {
   category: "buku-parenting",
   price: "",
   originalPrice: "",
-  hpp: "",
+  modalKotor: "",
+  biayaOperasional: "",
   feeMarketer: "",
   discountDefault: "",
   discountType: "percent",
@@ -104,7 +106,10 @@ export default function ProductsPage() {
       category: product.category,
       price: String(product.price || ""),
       originalPrice: product.originalPrice ? String(product.originalPrice) : "",
-      hpp: product.hpp ? String(product.hpp) : "",
+      // Produk lama cuma punya `hpp` tanpa rincian — taruh semua di modal kotor
+      // supaya Total HPP tetap sama persis, biaya operasional mulai dari 0.
+      modalKotor: product.modalKotor ? String(product.modalKotor) : (product.hpp ? String(product.hpp) : ""),
+      biayaOperasional: product.biayaOperasional ? String(product.biayaOperasional) : "",
       feeMarketer: product.feeMarketer ? String(product.feeMarketer) : "",
       discountDefault: product.discountDefault ? String(product.discountDefault) : "",
       discountType: product.discountType || "percent",
@@ -120,13 +125,17 @@ export default function ProductsPage() {
     const price = Number(form.price) || 0;
     if (price <= 0) { notify("Harga jual wajib diisi"); return; }
 
+    const modalKotor = Number(form.modalKotor) || 0;
+    const biayaOperasional = Number(form.biayaOperasional) || 0;
     const product: Product = {
       id: editingProduct ? editingProduct.id : "prod-" + Date.now(),
       name: form.name.trim(),
       category: form.category,
       price,
       originalPrice: form.originalPrice ? Number(form.originalPrice) : undefined,
-      hpp: form.hpp ? Number(form.hpp) : undefined,
+      modalKotor: modalKotor || undefined,
+      biayaOperasional: biayaOperasional || undefined,
+      hpp: (modalKotor + biayaOperasional) || undefined,
       feeMarketer: form.feeMarketer ? Number(form.feeMarketer) : undefined,
       discountDefault: form.discountDefault ? Number(form.discountDefault) : undefined,
       discountType: form.discountType,
@@ -407,19 +416,24 @@ export default function ProductsPage() {
             <label>Harga Jual (Rp) *
               <input type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="250000" />
             </label>
-            <label>HPP / Modal (Rp)
-              <input type="number" min="0" value={form.hpp} onChange={e => setForm({ ...form, hpp: e.target.value })} placeholder="180000" />
+            <label>Harga Normal (Rp)
+              <input type="number" min="0" value={form.originalPrice} onChange={e => setForm({ ...form, originalPrice: e.target.value })} placeholder="Opsional" />
             </label>
           </div>
 
           <div className="form-grid-2">
-            <label>Harga Normal (Rp)
-              <input type="number" min="0" value={form.originalPrice} onChange={e => setForm({ ...form, originalPrice: e.target.value })} placeholder="Opsional" />
+            <label>Modal Kotor (Rp)
+              <input type="number" min="0" value={form.modalKotor} onChange={e => setForm({ ...form, modalKotor: e.target.value })} placeholder="150000" />
             </label>
-            <label>Fee Marketer (Rp/pcs)
-              <input type="number" min="0" value={form.feeMarketer} onChange={e => setForm({ ...form, feeMarketer: e.target.value })} placeholder="5000" />
+            <label>Biaya Operasional (Rp)
+              <input type="number" min="0" value={form.biayaOperasional} onChange={e => setForm({ ...form, biayaOperasional: e.target.value })} placeholder="30000" />
             </label>
           </div>
+          <div className="hpp-total-preview">Total HPP: <b>{formatRupiah((Number(form.modalKotor) || 0) + (Number(form.biayaOperasional) || 0))}</b></div>
+
+          <label>Fee Marketer (Rp/pcs)
+            <input type="number" min="0" value={form.feeMarketer} onChange={e => setForm({ ...form, feeMarketer: e.target.value })} placeholder="Kosongkan / 0 kalau produk ini tidak pakai fee marketer" />
+          </label>
 
           <label>Diskon Default
             <div className="discount-input-row">
@@ -450,7 +464,7 @@ export default function ProductsPage() {
 
           {(() => {
             const price = Number(form.price) || 0;
-            const hpp = Number(form.hpp) || 0;
+            const hpp = (Number(form.modalKotor) || 0) + (Number(form.biayaOperasional) || 0);
             const discVal = Number(form.discountDefault) || 0;
             const discAmt = form.discountType === "percent" ? Math.round(price * Math.min(discVal, 100) / 100) : Math.min(discVal, price);
             const afterDisc = price - discAmt;

@@ -1,7 +1,7 @@
 "use client";
 
 
-import { ArrowLeft, Bell, Check, ChevronRight, Copy, FileText, MessageCircle, Minus, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Bell, Check, ChevronRight, Copy, FileText, MessageCircle, Minus, Plus, Search, Trash2, Landmark } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -11,7 +11,7 @@ import { goBack } from "../lib/goBack";
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, determineRekening, SPLIT_BILL_PRODUK, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
-import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
+import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
 import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
@@ -106,6 +106,8 @@ function OrderPageInner() {
   const [customOngkir, setCustomOngkir] = useState(0);
   const [customOngkirLabel, setCustomOngkirLabel] = useState("");
   const [dpAmount, setDpAmount] = useState(0);
+  const [orderPayments, setOrderPayments] = useState<PaymentRecord[]>([]);
+  const [topUpAmount, setTopUpAmount] = useState(0);
   const [note, setNote] = useState("");
   const [internalNote, setInternalNote] = useState("");
   const [amnaStatus, setAmnaStatus] = useState<"po" | "lunas">("po");
@@ -566,6 +568,46 @@ function OrderPageInner() {
       } catch {
         // Projection failure is non-authoritative; legacy order already saved.
       }
+      // ===== RIWAYAT PEMBAYARAN: catat top up awal (kalau ada) =====
+      // Order baru (bukan edit) — dpAmount manual & kredit Split Bill Shopee
+      // dicatat sebagai baris riwayat TERPISAH sejak awal, bukan cuma angka
+      // tunggal di order.dp yang gak jelas asalnya dari transfer yang mana.
+      const productSummary = snapshots.map(s => s.name).join(", ");
+      const newPayments: PaymentRecord[] = [];
+      if (dpAmount > 0) {
+        newPayments.push({
+          id: "pay-" + Date.now() + "-dp",
+          orderId,
+          orderNumber,
+          customerId: customer.id || null,
+          customerName: customer.name,
+          productSummary,
+          amount: dpAmount,
+          dateReceived: now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
+          status: "belum-ditarik",
+          dateWithdrawn: null,
+          note: "DP saat order dibuat",
+          createdAt: Date.now(),
+        });
+      }
+      if (splitShopeeCredit > 0) {
+        newPayments.push({
+          id: "pay-" + Date.now() + "-shopee",
+          orderId,
+          orderNumber,
+          customerId: customer.id || null,
+          customerName: customer.name,
+          productSummary,
+          amount: splitShopeeCredit,
+          dateReceived: now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
+          status: "belum-ditarik",
+          dateWithdrawn: null,
+          note: "Split Bill Shopee (checkout otomatis)",
+          createdAt: Date.now(),
+        });
+      }
+      newPayments.forEach(p => addPayment(p));
+      if (newPayments.length > 0) setOrderPayments(getPaymentsForOrder(orderId));
     }
 
     // ===== SINKRON COLLECTION "PO BATCH" =====
@@ -666,6 +708,8 @@ function OrderPageInner() {
     // angka yang benar-benar diketik admin, bukan dobel dengan kredit otomatis.
     const loadedSplitShopee = matchedOngkir?.id === "shopee";
     setDpAmount(order.dp - (loadedSplitShopee ? SPLIT_BILL_PRODUK : 0));
+    setOrderPayments(getPaymentsForOrder(order.id));
+    setTopUpAmount(0);
     setNote(order.note);
     setInternalNote(order.internalNote || "");
     setMarketerId(order.marketerId || "");
@@ -680,6 +724,58 @@ function OrderPageInner() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // ===== TAMBAH PEMBAYARAN (top up) =====
+  // Admin cukup input NOMINAL TRANSFER YANG MASUK (bukan total baru) — beda
+  // dari field DP lama yang minta angka kumulatif dan gampang salah hitung.
+  // Langsung tersimpan (gak perlu tunggu klik "Generate Invoice" lagi) supaya
+  // dpAmount di form tetap sinkron kalau admin lanjut edit hal lain.
+  const handleAddPayment = () => {
+    if (!editingOrderId || topUpAmount <= 0) return;
+    const existingOrder = getOrderById(editingOrderId);
+    if (!existingOrder) return;
+    const newDp = existingOrder.dp + topUpAmount;
+    updateOrder({ ...existingOrder, dp: newDp });
+    addPayment({
+      id: "pay-" + Date.now(),
+      orderId: editingOrderId,
+      orderNumber: existingOrder.number,
+      customerId: customer.id || null,
+      customerName: customer.name,
+      productSummary: items.map(i => i.name).join(", "),
+      amount: topUpAmount,
+      dateReceived: new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
+      status: "belum-ditarik",
+      dateWithdrawn: null,
+      note: "",
+      createdAt: Date.now(),
+    });
+    setDpAmount(newDp - splitShopeeCredit);
+    setOrderPayments(getPaymentsForOrder(editingOrderId));
+    setExistingOrders(getOrders());
+    setTopUpAmount(0);
+    notify(`Pembayaran ${formatRupiah(topUpAmount)} dicatat`);
+  };
+
+  const handleDeletePayment = (payment: PaymentRecord) => {
+    if (!editingOrderId) return;
+    const existingOrder = getOrderById(editingOrderId);
+    if (!existingOrder) return;
+    const newDp = Math.max(0, existingOrder.dp - payment.amount);
+    updateOrder({ ...existingOrder, dp: newDp });
+    deletePayment(payment.id);
+    setDpAmount(newDp - splitShopeeCredit);
+    setOrderPayments(getPaymentsForOrder(editingOrderId));
+    setExistingOrders(getOrders());
+    notify(`Pembayaran ${formatRupiah(payment.amount)} dihapus`);
+  };
+
+  const handleTogglePaymentWithdrawn = (payment: PaymentRecord) => {
+    const nextStatus = payment.status === "sudah-ditarik" ? "belum-ditarik" : "sudah-ditarik";
+    const dateWithdrawn = nextStatus === "sudah-ditarik" ? new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : null;
+    markPaymentWithdrawn(payment.id, nextStatus, dateWithdrawn);
+    if (editingOrderId) setOrderPayments(getPaymentsForOrder(editingOrderId));
+  };
+
   // ===== HAPUS ORDER =====
   // Ikut membersihkan FeeRecord & tautan Collection order ini supaya tidak
   // ada catatan lain yang menunjuk ke order yang sudah tidak ada.
@@ -689,10 +785,13 @@ function OrderPageInner() {
     const deletedNumber = existingOrders.find(o => o.id === deletedId)?.number || "";
     deleteOrder(deletedId);
     removeFeeForOrder(deletedId);
+    removePaymentsForOrder(deletedId);
     try { removeOrderFromAllCollections(deletedId); } catch { /* non-fatal */ }
     setEditingOrderId(null);
     setItems([]);
     setDpAmount(0);
+    setOrderPayments([]);
+    setTopUpAmount(0);
     setNote("");
     setInternalNote("");
     setDiscountValue(0);
@@ -757,6 +856,8 @@ function OrderPageInner() {
             setEditingOrderId(null);
             setItems([]);
             setDpAmount(0);
+            setOrderPayments([]);
+            setTopUpAmount(0);
             setNote("");
             setInternalNote("");
             setDiscountValue(0);
@@ -1126,10 +1227,37 @@ function OrderPageInner() {
         <p className="muted">Detail biaya admin per kategori ada di halaman Katalog → tab Split Shopee.</p>
       </div>}
 
-      <div className="setting-row">
-        <label>DP / Deposit (Rp)</label>
-        <MoneyInput value={dpAmount} onChange={setDpAmount} placeholder="0" />
-      </div>
+      {editingOrderId ? (
+        <div className="setting-row payment-history-block">
+          <label>Riwayat Pembayaran</label>
+          <div className="payment-total-preview">Total dibayar: <b>{formatRupiah(dpAmount + splitShopeeCredit)}</b></div>
+          {orderPayments.length === 0 && <p className="field-hint">Belum ada pembayaran tercatat untuk order ini.</p>}
+          {orderPayments.map(p => (
+            <div className="payment-row" key={p.id}>
+              <div className="payment-row-info">
+                <b>{formatRupiah(p.amount)}</b>
+                <small>{p.dateReceived}{p.note ? ` · ${p.note}` : ""}</small>
+                <small className={p.status === "sudah-ditarik" ? "payment-withdrawn" : "payment-pending"}>
+                  {p.status === "sudah-ditarik" ? `✅ Sudah ditarik · ${p.dateWithdrawn}` : "🕒 Belum ditarik"}
+                </small>
+              </div>
+              <div className="payment-row-actions">
+                <button type="button" onClick={() => handleTogglePaymentWithdrawn(p)} aria-label="Tandai status tarik" title={p.status === "sudah-ditarik" ? "Tandai belum ditarik" : "Tandai sudah ditarik"}><Landmark size={14} /></button>
+                <button type="button" onClick={() => handleDeletePayment(p)} aria-label="Hapus pembayaran" title="Hapus"><Trash2 size={14} /></button>
+              </div>
+            </div>
+          ))}
+          <div className="payment-topup-row">
+            <MoneyInput value={topUpAmount} onChange={setTopUpAmount} placeholder="Nominal transfer masuk" />
+            <button type="button" className="add-payment-btn" onClick={handleAddPayment}><Plus size={15} /> Catat Pembayaran</button>
+          </div>
+        </div>
+      ) : (
+        <div className="setting-row">
+          <label>DP / Deposit (Rp)</label>
+          <MoneyInput value={dpAmount} onChange={setDpAmount} placeholder="0" />
+        </div>
+      )}
 
       <div className="setting-row">
         <label>Catatan (opsional)</label>
@@ -1340,7 +1468,7 @@ function OrderPageInner() {
           <button className="secondary" onClick={copyInvoice}><Copy size={16} /> Salin Invoice</button>
         </div>
         <div className="invoice-actions">
-          <button className="secondary" onClick={() => { setInvoice(null); setItems([]); setDpAmount(0); setNote(""); setInternalNote(""); setDiscountValue(0); setMarketerId(""); setEditingOrderId(null); notify("Order baru siap dibuat"); }}><Check size={16} /> Selesai</button>
+          <button className="secondary" onClick={() => { setInvoice(null); setItems([]); setDpAmount(0); setOrderPayments([]); setTopUpAmount(0); setNote(""); setInternalNote(""); setDiscountValue(0); setMarketerId(""); setEditingOrderId(null); notify("Order baru siap dibuat"); }}><Check size={16} /> Selesai</button>
         </div>
       </section>
     </div>}

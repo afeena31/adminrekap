@@ -269,6 +269,24 @@ a.nav-link:hover { background: #f5ece5; color: #694628; transform: translateY(-1
 .shopee-split-info p:last-child { margin-bottom: 0; }
 .shopee-split-info b { color: var(--brown); }
 
+/* ===== RIWAYAT PEMBAYARAN (per top up, mode edit order) ===== */
+.payment-history-block { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; }
+.payment-total-preview { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.payment-total-preview b { color: var(--brown); font-size: 15px; }
+.payment-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+.payment-row-info { display: flex; flex-direction: column; gap: 2px; }
+.payment-row-info b { font-size: 13px; color: var(--ink); }
+.payment-row-info small { font-size: 11px; color: var(--muted); }
+.payment-row-info small.payment-withdrawn { color: var(--olive); }
+.payment-row-info small.payment-pending { color: var(--terracotta); }
+.payment-row-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.payment-row-actions button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px; color: var(--muted); cursor: pointer; display: flex; transition: color 0.2s ease, border-color 0.2s ease; }
+.payment-row-actions button:hover { color: var(--brown); border-color: var(--brown); }
+.payment-topup-row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+.payment-topup-row input { flex: 1; width: auto; border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; font: inherit; font-size: 13px; }
+.add-payment-btn { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; border: 0; background: var(--brown); color: #fff; border-radius: 10px; padding: 11px 14px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: transform 0.15s ease, box-shadow 0.2s ease; }
+.add-payment-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+
 .invoice-type-tag { display: inline-block; background: #f1e9df; color: #765c45; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 8px; margin-bottom: 10px; }
 .invoice-sisa { border-top: 1px dashed #e8dccb; margin-top: 6px; padding-top: 10px; }
 .invoice-sisa span { font-weight: 700; }

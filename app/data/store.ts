@@ -79,6 +79,25 @@ export type OrderRecord = {
   createdAt: number;
 };
 
+// Satu baris = satu transfer yang benar-benar masuk (top up), bukan angka
+// kumulatif yang ditimpa — supaya riwayatnya jelas: dari closingan siapa,
+// produknya apa, nominal berapa, masuk tanggal berapa, ditarik tanggal berapa
+// (pola sama persis dengan FeeRecord: status belum/sudah + tanggal terkait).
+export type PaymentRecord = {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  customerId: string | null;
+  customerName: string;
+  productSummary: string;   // ringkasan item di order ini, mis. "Amna Jilbab L, Kaos Kaki"
+  amount: number;
+  dateReceived: string;     // tanggal transfer/top up masuk
+  status: "belum-ditarik" | "sudah-ditarik";
+  dateWithdrawn: string | null;
+  note: string;
+  createdAt: number;
+};
+
 export type FeeRecord = {
   id: string;
   orderId: string;
@@ -152,6 +171,7 @@ const KEYS = {
   invoiceCounter: "umayasla_invoice_counter",
   addresses: "umayasla_addresses",
   batchNames: "umayasla_batch_names",
+  payments: "umayasla_payments",
 };
 
 
@@ -516,6 +536,42 @@ export function updateFeeAmount(id: string, totalFee: number, note?: string): Fe
 export function deleteFee(id: string): FeeRecord[] {
   const updated = getFees().filter(f => f.id !== id);
   save(KEYS.fees, updated);
+  return updated;
+}
+
+// ===== PAYMENT STORE (riwayat transfer masuk, per top up) =====
+
+export function getPayments(): PaymentRecord[] {
+  return load<PaymentRecord[]>(KEYS.payments, []);
+}
+
+export function getPaymentsForOrder(orderId: string): PaymentRecord[] {
+  return getPayments().filter(p => p.orderId === orderId);
+}
+
+export function addPayment(payment: PaymentRecord): PaymentRecord[] {
+  const updated = [payment, ...getPayments()];
+  save(KEYS.payments, updated);
+  return updated;
+}
+
+export function deletePayment(id: string): PaymentRecord[] {
+  const updated = getPayments().filter(p => p.id !== id);
+  save(KEYS.payments, updated);
+  return updated;
+}
+
+export function markPaymentWithdrawn(id: string, status: "belum-ditarik" | "sudah-ditarik", dateWithdrawn: string | null): PaymentRecord[] {
+  const updated = getPayments().map(p => p.id === id ? { ...p, status, dateWithdrawn } : p);
+  save(KEYS.payments, updated);
+  return updated;
+}
+
+// Dipanggil saat order dihapus permanen — supaya riwayat pembayaran gak
+// nyangkut menunjuk order yang sudah tidak ada (pola sama dgn removeFeeForOrder).
+export function removePaymentsForOrder(orderId: string): PaymentRecord[] {
+  const updated = getPayments().filter(p => p.orderId !== orderId);
+  save(KEYS.payments, updated);
   return updated;
 }
 

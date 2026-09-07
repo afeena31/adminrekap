@@ -628,6 +628,11 @@
   padding: 18px 20px;
   box-shadow: var(--shadow-sm);
   transition: transform 0.2s ease, box-shadow 0.25s ease;
+  /* .dash-batch-card juga dipakai sebagai <Link> (item produksi order asli,
+     klik utk buka order-nya) — reset supaya sama persis dgn versi <div>. */
+  display: block;
+  text-decoration: none;
+  color: inherit;
 }
 .dash-batch-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .dash-batch-head {

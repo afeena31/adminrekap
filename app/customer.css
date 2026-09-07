@@ -305,6 +305,20 @@
 .next-value.blue { color: var(--blue); }
 .next-value.none { color: var(--muted); }
 
+.product-card-edit-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 15px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brown);
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+.product-card-edit-link:hover { background: rgba(116, 80, 52, 0.04); }
+
 .product-card-blocker {
   display: flex;
   align-items: center;

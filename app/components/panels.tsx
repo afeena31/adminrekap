@@ -4,7 +4,7 @@ import { AlertCircle, Check, ChevronRight, ClipboardList, MapPin, UserRound, Box
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { Customer, PaymentData } from "../data/customers";
-import { getOrdersForCustomer, formatRupiah, computePaymentTotals, getPelunasanWhatsAppUrl, type OrderRecord } from "../data/store";
+import { getOrdersForCustomer, formatRupiah, computePaymentTotals, getPelunasanWhatsAppUrl, productionStageInfo, shipmentStageInfo, type OrderRecord, type OrderItemSnapshot } from "../data/store";
 
 import {
   getOperations,
@@ -51,6 +51,14 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
   // migrasi penuh ke central.ts (itu tetap PR Tahap 4) — supaya minimal
   // "perlu ditagih" untuk order asli benar-benar muncul di sini.
   const unpaidRealOrders = realOrders.filter(o => o.total - o.dp > 0);
+
+  // Product Status Cards di bawah (ops.productCards) SAMA — cuma pernah diisi
+  // 3 customer demo, gak pernah tersambung ke order asli. Sekarang item order
+  // asli (dgn tahap produksi/pengiriman yang beneran diisi lewat form Order)
+  // ikut ditampilkan sbg kartu terpisah, bukan menggantikan yang demo (yg
+  // toh kosong utk customer asli) — read-only di sini, ubah tahapnya lewat
+  // halaman Order (satu tempat, gak duplikasi logic update di 2 tempat).
+  const realProductItems = realOrders.flatMap(order => order.items.map(item => ({ order, item })));
 
   const act = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
@@ -112,6 +120,9 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
         <div><h2>Product Status Cards</h2><p>Setiap produk menjelaskan kondisinya sendiri.</p></div>
         <button onClick={() => onTab("Order")}>Lihat semua</button>
       </div>
+      {realProductItems.map(({ order, item }) => (
+        <RealProductCard key={item.id} order={order} item={item} />
+      ))}
       {ops.productCards.map(card => (
         <ProductCard key={card.id} card={card} onAction={handleAction} />
       ))}
@@ -235,6 +246,43 @@ function ActionCenter({ ops, onAction, unpaidRealOrders, onTagihPelunasan }: { o
 }
 
 // ===== PRODUCT STATUS CARD =====
+// ===== PRODUCT STATUS CARD — order ASLI (bukan demo) =====
+// Read-only di sini (ubah tahap lewat halaman Order) — cuma 2 dimensi yang
+// beneran ada datanya (Produksi, Pengiriman) + Payment (dihitung dari
+// order.dp/total). TIDAK ikut menampilkan Lokasi/Shipping Plan/Fulfillment
+// seperti kartu demo — itu dimensi yang gak ada tracking asli-nya sama
+// sekali, daripada ditebak/dikosongkan asal, mendingan gak ditampilkan.
+// Tone dipetakan ke kosakata yang SUDAH ada CSS-nya (dipakai kartu demo) —
+// bukan bikin nama tone baru yang gak pernah punya gaya (className tanpa
+// definisi CSS = tampil polos, sama seperti bug ".eyebrow" yang pernah
+// ditemukan sebelumnya).
+const productionTone: Record<string, string> = { po: "po", produksi: "production", qc: "qc", packing: "packing", "siap-kirim": "ready" };
+const paymentTone: Record<string, string> = { lunas: "paid", dp: "dp", belum: "unpaid" };
+
+function RealProductCard({ order, item }: { order: OrderRecord; item: OrderItemSnapshot }) {
+  const payStatus = order.dp >= order.total ? "lunas" : order.dp > 0 ? "dp" : "belum";
+  const paymentLabel = payStatus === "lunas" ? "🟢 Lunas" : payStatus === "dp" ? "🟡 DP" : "🔴 Belum Bayar";
+  const prod = productionStageInfo[item.productionStage || "po"];
+  const prodTone = productionTone[item.productionStage || "po"];
+  const ship = item.shipmentStage ? shipmentStageInfo[item.shipmentStage] : null;
+  return <article className="product-card real">
+    <div className="product-card-head">
+      <span className="product-card-emoji">{item.emoji}</span>
+      <div className="product-card-title">
+        <b>{item.name}</b>
+        <small>{item.qty} pcs · {order.number}</small>
+      </div>
+      <span className={`status-chip ${prodTone}`}>{prod.emoji} {prod.name}</span>
+    </div>
+    <div className="product-card-grid">
+      <div className="psc-field"><small>💰 Payment</small><b className={`psc-value ${paymentTone[payStatus]}`}>{paymentLabel}</b></div>
+      <div className="psc-field"><small>🏭 Produksi</small><b className={`psc-value ${prodTone}`}>{prod.emoji} {prod.name}</b></div>
+      <div className="psc-field"><small>🚚 Pengiriman</small><b className={`psc-value ${ship ? "" : "none"}`}>{ship ? `${ship.emoji} ${ship.name}` : "— Belum diisi"}</b></div>
+    </div>
+    <Link href={`/order?orderId=${order.id}`} className="product-card-edit-link">Ubah tahap di halaman Order <ArrowRight size={13} /></Link>
+  </article>;
+}
+
 function ProductCard({ card, onAction }: { card: ProductStatusCard; onAction: (cardId: string, action: ActionType) => void }) {
   const [expanded, setExpanded] = useState(false);
   const available = getAvailableActions(card);

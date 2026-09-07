@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { toDisplayCustomer } from "../data/customers";
-import { getOrders, getFees, getMarketers, getProducts, formatRupiah, getOrderById, getPelunasanWhatsAppUrl } from "../data/store";
+import { getOrders, getFees, getMarketers, getProducts, formatRupiah, getOrderById, getPelunasanWhatsAppUrl, productionStageInfo } from "../data/store";
 import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
 import { getOperations } from "../data/operations";
@@ -129,6 +129,14 @@ export default function DashboardPage() {
   const productionBatches = allOps.flatMap(({ customer }) =>
     customer.batches.map(b => ({ customer, batch: b }))
   ).filter(({ batch }) => batch.status !== "selesai");
+
+  // Item order ASLI yang tahap produksinya lagi berjalan (produksi/qc/packing)
+  // — sebelumnya section ini cuma baca customer.batches (operations.ts, demo),
+  // jadi order asli gak pernah kelihatan di sini walau lagi diproses.
+  const realProductionItems = orders.flatMap(o => o.items
+    .filter(i => i.productionStage === "produksi" || i.productionStage === "qc" || i.productionStage === "packing")
+    .map(i => ({ order: o, item: i }))
+  );
 
   const batchProgress = (status: string) => {
     switch (status) {
@@ -307,13 +315,25 @@ export default function DashboardPage() {
         </div>
       </div>
       <div className="dash-production">
-        {productionBatches.length === 0 && (
+        {productionBatches.length === 0 && realProductionItems.length === 0 && (
           <div className="dash-empty">
             <span className="dash-empty-art">🏭</span>
             <h3>Tidak ada batch produksi aktif</h3>
             <p>Semua produksi telah selesai. Siap untuk batch berikutnya.</p>
           </div>
         )}
+        {realProductionItems.map(({ order, item }, i) => (
+          <Link key={"real-" + i} href={`/order?orderId=${order.id}`} className="dash-batch-card">
+            <div className="dash-batch-head">
+              <span className="dash-batch-icon"><Factory size={18} /></span>
+              <div>
+                <b>{item.name} · {order.customer}</b>
+                <span>{order.number}</span>
+              </div>
+              <span className="dash-batch-status produksi">{productionStageInfo[item.productionStage || "po"].name}</span>
+            </div>
+          </Link>
+        ))}
         {productionBatches.map(({ customer, batch }, i) => (
           <div key={i} className="dash-batch-card">
             <div className="dash-batch-head">

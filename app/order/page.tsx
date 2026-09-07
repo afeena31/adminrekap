@@ -634,7 +634,14 @@ function OrderPageInner() {
         });
       }
       newPayments.forEach(p => addPayment(p));
-      if (newPayments.length > 0) setOrderPayments(getPaymentsForOrder(orderId));
+      setOrderPayments(getPaymentsForOrder(orderId));
+      // Order baru langsung masuk mode edit (bukan cuma tampil invoice lalu
+      // form di baliknya balik ke "Buat Order Baru" kosong) — supaya "Riwayat
+      // Pembayaran"/"Catat Pembayaran" untuk order yang BARU SAJA dibuat ini
+      // langsung kelihatan & bisa dipakai, tanpa admin harus keluar dulu lalu
+      // cari lagi lewat "Edit Order yang Sudah Ada". "Selesai" di invoice
+      // tetap mereset semuanya kalau admin mau mulai order baru yang lain.
+      setEditingOrderId(orderId);
     }
 
     // ===== SINKRON COLLECTION "PO BATCH" =====

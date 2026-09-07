@@ -20,8 +20,22 @@ export function QuickPaymentModal({ onClose, onRecorded }: { onClose: () => void
   const [amount, setAmount] = useState(0);
   const [done, setDone] = useState<{ orderNumber: string; sisa: number } | null>(null);
 
+  // Daftar customer yang PUNYA tagihan belum lunas — dibuat browsable tanpa
+  // perlu ngetik dulu (sebelumnya cuma muncul kalau ngetik nama), diurutkan
+  // dari outstanding terbesar supaya yang paling perlu ditagih kelihatan
+  // duluan. Customer yang gak punya tagihan sengaja gak muncul di sini —
+  // gak ada gunanya "catat pembayaran" utk yang gak punya utang.
   const q = query.toLowerCase().trim();
-  const results = q ? getCustomers().filter(c => c.name.toLowerCase().includes(q) || c.waName.toLowerCase().includes(q)) : [];
+  const customersWithOutstanding = getCustomers()
+    .map(c => {
+      const outstanding = getOrdersForCustomer(c.id).reduce((sum, o) => sum + Math.max(0, o.total - o.dp), 0);
+      return { customer: c, outstanding };
+    })
+    .filter(x => x.outstanding > 0)
+    .sort((a, b) => b.outstanding - a.outstanding);
+  const results = q
+    ? customersWithOutstanding.filter(x => x.customer.name.toLowerCase().includes(q) || x.customer.waName.toLowerCase().includes(q))
+    : customersWithOutstanding;
 
   const pickCustomer = (c: CentralCustomer) => {
     setSelectedCustomer(c);
@@ -72,12 +86,17 @@ export function QuickPaymentModal({ onClose, onRecorded }: { onClose: () => void
               <Search size={18} />
               <input autoFocus placeholder="Ketik nama customer..." value={query} onChange={e => setQuery(e.target.value)} />
             </div>
-            {q && results.length === 0 && <p className="panel-hint" style={{ marginTop: 12 }}>Tidak ada customer dengan nama itu.</p>}
-            {results.map(c => (
+            {results.length === 0 && (
+              <p className="panel-hint" style={{ marginTop: 12 }}>
+                {q ? "Tidak ada customer dengan nama itu." : "Tidak ada customer dengan tagihan belum lunas saat ini."}
+              </p>
+            )}
+            {!q && results.length > 0 && <p className="panel-hint" style={{ margin: "12px 0 8px" }}>Customer dengan tagihan belum lunas:</p>}
+            {results.map(({ customer: c, outstanding }) => (
               <button key={c.id} className="customer-result" onClick={() => pickCustomer(c)}>
                 <span className="mini-avatar">{c.initials || c.name.charAt(0)}</span>
                 <span>{c.name} · {c.city}</span>
-                <ChevronRight size={18} />
+                <span className="quick-payment-order-sisa">{formatRupiah(outstanding)}</span>
               </button>
             ))}
           </>

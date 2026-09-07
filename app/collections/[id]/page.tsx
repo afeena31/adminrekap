@@ -114,7 +114,14 @@ export default function CollectionDetailPage() {
       customerMap.set(key, { name: o.customer, customerId: o.customerId, orders: 1, total: o.total });
     }
   });
-  itemLinks.forEach(({ order: o, item }) => {
+  // Order yang SUDAH dihitung utuh lewat tautan order-level (di atas) gak
+  // boleh ikut dihitung lagi dari tautan per-item — sama seperti pengaman
+  // di getCollectionStats (collections.ts), supaya angkanya konsisten dgn
+  // header stats di atas & gak dobel hitung kalau satu order kebetulan
+  // tertaut ke Collection yang sama lewat DUA jalur sekaligus.
+  const legacyOrderIds = new Set(orders.map(o => o.id));
+  const dedupedItemLinks = itemLinks.filter(l => !legacyOrderIds.has(l.order.id));
+  dedupedItemLinks.forEach(({ order: o, item }) => {
     const key = o.customerId || o.customer;
     const existing = customerMap.get(key);
     if (existing) {
@@ -128,7 +135,7 @@ export default function CollectionDetailPage() {
 
   // ===== ITEM BREAKDOWN (per Kategori Produk) — "kaos kaki closing berapa,
   // siapa saja yang pesan" =====
-  const itemBreakdown = itemLinks.map(({ order: o, item }) => ({
+  const itemBreakdown = dedupedItemLinks.map(({ order: o, item }) => ({
     orderId: o.id,
     orderNumber: o.number,
     customerName: o.customer,

@@ -576,6 +576,16 @@ function OrderPageInner() {
     snapshots.forEach(item => {
       setCategoriesForItem(orderId, item.id, itemCategoryMap[item.id] || []);
     });
+    // Item yang ADA di order lama tapi sudah gak ada di snapshots sekarang
+    // (dihapus admin selama sesi edit ini) — bersihkan tautan kategorinya
+    // juga, supaya gak jadi sampah nyangkut selamanya di
+    // umayasla_collection_order_items menunjuk item yang sudah gak ada.
+    if (existingOrder) {
+      const currentItemIds = new Set(snapshots.map(item => item.id));
+      existingOrder.items.forEach(oldItem => {
+        if (!currentItemIds.has(oldItem.id)) setCategoriesForItem(orderId, oldItem.id, []);
+      });
+    }
 
     if (editingOrderId) {
       updateOrder(orderRecord);
@@ -786,7 +796,13 @@ function OrderPageInner() {
       note: "",
       createdAt: Date.now(),
     });
-    setDpAmount(newDp - splitShopeeCredit);
+    // Dasar kredit Split Bill Shopee dari ongkir yang BENERAN tersimpan di
+    // order (existingOrder.ongkirLabel), BUKAN dari pilihan ongkir di form
+    // (ongkirId/splitShopeeCredit) — kalau admin sempat ganti ongkir di form
+    // tapi belum klik Generate Invoice, keduanya bisa beda dan bikin dpAmount
+    // salah hitung (bahkan bisa negatif). Math.max(0, ...) jaga-jaga tambahan.
+    const persistedSplitShopee = ongkirOptions.find(o => o.name === existingOrder.ongkirLabel)?.id === "shopee";
+    setDpAmount(Math.max(0, newDp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0)));
     setOrderPayments(getPaymentsForOrder(editingOrderId));
     setExistingOrders(getOrders());
     setTopUpAmount(0);
@@ -800,7 +816,8 @@ function OrderPageInner() {
     const newDp = Math.max(0, existingOrder.dp - payment.amount);
     updateOrder({ ...existingOrder, dp: newDp });
     deletePayment(payment.id);
-    setDpAmount(newDp - splitShopeeCredit);
+    const persistedSplitShopee = ongkirOptions.find(o => o.name === existingOrder.ongkirLabel)?.id === "shopee";
+    setDpAmount(Math.max(0, newDp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0)));
     setOrderPayments(getPaymentsForOrder(editingOrderId));
     setExistingOrders(getOrders());
     notify(`Pembayaran ${formatRupiah(payment.amount)} dihapus`);

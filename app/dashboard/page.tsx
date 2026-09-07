@@ -68,15 +68,6 @@ export default function DashboardPage() {
     setTodayLabel(new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" }));
   }, []);
 
-  // ===== SECTION 3: TODAY'S ACTIVITY (HISTORI — hanya kejadian yang terjadi) =====
-  const activityFeed = allOps.flatMap(({ customer, ops }) =>
-    ops.timeline.map(evt => ({ customer, evt }))
-  ).sort((a, b) => {
-    const dateA = a.evt.time;
-    const dateB = b.evt.time;
-    return dateB.localeCompare(dateA);
-  }).slice(0, 8);
-
   const activityIcon: Record<string, any> = {
     order: ShoppingBag,
     invoice: FileText,
@@ -90,6 +81,44 @@ export default function DashboardPage() {
     note: StickyNote,
     decision: CircleDot,
   };
+
+  // ===== SECTION 3: TODAY'S ACTIVITY (HISTORI — hanya kejadian yang terjadi) =====
+  // ops.timeline (operations.ts) cuma pernah diisi utk 3 customer demo lama —
+  // workspace dgn order ASLI tapi nol customer demo dulu selalu tampil "Belum
+  // ada aktivitas... Mulai dengan membuat order baru", padahal order-nya
+  // sudah ada (bahkan mungkin banyak) — instruksi yang salah & membingungkan.
+  // Order asli (createdAt asli, dari store.ts) sekarang ikut ditambahkan
+  // sebagai "Order baru: {customer}" supaya histori ini jujur.
+  const realOrderActivity = orders
+    .slice()
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 8)
+    .map(o => ({
+      key: "real-" + o.id,
+      icon: ShoppingBag,
+      iconClass: "order",
+      title: `Order baru: ${o.customer}`,
+      desc: `${o.number} · ${formatRupiah(o.total)}`,
+      time: new Date(o.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" }),
+    }));
+  const demoActivity = allOps.flatMap(({ customer, ops }) =>
+    ops.timeline.map(evt => ({ customer, evt }))
+  ).sort((a, b) => {
+    const dateA = a.evt.time;
+    const dateB = b.evt.time;
+    return dateB.localeCompare(dateA);
+  });
+  const activityFeed = [
+    ...realOrderActivity,
+    ...demoActivity.map(({ customer, evt }, i) => ({
+      key: "demo-" + i,
+      icon: activityIcon[evt.type] || CircleDot,
+      iconClass: evt.type,
+      title: evt.title,
+      desc: customer.name + (evt.desc ? ` · ${evt.desc}` : ""),
+      time: evt.time,
+    })),
+  ].slice(0, 8);
 
   // ===== SECTION 6: PRODUCTION (domain batch — terpisah dari work queue) =====
   // Diturunkan dari allOps (sudah dimuat hydration-safe lewat useEffect di
@@ -253,16 +282,16 @@ export default function DashboardPage() {
             <Link href="/order" className="dash-empty-cta"><Plus size={15} /> Buat Order</Link>
           </div>
         )}
-        {activityFeed.map(({ customer, evt }, i) => {
-          const Icon = activityIcon[evt.type] || CircleDot;
+        {activityFeed.map(item => {
+          const Icon = item.icon;
           return (
-            <div key={i} className="dash-activity-item">
-              <span className={`dash-activity-dot ${evt.type}`}><Icon size={14} /></span>
+            <div key={item.key} className="dash-activity-item">
+              <span className={`dash-activity-dot ${item.iconClass}`}><Icon size={14} /></span>
               <div className="dash-activity-body">
-                <b>{evt.title}</b>
-                <span>{customer.name}{evt.desc ? ` · ${evt.desc}` : ""}</span>
+                <b>{item.title}</b>
+                <span>{item.desc}</span>
               </div>
-              <span className="dash-activity-time">{evt.time}</span>
+              <span className="dash-activity-time">{item.time}</span>
             </div>
           );
         })}

@@ -408,8 +408,13 @@ function HomePageInner() {
             customer dgn order asli selalu tampil "0 produk" di sini walau "Total Order"
             di bawah (juga dari data asli) sudah benar menunjukkan order aktif. */}
         <div className="situation-item"><small>Order Aktif</small><b>{customerOrders.filter(o => o.total - o.dp > 0).reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.qty, 0), 0)} produk</b></div>
-        <div className="situation-item"><small>Produksi</small><b>{ops.productCards.filter(c => c.progressStatus === "produksi" || c.progressStatus === "qc").length} berjalan</b></div>
-        <div className="situation-item"><small>Pengiriman</small><b>{ops.productCards.filter(c => c.shipmentStatus === "menunggu-pickup" || c.shipmentStatus === "dalam-perjalanan").length} aktif</b></div>
+        {/* Belum ada tracking produksi/pengiriman ASLI (order dari /order gak
+            pernah mengisi ops.productCards, itu cuma pernah diisi utk 3 customer
+            demo) — tampilkan "—" yang jujur utk customer dgn order asli, bukan
+            "0 berjalan"/"0 aktif" yang keliatan seperti sudah dicek & memang
+            kosong (padahal sebenarnya cuma belum ada datanya sama sekali). */}
+        <div className="situation-item"><small>Produksi</small><b>{customerOrders.length > 0 && ops.productCards.length === 0 ? "— belum ada tracking" : `${ops.productCards.filter(c => c.progressStatus === "produksi" || c.progressStatus === "qc").length} berjalan`}</b></div>
+        <div className="situation-item"><small>Pengiriman</small><b>{customerOrders.length > 0 && ops.productCards.length === 0 ? "— belum ada tracking" : `${ops.productCards.filter(c => c.shipmentStatus === "menunggu-pickup" || c.shipmentStatus === "dalam-perjalanan").length} aktif`}</b></div>
 
         <div className="situation-item"><small>Prioritas</small><b className="situation-priority">{(ops.actionCenter.length + customerOrders.filter(o => o.total - o.dp > 0).length) > 0 ? `${ops.actionCenter.length + customerOrders.filter(o => o.total - o.dp > 0).length} aksi` : "Tenang"}</b></div>
       </div>

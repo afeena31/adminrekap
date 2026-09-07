@@ -234,28 +234,28 @@
 }
 
 /* ===== SECTION 2: QUICK ACTIONS — beautiful tiles ===== */
+/* Sebelumnya deret geser-ke-samping (overflow-x scroll) — di layar sempit
+   cuma kartu pertama yang keliatan penuh, sisanya (termasuk "Record
+   Payment" yang sering dipakai) ketutup & gampang gak ketemu. Diganti
+   susun ke bawah supaya semua kartu langsung kelihatan tanpa perlu geser. */
 .dash-quick-actions {
   display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 6px;
-  scrollbar-width: none;
+  flex-direction: column;
+  gap: 10px;
 }
-.dash-quick-actions::-webkit-scrollbar { display: none; }
 .dash-quick-action {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
   background: linear-gradient(165deg, #ffffff, #fbf6ef);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   padding: 14px 18px 14px 14px;
   text-decoration: none;
   color: var(--ink);
-  white-space: nowrap;
   box-shadow: var(--shadow-sm);
   transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
-  flex: 0 0 auto;
   font: inherit;
   cursor: pointer;
   text-align: left;

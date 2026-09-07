@@ -11,7 +11,7 @@ import { goBack } from "../lib/goBack";
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, determineRekening, SPLIT_BILL_PRODUK, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
-import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
+import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
 import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections, getCollections, getCollectionIdsForItem, setCategoriesForItem, removeItemLinksForOrder, type Collection } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
@@ -50,6 +50,8 @@ type OrderItem = {
   customRequests?: CustomRequest[];
   additionalPrice?: number;
   finalPrice?: number;
+  productionStage?: ProductionStage;
+  shipmentStage?: ShipmentStage;
 };
 
 
@@ -388,6 +390,14 @@ function OrderPageInner() {
     setItems(prev => prev.map(item => item.id === id ? { ...item, qty: Math.max(1, item.qty + delta) } : item));
   };
 
+  const updateProductionStage = (id: string, stage: ProductionStage) => {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, productionStage: stage } : item));
+  };
+
+  const updateShipmentStage = (id: string, stage: ShipmentStage | "") => {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, shipmentStage: stage || undefined } : item));
+  };
+
   const removeItem = (id: string) => {
     setItems(prev => prev.filter(item => item.id !== id));
     setItemCategoryMap(prev => {
@@ -535,6 +545,8 @@ function OrderPageInner() {
       customRequests: item.customRequests,
       additionalPrice: item.additionalPrice,
       finalPrice: item.finalPrice,
+      productionStage: item.productionStage || "po",
+      shipmentStage: item.shipmentStage,
     }));
 
 
@@ -737,6 +749,8 @@ function OrderPageInner() {
       customRequests: item.customRequests,
       additionalPrice: item.additionalPrice,
       finalPrice: item.finalPrice,
+      productionStage: item.productionStage,
+      shipmentStage: item.shipmentStage,
     }));
     setItems(loadedItems);
     const loadedCategoryMap: Record<string, string[]> = {};
@@ -1194,6 +1208,22 @@ function OrderPageInner() {
                 })}
               </div>
             )}
+          </div>
+          {/* ===== TAHAP PRODUKSI & PENGIRIMAN — per item, gak per-invoice ===== */}
+          <div className="order-item-stages">
+            <div className="order-item-stage-field">
+              <small className="category-label">🏭 Tahap Produksi</small>
+              <select value={item.productionStage || "po"} onChange={e => updateProductionStage(item.id, e.target.value as ProductionStage)}>
+                {productionStageOrder.map(stage => <option key={stage} value={stage}>{productionStageInfo[stage].emoji} {productionStageInfo[stage].name}</option>)}
+              </select>
+            </div>
+            <div className="order-item-stage-field">
+              <small className="category-label">🚚 Tahap Pengiriman</small>
+              <select value={item.shipmentStage || ""} onChange={e => updateShipmentStage(item.id, e.target.value as ShipmentStage | "")}>
+                <option value="">— Belum diisi —</option>
+                {(Object.keys(shipmentStageInfo) as ShipmentStage[]).map(stage => <option key={stage} value={stage}>{shipmentStageInfo[stage].emoji} {shipmentStageInfo[stage].name}</option>)}
+              </select>
+            </div>
           </div>
         </div>
       ))}

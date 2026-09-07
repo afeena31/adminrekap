@@ -24,6 +24,33 @@ export type CustomRequest = {
   price: number;
 };
 
+// Tahap produksi & pengiriman PER-ITEM (bukan per-order) — satu invoice bisa
+// berisi produk dgn progres berbeda-beda (mis. Amna masih Produksi, Kaos
+// Kaki sudah Siap Kirim), sama seperti Kategori Produk. Ini tracking ASLI
+// pertama utk order asli — sebelumnya cuma ada versi demo (operations.ts,
+// ProductStatusCard) yang gak pernah tersambung ke order beneran.
+export type ProductionStage = "po" | "produksi" | "qc" | "packing" | "siap-kirim";
+export type ShipmentStage = "proses-resi" | "dalam-pengiriman" | "selesai" | "ditunda" | "retur" | "refund";
+
+export const productionStageOrder: ProductionStage[] = ["po", "produksi", "qc", "packing", "siap-kirim"];
+export const productionStageInfo: Record<ProductionStage, { name: string; emoji: string }> = {
+  "po": { name: "PO", emoji: "📝" },
+  "produksi": { name: "Dalam Produksi", emoji: "🏭" },
+  "qc": { name: "QC", emoji: "🔍" },
+  "packing": { name: "Packing", emoji: "📦" },
+  "siap-kirim": { name: "Siap Kirim", emoji: "✅" },
+};
+
+export const shipmentStageOrder: ShipmentStage[] = ["proses-resi", "dalam-pengiriman", "selesai"];
+export const shipmentStageInfo: Record<ShipmentStage, { name: string; emoji: string }> = {
+  "proses-resi": { name: "Proses Resi", emoji: "🧾" },
+  "dalam-pengiriman": { name: "Dalam Pengiriman", emoji: "🚚" },
+  "selesai": { name: "Selesai", emoji: "🎉" },
+  "ditunda": { name: "Ditunda", emoji: "⏸️" },
+  "retur": { name: "Retur", emoji: "↩️" },
+  "refund": { name: "Refund", emoji: "💸" },
+};
+
 export type OrderItemSnapshot = {
   id: string;
   productId?: string;
@@ -45,6 +72,9 @@ export type OrderItemSnapshot = {
   customRequests?: CustomRequest[]; // request khusus (nama + harga)
   additionalPrice?: number;   // total tambahan modifikasi + request
   finalPrice?: number;        // harga akhir per unit
+  // ===== Tahap produksi & pengiriman (opsional — undefined = "po", belum diisi) =====
+  productionStage?: ProductionStage;
+  shipmentStage?: ShipmentStage;
 };
 
 

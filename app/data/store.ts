@@ -1,6 +1,6 @@
 "use client";
 
-import { products as seedProducts, type Product } from "./products";
+import { products as seedProducts, determineRekening, type Product } from "./products";
 import { type CustomerAddress } from "./customers";
 
 
@@ -373,6 +373,48 @@ export function computePaymentTotals(orders: OrderRecord[]) {
   const totalPaid = orders.reduce((sum, o) => sum + (o.status === "paid" ? o.total : o.dp), 0);
   const totalOutstanding = orders.reduce((sum, o) => sum + (o.status === "paid" ? 0 : o.total - o.dp), 0);
   return { totalPaid, totalOutstanding };
+}
+
+// ===== TAGIH PELUNASAN VIA WHATSAPP =====
+// Dipakai dari Action Center (profil customer) & Work Queue (Dashboard) —
+// klik "Tagih pelunasan" langsung buka WhatsApp dgn pesan pelunasan siap
+// kirim (item, total, sudah dibayar, sisa, rekening), bukan cuma pindah tab.
+export function buildPelunasanMessage(order: OrderRecord): string {
+  const outstanding = order.total - order.dp;
+  const fmt = (v: number) => "Rp" + v.toLocaleString("id-ID");
+  const lines: string[] = [];
+  lines.push(`Assalamu'alaikum ${order.customer},`);
+  lines.push("");
+  lines.push(`Mau info update untuk pesanan ${order.number} ya 🌿`);
+  lines.push("");
+  order.items.forEach(item => {
+    lines.push(`- ${item.name}${item.detail ? ` (${item.detail})` : ""} x${item.qty}`);
+  });
+  lines.push("");
+  lines.push(`Total Tagihan: ${fmt(order.total)}`);
+  lines.push(`Sudah Dibayar: ${fmt(order.dp)}`);
+  lines.push(`Sisa Pelunasan: ${fmt(outstanding)}`);
+  const rek = determineRekening(order.items.map(i => i.category || "lainnya"));
+  if (rek) {
+    lines.push("");
+    lines.push("Pelunasan bisa ditransfer ke:");
+    lines.push(rek.name);
+    lines.push(rek.bank);
+    lines.push(rek.number);
+    lines.push("a/n " + rek.owner);
+  }
+  lines.push("");
+  lines.push("Ditunggu konfirmasinya ya, terima kasih 🌸");
+  return lines.join("\n");
+}
+
+// null kalau nomor HP order kosong — pemanggil harus tangani (mis. tampilkan
+// toast "Nomor WA belum ada") daripada buka wa.me tanpa nomor tujuan.
+export function getPelunasanWhatsAppUrl(order: OrderRecord): string | null {
+  const digits = order.phone.replace(/[^0-9]/g, "");
+  if (!digits) return null;
+  const waPhone = digits.startsWith("0") ? "62" + digits.slice(1) : digits;
+  return `https://wa.me/${waPhone}?text=${encodeURIComponent(buildPelunasanMessage(order))}`;
 }
 
 // Perbarui order yang sudah ada (misal saat edit order)

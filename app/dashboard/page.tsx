@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { toDisplayCustomer } from "../data/customers";
-import { getOrders, getFees, getMarketers, getProducts, formatRupiah } from "../data/store";
+import { getOrders, getFees, getMarketers, getProducts, formatRupiah, getOrderById, getPelunasanWhatsAppUrl } from "../data/store";
 import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
 import { getOperations } from "../data/operations";
@@ -25,6 +25,17 @@ function loadAllDisplayCustomers() {
 export default function DashboardPage() {
   const [notice, setNotice] = useState("");
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
+
+  // Item "PERLU DITAGIH" langsung buka WhatsApp dgn pesan pelunasan siap
+  // kirim (bukan cuma pindah ke halaman Edit Order) — item lain di Work
+  // Queue tetap link biasa ke halaman order.
+  const handleTagihPelunasan = (orderId: string) => {
+    const order = getOrderById(orderId);
+    if (!order) return;
+    const url = getPelunasanWhatsAppUrl(order);
+    if (!url) { notify("Nomor WA customer belum ada — lengkapi dulu di halaman Customer"); return; }
+    window.open(url, "_blank");
+  };
 
   // Semua state di bawah ini dimulai kosong (bukan langsung baca localStorage)
   // supaya render pertama di server & di client sama, lalu diisi data asli
@@ -178,8 +189,9 @@ export default function DashboardPage() {
               <span className="dash-queue-count">{group.items.length}</span>
             </div>
             {group.items.length === 0 && <p className="dash-queue-empty">{group.empty}</p>}
-            {group.items.map(item => (
-              <Link key={item.orderId} href={`/order?orderId=${item.orderId}`} className="dash-queue-item">
+            {group.items.map(item => {
+              const isTagihan = item.primaryCondition === "PERLU DITAGIH";
+              const body = <>
                 <span className="mini-avatar">{item.customerName.slice(0, 2).toUpperCase()}</span>
                 <div className="dash-queue-body">
                   <div className="dash-queue-top">
@@ -194,9 +206,14 @@ export default function DashboardPage() {
                   </div>
                   <span className="dash-queue-action">→ {item.nextAction}</span>
                 </div>
-                <ChevronRight size={16} className="dash-queue-chevron" />
-              </Link>
-            ))}
+                {isTagihan ? <MessageCircle size={16} className="dash-queue-chevron" /> : <ChevronRight size={16} className="dash-queue-chevron" />}
+              </>;
+              return isTagihan ? (
+                <button key={item.orderId} type="button" className="dash-queue-item" onClick={() => handleTagihPelunasan(item.orderId)}>{body}</button>
+              ) : (
+                <Link key={item.orderId} href={`/order?orderId=${item.orderId}`} className="dash-queue-item">{body}</Link>
+              );
+            })}
           </div>
         );
       })}

@@ -403,7 +403,11 @@ function HomePageInner() {
       <div className="situation-strip">
         <div className="situation-item"><small>Lifetime Value</small><b>{formatRupiah(computePaymentTotals(customerOrders).totalPaid)}</b></div>
         <div className="situation-item"><small>Outstanding</small><b className="situation-warn">{formatRupiah(computePaymentTotals(customerOrders).totalOutstanding)}</b></div>
-        <div className="situation-item"><small>Order Aktif</small><b>{ops.productCards.filter(c => c.nextAction !== "tidak-ada").length} produk</b></div>
+        {/* Dihitung dari order ASLI (customerOrders) — sebelumnya baca ops.productCards
+            (operations.ts, state lama cuma pernah diisi utk 3 customer demo), jadi
+            customer dgn order asli selalu tampil "0 produk" di sini walau "Total Order"
+            di bawah (juga dari data asli) sudah benar menunjukkan order aktif. */}
+        <div className="situation-item"><small>Order Aktif</small><b>{customerOrders.filter(o => o.total - o.dp > 0).reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.qty, 0), 0)} produk</b></div>
         <div className="situation-item"><small>Produksi</small><b>{ops.productCards.filter(c => c.progressStatus === "produksi" || c.progressStatus === "qc").length} berjalan</b></div>
         <div className="situation-item"><small>Pengiriman</small><b>{ops.productCards.filter(c => c.shipmentStatus === "menunggu-pickup" || c.shipmentStatus === "dalam-perjalanan").length} aktif</b></div>
 

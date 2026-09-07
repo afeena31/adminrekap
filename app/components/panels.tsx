@@ -4,7 +4,7 @@ import { AlertCircle, Check, ChevronRight, ClipboardList, MapPin, UserRound, Box
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { Customer, PaymentData } from "../data/customers";
-import { getOrdersForCustomer, formatRupiah, computePaymentTotals, type OrderRecord } from "../data/store";
+import { getOrdersForCustomer, formatRupiah, computePaymentTotals, getPelunasanWhatsAppUrl, type OrderRecord } from "../data/store";
 
 import {
   getOperations,
@@ -60,6 +60,15 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
     act(`${actionTypeInfo[action].name} diterapkan`);
   };
 
+  // Klik "Tagih pelunasan" langsung buka WhatsApp dgn pesan pelunasan siap
+  // kirim — bukan cuma pindah tab Order (yang cuma nunjukin datanya, gak
+  // benar-benar "menagih" apa-apa ke customer).
+  const handleTagihPelunasan = (order: OrderRecord) => {
+    const url = getPelunasanWhatsAppUrl(order);
+    if (!url) { act("Nomor WA customer belum ada — lengkapi dulu di halaman Customer"); return; }
+    window.open(url, "_blank");
+  };
+
   const utamaMarketer = customer.marketers.find(m => m.role === "utama");
   const aktifMarketer = customer.marketers.find(m => m.role === "aktif");
   const activeBatches = customer.batches.filter(b => b.status !== "selesai");
@@ -67,7 +76,7 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
 
   return <div className="content">
     {/* ===== ACTION CENTER ===== */}
-    <ActionCenter ops={ops} onAction={handleAction} unpaidRealOrders={unpaidRealOrders} onRealOrderClick={() => onTab("Order")} />
+    <ActionCenter ops={ops} onAction={handleAction} unpaidRealOrders={unpaidRealOrders} onTagihPelunasan={handleTagihPelunasan} />
 
     {/* ===== PERLU PERHATIAN ===== */}
     <section className="attention card">
@@ -193,7 +202,7 @@ function resolveActionForNextAction(card: ProductStatusCard): ActionType | null 
 }
 
 // ===== ACTION CENTER =====
-function ActionCenter({ ops, onAction, unpaidRealOrders, onRealOrderClick }: { ops: CustomerOperations; onAction: (cardId: string, action: ActionType) => void; unpaidRealOrders: OrderRecord[]; onRealOrderClick: () => void }) {
+function ActionCenter({ ops, onAction, unpaidRealOrders, onTagihPelunasan }: { ops: CustomerOperations; onAction: (cardId: string, action: ActionType) => void; unpaidRealOrders: OrderRecord[]; onTagihPelunasan: (order: OrderRecord) => void }) {
   const priorityLabel: Record<string, string> = { red: "🔴", yellow: "🟡", green: "🟢", blue: "🔵" };
   const totalCount = ops.actionCenter.length + unpaidRealOrders.length;
   return <section className="card action-center">
@@ -203,10 +212,10 @@ function ActionCenter({ ops, onAction, unpaidRealOrders, onRealOrderClick }: { o
     </div>
     {totalCount === 0 && <p className="panel-hint" style={{ marginTop: 10 }}>Tidak ada aksi yang perlu dilakukan. Semua beres! 🎉</p>}
     {unpaidRealOrders.map(order => (
-      <button key={order.id} className="action-item" onClick={onRealOrderClick}>
+      <button key={order.id} className="action-item" onClick={() => onTagihPelunasan(order)}>
         <span className="action-priority">🔴</span>
         <div className="action-copy"><b>Tagih pelunasan {order.number}</b><small>Sisa {formatRupiah(order.total - order.dp)}</small></div>
-        <ChevronRight size={17}/>
+        <MessageCircle size={17}/>
       </button>
     ))}
     {ops.actionCenter.map(item => (

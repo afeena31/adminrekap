@@ -814,6 +814,14 @@
   text-decoration: none;
   color: var(--ink);
   transition: background 0.2s ease, transform 0.15s ease;
+  /* .dash-queue-item juga dipakai sebagai <button> (item "PERLU DITAGIH" yang
+     buka WhatsApp langsung) — reset supaya tampilannya sama dgn versi <Link>. */
+  border: 0;
+  background: transparent;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 .dash-queue-item:hover { background: rgba(123, 85, 54, 0.05); transform: translateX(2px); }
 .dash-queue-item .mini-avatar {

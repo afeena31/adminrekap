@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { toDisplayCustomer } from "../data/customers";
-import { getOrders, getFees, getMarketers, getProducts, formatRupiah, getOrderById, getPelunasanWhatsAppUrl, productionStageInfo } from "../data/store";
+import { getOrders, getFees, getMarketers, getProducts, formatRupiah, getOrderById, getPelunasanWhatsAppUrl, productionStageInfo, shipmentStageInfo } from "../data/store";
 import { BottomNav } from "../components/BottomNav";
 import { QuickPaymentModal } from "../components/QuickPaymentModal";
 import { goBack } from "../lib/goBack";
@@ -166,6 +166,13 @@ export default function DashboardPage() {
     { label: "Marketers", value: String(totalMarketers), icon: UserRound, tone: "olive" },
   ];
 
+  // Work Queue (central.ts) belum tahu soal productionStage/shipmentStage
+  // (field asli baru, tersimpan di store.ts) — daripada ubah logic
+  // primaryCondition central.ts yang sudah jalan (berisiko), tiap item Work
+  // Queue di-lookup ke order ASLI di sini utk nampilin badge tahap sbg info
+  // tambahan, gak ganti kondisi utama yang sudah benar.
+  const orderMap = new Map(orders.map(o => [o.id, o]));
+
   // ===== WORK QUEUE (satu tempat utama untuk kondisi operasional) =====
   // Setiap order muncul SATU KALI dengan PRIMARY CONDITION + NEXT ACTION.
   // Kondisi non-primary menjadi secondary signal (konteks), bukan duplikasi.
@@ -230,6 +237,9 @@ export default function DashboardPage() {
             {group.items.length === 0 && <p className="dash-queue-empty">{group.empty}</p>}
             {group.items.map(item => {
               const isTagihan = item.primaryCondition === "PERLU DITAGIH";
+              const realOrder = orderMap.get(item.orderId);
+              const activeProdItem = realOrder?.items.find(i => i.productionStage === "produksi" || i.productionStage === "qc" || i.productionStage === "packing");
+              const activeShipItem = realOrder?.items.find(i => i.shipmentStage === "proses-resi" || i.shipmentStage === "dalam-pengiriman" || i.shipmentStage === "ditunda");
               const body = <>
                 <span className="mini-avatar">{item.customerName.slice(0, 2).toUpperCase()}</span>
                 <div className="dash-queue-body">
@@ -242,6 +252,8 @@ export default function DashboardPage() {
                     {item.secondarySignals.map((s, i) => (
                       <span key={i} className="dash-queue-secondary">{s.count} {s.label}</span>
                     ))}
+                    {activeProdItem && <span className="dash-queue-secondary">🏭 {productionStageInfo[activeProdItem.productionStage!].name}</span>}
+                    {activeShipItem && <span className="dash-queue-secondary">🚚 {shipmentStageInfo[activeShipItem.shipmentStage!].name}</span>}
                   </div>
                   <span className="dash-queue-action">→ {item.nextAction}</span>
                 </div>
@@ -315,6 +327,7 @@ export default function DashboardPage() {
           <h2>Produksi</h2>
           <span className="dash-section-sub">Batch yang sedang berjalan</span>
         </div>
+        <Link href="/produksi" className="dash-section-date"><Factory size={13} /> Papan Produksi</Link>
       </div>
       <div className="dash-production">
         {productionBatches.length === 0 && realProductionItems.length === 0 && (

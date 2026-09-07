@@ -1,0 +1,54 @@
+/* ===== PAPAN PRODUKSI & PENGIRIMAN ===== */
+
+.produksi-hero {
+  padding: 20px 2px 6px;
+}
+.produksi-hero h1 {
+  font-family: var(--serif);
+  font-size: 26px;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+.produksi-hero p {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.produksi-mode-switch {
+  margin: 14px 0 20px;
+}
+.produksi-mode-switch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.produksi-note {
+  margin: 0 0 14px;
+  padding: 10px 13px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.produksi-group {
+  margin-bottom: 14px;
+}
+
+/* .order-item (order.css) dipakai lagi di sini sbg <Link> (klik produk ->
+   buka order-nya) — reset supaya sama persis dgn versi non-link, pola sama
+   dgn fix .dash-batch-card sebelumnya. */
+.produksi-item {
+  display: flex;
+  text-decoration: none;
+  color: inherit;
+}
+.produksi-item-qty {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brown);
+  white-space: nowrap;
+  margin-right: 8px;
+}

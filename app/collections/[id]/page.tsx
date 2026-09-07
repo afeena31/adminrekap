@@ -433,7 +433,7 @@ export default function CollectionDetailPage() {
               <div className="collection-item-row" key={it.orderId + "-" + i}>
                 <div className="collection-item-info">
                   <b>{it.productName}</b>{it.detail && <small> · {it.detail}</small>}
-                  <small>{it.customerId ? <Link href={`/?customerId=${it.customerId}`}>{it.customerName}</Link> : it.customerName} · {it.orderNumber}</small>
+                  <small>{it.customerId ? <Link href={`/customer?customerId=${it.customerId}`}>{it.customerName}</Link> : it.customerName} · {it.orderNumber}</small>
                 </div>
                 <div className="collection-item-amount">{it.qty}x · {formatRupiah(it.subtotal)}</div>
               </div>
@@ -449,7 +449,7 @@ export default function CollectionDetailPage() {
           <div className="collection-customer-row" key={c.key}>
             <span className="collection-customer-avatar">{c.name.charAt(0)}</span>
             <div className="collection-customer-info">
-              {c.customerId ? <Link href={`/?customerId=${c.customerId}`}><b>{c.name}</b></Link> : <b>{c.name}</b>}
+              {c.customerId ? <Link href={`/customer?customerId=${c.customerId}`}><b>{c.name}</b></Link> : <b>{c.name}</b>}
               <small>{c.customerId ? "Terhubung ke Customer Workspace — klik nama utk lihat pesanan lain" : "Belum terhubung ke Customer"}</small>
             </div>
             <div className="collection-customer-orders">

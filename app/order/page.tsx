@@ -176,6 +176,22 @@ function OrderPageInner() {
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
   // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
+  // Data global (marketer/produk/batch/collection/daftar order & customer) HARUS
+  // selalu dimuat sekali di awal, gak boleh digantung ke resolusi customer di
+  // bawah — kalau customer masih 0 (localStorage kosong), loadFirstCustomer()
+  // balikin customer.id "" lagi, jadi effect customer.id gak akan pernah
+  // "berubah" dan dependency [customer.id] gak pernah retrigger. Sebelumnya
+  // ini 1 effect gabung, jadi marketer/produk/dll ikut kosong selamanya di
+  // kondisi 0 customer.
+  useEffect(() => {
+    setExistingOrders(getOrders());
+    setProductList(getProducts());
+    setMarketers(getMarketers());
+    setCustomerList(getCustomers());
+    setBatchNames(getBatchNames());
+    setCollectionsList(getCollections());
+  }, []);
+
   useEffect(() => {
     if (customer.id === "") {
       // Kalau datang dari profil customer (?customerId=...), langsung pilihkan
@@ -184,15 +200,9 @@ function OrderPageInner() {
       const first = fromParam ? toDisplayCustomer(fromParam, getCustomerAddresses(fromParam.id)) : loadFirstCustomer();
       setCustomer(first);
       setSelectedAddressId(first.defaultAddressId || "");
-      return; // effect ini jalan lagi begitu customer.id berubah, lanjutkan di sana
+      return;
     }
-    setExistingOrders(getOrders());
-    setProductList(getProducts());
-    setMarketers(getMarketers());
     setCustomerAddresses(getCustomerAddresses(customer.id));
-    setCustomerList(getCustomers());
-    setBatchNames(getBatchNames());
-    setCollectionsList(getCollections());
   }, [customer.id]);
 
   // ===== CUSTOMER & SHIPPING ADDRESS =====

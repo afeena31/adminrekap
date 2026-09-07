@@ -80,8 +80,8 @@
 }
 .dash-hero h1 {
   font-family: var(--serif);
-  font-size: 40px;
-  line-height: 1.08;
+  font-size: 32px;
+  line-height: 1.12;
   margin: 0 0 12px;
   color: var(--ink);
   letter-spacing: -0.02em;
@@ -909,7 +909,7 @@
 /* ===== RESPONSIVE ===== */
 @media (max-width: 600px) {
   .dash-hero { padding: 30px 4px 8px; }
-  .dash-hero h1 { font-size: 30px; }
+  .dash-hero h1 { font-size: 26px; }
   .dash-hero-message { font-size: 13.5px; }
   .dash-hero-ornament { font-size: 170px; }
   .dash-priorities { grid-template-columns: 1fr; }

@@ -1070,7 +1070,7 @@ function OrderPageInner() {
       <div className="setting-row">
         <label>Diskon</label>
         <div className="discount-row">
-          <select value={discountType} onChange={e => setDiscountType(e.target.value as DiscountType)}>
+          <select value={discountType} onChange={e => { setDiscountType(e.target.value as DiscountType); setDiscountValue(0); }}>
             <option value="percent">Persen (%)</option>
             <option value="nominal">Nominal (Rp)</option>
           </select>

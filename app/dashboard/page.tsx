@@ -36,6 +36,12 @@ export default function DashboardPage() {
   const [allOps, setAllOps] = useState<{ customer: ReturnType<typeof toDisplayCustomer>; ops: ReturnType<typeof getOperations> }[]>([]);
   const [workQueue, setWorkQueue] = useState<ReturnType<typeof getDashboardWorkQueue>>({ perluTindakan: [], bisaDikerjakan: [], segera: [], menunggu: [], ringkasan: [] });
   const [totalCustomers, setTotalCustomers] = useState(0);
+  // Halaman ini di-prerender statis (waktu build) — kalau jam/tanggal dihitung
+  // langsung di badan render, HTML hasil build (jam build) akan beda dari hasil
+  // hitung ulang di client (jam dibuka), dan React akan selalu melaporkan
+  // hydration mismatch. Default netral dulu, isi jam/tanggal asli di useEffect.
+  const [greeting, setGreeting] = useState("Selamat Datang");
+  const [todayLabel, setTodayLabel] = useState("");
 
   // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
   useEffect(() => {
@@ -46,6 +52,9 @@ export default function DashboardPage() {
     setAllOps(loadAllDisplayCustomers().map(c => ({ customer: c, ops: getOperations(c.id) })));
     setWorkQueue(getDashboardWorkQueue());
     setTotalCustomers(getCustomers().length);
+    const hour = new Date().getHours();
+    setGreeting(hour < 11 ? "Selamat Pagi" : hour < 15 ? "Selamat Siang" : hour < 18 ? "Selamat Sore" : "Selamat Malam");
+    setTodayLabel(new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" }));
   }, []);
 
   // ===== SECTION 3: TODAY'S ACTIVITY (HISTORI — hanya kejadian yang terjadi) =====
@@ -72,8 +81,13 @@ export default function DashboardPage() {
   };
 
   // ===== SECTION 6: PRODUCTION (domain batch — terpisah dari work queue) =====
-  const productionBatches = loadAllDisplayCustomers().flatMap(c =>
-    c.batches.map(b => ({ customer: c, batch: b }))
+  // Diturunkan dari allOps (sudah dimuat hydration-safe lewat useEffect di
+  // atas) alih-alih memanggil loadAllDisplayCustomers() lagi di sini — yang
+  // sebelumnya baca localStorage langsung di badan render (beda dari SSR yang
+  // baca [], bikin mismatch hydration persis kayak yang sudah dibenerin di
+  // state lain di file ini).
+  const productionBatches = allOps.flatMap(({ customer }) =>
+    customer.batches.map(b => ({ customer, batch: b }))
   ).filter(({ batch }) => batch.status !== "selesai");
 
   const batchProgress = (status: string) => {
@@ -101,10 +115,6 @@ export default function DashboardPage() {
     { label: "Products", value: String(totalProducts), icon: Package, tone: "sand" },
     { label: "Marketers", value: String(totalMarketers), icon: UserRound, tone: "olive" },
   ];
-
-  // ===== GREETING (time-aware) =====
-  const hour = new Date().getHours();
-  const greeting = hour < 11 ? "Selamat Pagi" : hour < 15 ? "Selamat Siang" : hour < 18 ? "Selamat Sore" : "Selamat Malam";
 
   // ===== WORK QUEUE (satu tempat utama untuk kondisi operasional) =====
   // Setiap order muncul SATU KALI dengan PRIMARY CONDITION + NEXT ACTION.
@@ -134,16 +144,16 @@ export default function DashboardPage() {
       <button className="icon-btn" aria-label="Kembali" onClick={goBack}><ArrowLeft size={21} /></button>
       <div className="brand">UmayasLa<span>·</span> <em className="brand-sub">Headquarters</em></div>
       <div className="header-actions">
-        <button className="icon-btn" aria-label="Notifikasi"><Bell size={19} /></button>
-        <button className="icon-btn" aria-label="Pengaturan"><Settings size={19} /></button>
-        <button className="profile-chip" aria-label="Profil"><span className="profile-chip-avatar">U</span></button>
+        <button className="icon-btn" aria-label="Notifikasi" onClick={() => notify("Belum ada notifikasi baru")}><Bell size={19} /></button>
+        <button className="icon-btn" aria-label="Pengaturan" onClick={() => notify("Pengaturan ada di halaman Customer (tombol ⋯)")}><Settings size={19} /></button>
+        <button className="profile-chip" aria-label="Profil" onClick={() => notify("Profil pemilik akun belum tersedia")}><span className="profile-chip-avatar">U</span></button>
       </div>
     </header>
 
     {/* ===== HERO / GREETING ===== */}
     <div className="dash-hero">
       <div className="dash-hero-ornament" aria-hidden="true">❦</div>
-      <p className="dash-hero-eyebrow"><Sparkles size={13} /> {new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })}</p>
+      <p className="dash-hero-eyebrow"><Sparkles size={13} /> {todayLabel}</p>
       <h1>{greeting}, Ummyas <span className="dash-hero-leaf">🌿</span></h1>
       <p className="dash-hero-message">Semoga hari ini penuh keberkahan dan order berjalan lancar.</p>
     </div>
@@ -169,7 +179,7 @@ export default function DashboardPage() {
             </div>
             {group.items.length === 0 && <p className="dash-queue-empty">{group.empty}</p>}
             {group.items.map(item => (
-              <Link key={item.orderId} href="/order" className="dash-queue-item">
+              <Link key={item.orderId} href={`/order?orderId=${item.orderId}`} className="dash-queue-item">
                 <span className="mini-avatar">{item.customerName.slice(0, 2).toUpperCase()}</span>
                 <div className="dash-queue-body">
                   <div className="dash-queue-top">
@@ -203,9 +213,9 @@ export default function DashboardPage() {
       <div className="dash-quick-actions">
         <Link href="/order" className="dash-quick-action primary"><span className="dash-quick-icon"><Plus size={20} /></span><span className="dash-quick-copy"><b>New Order</b><small>Buat pesanan baru</small></span></Link>
         <Link href="/" className="dash-quick-action"><span className="dash-quick-icon"><UserPlus size={20} /></span><span className="dash-quick-copy"><b>New Customer</b><small>Tambahkan profil</small></span></Link>
-        <Link href="/order" className="dash-quick-action"><span className="dash-quick-icon"><HandCoins size={20} /></span><span className="dash-quick-copy"><b>Record Payment</b><small>Catat pembayaran</small></span></Link>
-        <Link href="/order" className="dash-quick-action"><span className="dash-quick-icon"><Truck size={20} /></span><span className="dash-quick-copy"><b>Create Shipment</b><small>Atur pengiriman</small></span></Link>
-        <Link href="/" className="dash-quick-action"><span className="dash-quick-icon"><StickyNote size={20} /></span><span className="dash-quick-copy"><b>Add Note</b><small>Catat sesuatu</small></span></Link>
+        <Link href="/order" className="dash-quick-action"><span className="dash-quick-icon"><HandCoins size={20} /></span><span className="dash-quick-copy"><b>Record Payment</b><small>Edit order untuk catat DP/pelunasan</small></span></Link>
+        <button type="button" className="dash-quick-action" onClick={() => notify("Fitur pengiriman/resi belum tersedia")}><span className="dash-quick-icon"><Truck size={20} /></span><span className="dash-quick-copy"><b>Create Shipment</b><small>Belum tersedia</small></span></button>
+        <button type="button" className="dash-quick-action" onClick={() => notify("Catatan dikelola per-customer, buka profil customer dulu")}><span className="dash-quick-icon"><StickyNote size={20} /></span><span className="dash-quick-copy"><b>Add Note</b><small>Lewat profil customer</small></span></button>
       </div>
     </section>
 

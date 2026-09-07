@@ -118,10 +118,10 @@ export const formatRupiah = (value: number) => "Rp " + value.toLocaleString("id-
 
 // ===== INFO TAMBAHAN =====
 export const modifikasiInfo = [
-  { name: "Lubang Tangan Rits", price: 20000, emoji: "✂️" },
-  { name: "Rits Tengah Busui / Sleting Tengah Jilbab", price: 20000, emoji: "🧵" },
+  { name: "Fitur Lubang Tangan + Rits", price: 20000, emoji: "✂️" },
+  { name: "Rits Tengah Busui 40 cm", price: 20000, emoji: "🧵" },
   { name: "Lubang Tangan Rits + Rits Tengah Busui", price: 40000, emoji: "✂️🧵", note: "Total tambahan jika keduanya" },
-  { name: "Tali kecil kanan-kiri bagian dalam jilbab", price: 8000, emoji: "🎀" },
+  { name: "Tali Ikat Dalam/Luar Jilbab", price: 8000, emoji: "🎀" },
   { name: "Request ukuran custom", price: 0, emoji: "📏", note: "Mengikuti harga sesuai kesepakatan (contoh: mengikuti harga Size L)" },
 ];
 

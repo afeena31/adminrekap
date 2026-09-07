@@ -871,6 +871,23 @@ export function restoreBackup(backupKey: string): boolean {
     return false;
   }
   backupLocalStorage();
+  // Hapus dulu key yang ADA SEKARANG tapi TIDAK ADA di snapshot lama (mis.
+  // data yang baru dibuat setelah cadangan itu diambil) — sebelumnya restore
+  // cuma menimpa key yang KEBETULAN sama dengan snapshot, jadi data baru yang
+  // dibuat setelah backup TIDAK PERNAH ikut terhapus walau user pulihkan
+  // cadangan yang lebih lama — bukan "pulihkan ke kondisi backup" yang
+  // sebenarnya, cuma "gabungkan sebagian balik". Cadangan LAIN (key
+  // berawalan backupPrefix) tetap dijaga, tidak ikut dihapus.
+  const snapshotKeys = new Set(Object.keys(snapshot));
+  const currentKeys: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i);
+    if (key) currentKeys.push(key);
+  }
+  for (const key of currentKeys) {
+    if (key.startsWith(KEYS.backupPrefix)) continue;
+    if (!snapshotKeys.has(key)) window.localStorage.removeItem(key);
+  }
   for (const [key, value] of Object.entries(snapshot)) {
     if (key.startsWith(KEYS.backupPrefix)) continue;
     if (value === null || value === undefined) {

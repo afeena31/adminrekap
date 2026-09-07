@@ -15,7 +15,7 @@ import { goBack } from "./lib/goBack";
 import { getCollections, getAllCollections, seedCollections, getCollectionStats, addCollection, saveCollections, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "./data/demoSeed";
 
-import { formatRupiah, getOrdersForCustomer, computePaymentTotals, getProducts, saveProducts, getMarketers, saveMarketers, defaultMarketers, saveFees, type OrderRecord } from "./data/store";
+import { formatRupiah, getOrdersForCustomer, computePaymentTotals, getProducts, saveProducts, getMarketers, saveMarketers, defaultMarketers, type OrderRecord } from "./data/store";
 import { products as seedCatalogProducts, nonBookMasterCatalog } from "./data/products";
 import { getOperations, type CustomerOperations } from "./data/operations";
 
@@ -159,7 +159,12 @@ export default function HomePage() {
     const realCatalogIds = new Set(nonBookMasterCatalog.map(p => p.id));
     const seedOnlyProductIds = new Set(seedCatalogProducts.filter(p => !realCatalogIds.has(p.id)).map(p => p.id));
     saveProducts(getProducts().filter(p => !seedOnlyProductIds.has(p.id)));
-    saveFees([]);
+    // saveFees([]) SENGAJA DIHAPUS — dulu di sini menghapus SELURUH riwayat
+    // fee marketer (termasuk order asli), padahal tidak ada data fee demo yang
+    // pernah dimuat ke localStorage sama sekali (seedFees di store.ts gak
+    // pernah dipakai oleh fitur "Muat Data Demo" manapun) — jadi baris ini
+    // gak ada gunanya selain merusak data asli. Sama persis kelasnya dengan
+    // bug saveProducts([]) yang baru diperbaiki di atas.
     setCustomer(loadFirstCustomer());
     notify("Semua data demo (customer, collection, produk, marketer) dihapus permanen");
   };
@@ -329,7 +334,7 @@ export default function HomePage() {
       <div className="overlay" onClick={() => setWipeDemoConfirmOpen(false)}>
         <section className="modal confirm-modal" onClick={event => event.stopPropagation()}>
           <h2>Hapus Semua Data Demo?</h2>
-          <p>Ini akan menghapus PERMANEN: 3 customer contoh + alamatnya, semua Collection contoh, semua produk di katalog, dan semua marketer contoh.</p>
+          <p>Ini akan menghapus PERMANEN: 3 customer contoh + alamatnya, Collection contoh, produk contoh di katalog, dan marketer contoh. Customer/Collection/produk/marketer ASLI yang sudah kamu buat sendiri (termasuk katalog dari Master Data & riwayat fee marketer) TIDAK ikut terhapus.</p>
           <p className="muted">Kondisi sekarang otomatis dicadangkan dulu (lihat "Cadangan Data" di atas), jadi masih bisa dipulihkan kalau berubah pikiran.</p>
           <div className="confirm-actions">
             <button className="secondary" onClick={() => setWipeDemoConfirmOpen(false)}>Batal</button>

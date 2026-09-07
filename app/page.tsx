@@ -411,7 +411,10 @@ function HomePageInner() {
         {/* Dihitung dari tahap produksi/pengiriman ASLI per-item (OrderItemSnapshot.
             productionStage/shipmentStage, diisi lewat form Order) — sebelumnya
             selalu "0"/placeholder krn baca ops.productCards (data demo). */}
-        <div className="situation-item"><small>Produksi</small><b>{customerOrders.reduce((sum, o) => sum + o.items.filter(i => i.productionStage === "produksi" || i.productionStage === "qc").length, 0)} berjalan</b></div>
+        {/* "packing" ikut dihitung di sini — harus sama persis dgn kriteria
+            realProductionItems di dashboard/page.tsx, supaya item yang sama
+            gak kehitung beda di 2 layar (ditemukan saat audit). */}
+        <div className="situation-item"><small>Produksi</small><b>{customerOrders.reduce((sum, o) => sum + o.items.filter(i => i.productionStage === "produksi" || i.productionStage === "qc" || i.productionStage === "packing").length, 0)} berjalan</b></div>
         <div className="situation-item"><small>Pengiriman</small><b>{customerOrders.reduce((sum, o) => sum + o.items.filter(i => i.shipmentStage === "dalam-pengiriman").length, 0)} aktif</b></div>
 
         <div className="situation-item"><small>Prioritas</small><b className="situation-priority">{(ops.actionCenter.length + customerOrders.filter(o => o.total - o.dp > 0).length) > 0 ? `${ops.actionCenter.length + customerOrders.filter(o => o.total - o.dp > 0).length} aksi` : "Tenang"}</b></div>

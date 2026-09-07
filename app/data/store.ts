@@ -41,6 +41,10 @@ export const productionStageInfo: Record<ProductionStage, { name: string; emoji:
   "siap-kirim": { name: "Siap Kirim", emoji: "✅" },
 };
 
+// Sengaja cuma 3 dari 6 ShipmentStage — ini urutan LINEAR normal saja.
+// "ditunda"/"retur"/"refund" SENGAJA gak dimasukkan: itu status khusus yang
+// bisa terjadi kapan saja (keputusan user, dikonfirmasi saat fitur ini
+// dibangun), bukan tahap lanjutan dari urutan di atas.
 export const shipmentStageOrder: ShipmentStage[] = ["proses-resi", "dalam-pengiriman", "selesai"];
 export const shipmentStageInfo: Record<ShipmentStage, { name: string; emoji: string }> = {
   "proses-resi": { name: "Proses Resi", emoji: "🧾" },

@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import {
   getCollections, addCollection, updateCollection, softDeleteCollection, hardDeleteCollection,
   getCollectionStats, collectionTypeInfo, collectionStatusInfo,
-  collectionColors, collectionIcons,
+  collectionColors, collectionIcons, afeenaYaslaMasterCollections,
   type Collection, type CollectionType, type CollectionStatus,
 } from "../data/collections";
 import { formatRupiah } from "../data/store";
@@ -35,6 +35,18 @@ export default function CollectionsPage() {
   });
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
+
+  // Idempotent (pola sama seperti "Muat Katalog Master Data" di halaman
+  // Katalog) — aman diklik ulang, cuma nambah yang belum ada.
+  const loadMasterCollections = () => {
+    const existingIds = new Set(getCollections().map(c => c.id));
+    let added = 0;
+    for (const c of afeenaYaslaMasterCollections) {
+      if (!existingIds.has(c.id)) { addCollection(c); added++; }
+    }
+    setCollectionList(getCollections());
+    notify(added > 0 ? `${added} Collection dari Master Data dimuat` : "Kategori Master Data sudah lengkap");
+  };
 
   // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
   useEffect(() => {
@@ -183,6 +195,7 @@ export default function CollectionsPage() {
         <span>🗂️</span>
         <h3>Belum ada collection</h3>
         <p>Buat collection pertama untuk mulai mengelola order per batch atau produk.</p>
+        <button className="primary" style={{ marginTop: 14 }} onClick={loadMasterCollections}>Muat Kategori Master Data (Afeena & Etalase YasLa)</button>
       </div>}
 
       {collectionList.map(c => {

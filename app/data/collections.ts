@@ -220,6 +220,38 @@ export const seedCollections: Collection[] = [
   },
 ];
 
+// ===== KATEGORI MASTER DATA (Afeena & Etalase YasLa) =====
+// Daftar Collection resmi sesuai kategori yang diberikan user (urut abjad per
+// brand) — dipakai oleh tombol "Muat Kategori Master Data" di /collections.
+// BUKAN data demo (id sengaja pakai prefix "col-master-" supaya TIDAK PERNAH
+// tumpang tindih dengan id di seedCollections di atas — kalau id-nya sampai
+// sama, "Hapus Semua Data Demo" bisa ikut menghapus Collection asli ini,
+// sama seperti bug id-collision yang pernah kejadian di katalog produk).
+// SENGAJA TIDAK dimuat otomatis — harus diklik manual, sama seperti "Muat
+// Katalog Master Data (Non-Buku)" di halaman Katalog.
+export const afeenaYaslaMasterCollections: Collection[] = [
+  // ===== BRAND AFEENA (urut abjad) =====
+  { id: "col-master-amna-batch-8", name: "Amna Batch 8", type: "po-batch", status: "aktif", icon: "🧕", color: collectionColors[0], description: "Kategori produk brand Afeena.", tags: ["afeena", "amna-jilbab"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-amna-batch-9", name: "Amna Batch 9", type: "po-batch", status: "aktif", icon: "🧕", color: collectionColors[1], description: "Kategori produk brand Afeena.", tags: ["afeena", "amna-jilbab"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-amna-batch-10", name: "Amna Batch 10", type: "po-batch", status: "aktif", icon: "🧕", color: collectionColors[2], description: "Kategori produk brand Afeena.", tags: ["afeena", "amna-jilbab"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-kaos-kaki", name: "Kaos Kaki", type: "produk", status: "aktif", icon: "🧦", color: collectionColors[3], description: "Kategori produk brand Afeena.", tags: ["afeena", "aksesoris"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-linen-spray", name: "Linen Spray", type: "produk", status: "aktif", icon: "🌸", color: collectionColors[4], description: "Kategori produk brand Afeena.", tags: ["afeena", "aksesoris"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-manset", name: "Manset", type: "produk", status: "aktif", icon: "🧤", color: collectionColors[5], description: "Kategori produk brand Afeena.", tags: ["afeena", "aksesoris"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-niqab", name: "Niqab", type: "produk", status: "aktif", icon: "🖤", color: collectionColors[6], description: "Kategori produk brand Afeena.", tags: ["afeena", "aksesoris"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  // ===== ETALASE YASLA (urut abjad) =====
+  { id: "col-master-boardbook-123", name: "Boardbook 123", type: "produk", status: "aktif", icon: "📖", color: collectionColors[7], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla", "boardbook"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-boardbook-abc", name: "Boardbook ABC", type: "produk", status: "aktif", icon: "📖", color: collectionColors[8], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla", "boardbook"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-boardbook-asaqu-bundling", name: "Boardbook Asaqu Bundling", type: "produk", status: "aktif", icon: "📖", color: collectionColors[9], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla", "boardbook"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-boardbook-asmaul-husna-alam-semesta", name: "Boardbook Asmaul Husna seri Alam Semesta", type: "produk", status: "aktif", icon: "📖", color: collectionColors[0], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla", "boardbook"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-boardbook-gajah-kecil-malang", name: "Boardbook Gajah Kecil yang Malang", type: "produk", status: "aktif", icon: "📖", color: collectionColors[1], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla", "boardbook"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-boardbook-persis-sepertimu", name: "Boardbook Persis Sepertimu", type: "produk", status: "aktif", icon: "📖", color: collectionColors[2], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla", "boardbook"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-boardbook-si-pensil-kecil", name: "Boardbook Si Pensil Kecil", type: "produk", status: "aktif", icon: "📖", color: collectionColors[3], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla", "boardbook"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-boardbook-who-made-my-day", name: "Boardbook Who Made My Day", type: "produk", status: "aktif", icon: "📖", color: collectionColors[4], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla", "boardbook"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-hardbook-marifatullah", name: "HardBook Seri Ma'rifatullah", type: "produk", status: "aktif", icon: "📕", color: collectionColors[5], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla", "hardbook"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-seri-sabata", name: "Seri SABATA", type: "produk", status: "aktif", icon: "📚", color: collectionColors[6], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+  { id: "col-master-workbook-juz-amma", name: "WorkBook Juz Amma", type: "produk", status: "aktif", icon: "📓", color: collectionColors[7], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla", "workbook"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
+];
+
 // ===== COLLECTION STORE =====
 
 // seedCollections (mis. "PO Batch 7", "Linen Spray") TIDAK dipakai sebagai

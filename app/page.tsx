@@ -5,7 +5,8 @@ import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, Credit
 
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { createNewCustomer, toDisplayCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "./data/customers";
 import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentralCustomer, addAddress, updateAddress as updateCentralAddress, deleteAddress as deleteCentralAddress, getAddresses, getCustomerAddresses as getCentralCustomerAddresses, softDeleteCustomer, hardDeleteCustomer, backupLocalStorage, listBackups, restoreBackup, type BackupInfo } from "./data/central";
 import { Overview, CustomerPanel } from "./components/panels";
@@ -59,6 +60,14 @@ function loadFirstCustomer(): Customer {
 }
 
 export default function HomePage() {
+  return <Suspense fallback={null}><HomePageInner /></Suspense>;
+}
+
+// Datang dari luar (mis. tab Customer di Collection Workspace, "?customerId=...")
+// — langsung buka profil customer itu, bukan customer pertama di daftar.
+function HomePageInner() {
+  const searchParams = useSearchParams();
+  const initialCustomerId = searchParams.get("customerId");
   const [activeTab, setActiveTab] = useState("Ringkasan");
   const [saved, setSaved] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -86,7 +95,15 @@ export default function HomePage() {
 
   // ===== HYDRATION FIX: muat customer asli dari localStorage setelah mount =====
   useEffect(() => {
+    if (initialCustomerId) {
+      const found = getCustomer(initialCustomerId);
+      if (found) {
+        setCustomer(toDisplayCustomer(found, getCentralCustomerAddresses(found.id)));
+        return;
+      }
+    }
     setCustomer(loadFirstCustomer());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Order asli customer ini (dibuat lewat halaman /order) — dimuat ulang tiap

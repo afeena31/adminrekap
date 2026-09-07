@@ -1,6 +1,6 @@
 "use client";
 
-import { getOrders, saveOrder, type OrderRecord } from "./store";
+import { getOrders, saveOrder, type OrderRecord, type OrderItemSnapshot } from "./store";
 import { getCustomers } from "./central";
 
 
@@ -29,6 +29,22 @@ export type CollectionOrder = {
   id: string;
   collectionId: string;
   orderId: string;
+  addedAt: number;
+};
+
+// Tautan per-ITEM (bukan per-order) — satu invoice bisa berisi item dari
+// beberapa kategori sekaligus (mis. Amna Jilbab + Kaos Kaki + Boardbook dalam
+// SATU order), jadi tiap item ditandai Collection-nya sendiri-sendiri supaya
+// "closing per kategori" di Collection Workspace gak ikut menghitung seluruh
+// nilai invoice, cuma porsi item yang relevan. Ini TERPISAH dari CollectionOrder
+// (order-level) yang masih dipakai apa adanya oleh jembatan Batch Produksi Amna
+// (getOrCreateBatchCollection/syncOrderBatchCollection) dan alur "Tambah Order"
+// manual di dalam Collection Workspace — keduanya tidak diubah.
+export type CollectionOrderItem = {
+  id: string;
+  collectionId: string;
+  orderId: string;
+  itemId: string;
   addedAt: number;
 };
 
@@ -62,6 +78,7 @@ export const collectionIcons = ["📦", "🛍️", "📣", "✅", "🎓", "✨",
 const KEYS = {
   collections: "umayasla_collections",
   collectionOrders: "umayasla_collection_orders",
+  collectionOrderItems: "umayasla_collection_order_items",
 };
 
 // ===== LOCAL STORAGE HELPERS =====
@@ -253,9 +270,11 @@ export function hardDeleteCollection(id: string): Collection[] {
   const list = getAllCollections();
   const updated = list.filter(c => c.id !== id);
   saveCollections(updated);
-  // Hapus juga relasi CollectionOrder
+  // Hapus juga relasi CollectionOrder & CollectionOrderItem
   const rels = getCollectionOrders().filter(r => r.collectionId !== id);
   save(KEYS.collectionOrders, rels);
+  const itemRels = getCollectionOrderItems().filter(r => r.collectionId !== id);
+  save(KEYS.collectionOrderItems, itemRels);
   return updated;
 }
 
@@ -366,6 +385,73 @@ export function removeOrderFromAllCollections(orderId: string): CollectionOrder[
   return updated;
 }
 
+// ===== COLLECTION ORDER ITEM STORE (tautan per-item, "Kategori Produk") =====
+
+export function getCollectionOrderItems(): CollectionOrderItem[] {
+  return load<CollectionOrderItem[]>(KEYS.collectionOrderItems, []);
+}
+
+export function saveCollectionOrderItems(list: CollectionOrderItem[]) {
+  save(KEYS.collectionOrderItems, list);
+}
+
+// Collection mana saja yang sudah ditandai untuk satu item tertentu — dipakai
+// buat prefill checkbox saat order dibuka lagi utk diedit.
+export function getCollectionIdsForItem(orderId: string, itemId: string): string[] {
+  return getCollectionOrderItems()
+    .filter(l => l.orderId === orderId && l.itemId === itemId)
+    .map(l => l.collectionId);
+}
+
+// Ganti SELURUH tautan kategori satu item sekaligus (idempotent) — dipanggil
+// tiap order disimpan, supaya centang/uncek admin langsung sinkron tanpa perlu
+// tambah/hapus manual satu-satu.
+export function setCategoriesForItem(orderId: string, itemId: string, collectionIds: string[]) {
+  const rest = getCollectionOrderItems().filter(l => !(l.orderId === orderId && l.itemId === itemId));
+  const now = Date.now();
+  const added: CollectionOrderItem[] = collectionIds.map(collectionId => ({
+    id: "colordit-" + orderId + "-" + itemId + "-" + collectionId,
+    collectionId,
+    orderId,
+    itemId,
+    addedAt: now,
+  }));
+  saveCollectionOrderItems([...rest, ...added]);
+}
+
+// Semua item (dari order manapun) yang tertaut ke satu Collection — dipakai
+// utk breakdown detail ("kaos kaki closing berapa, siapa saja yang pesan").
+export function getItemLinksForCollection(collectionId: string): { order: OrderRecord; item: OrderItemSnapshot }[] {
+  const links = getCollectionOrderItems().filter(l => l.collectionId === collectionId);
+  const orders = getOrders();
+  const result: { order: OrderRecord; item: OrderItemSnapshot }[] = [];
+  for (const link of links) {
+    const order = orders.find(o => o.id === link.orderId);
+    const item = order?.items.find(i => i.id === link.itemId);
+    if (order && item) result.push({ order, item });
+  }
+  return result;
+}
+
+// Dipanggil saat order dihapus permanen — sama seperti removeOrderFromAllCollections
+// tapi utk tautan per-item.
+export function removeItemLinksForOrder(orderId: string): CollectionOrderItem[] {
+  const updated = getCollectionOrderItems().filter(l => l.orderId !== orderId);
+  saveCollectionOrderItems(updated);
+  return updated;
+}
+
+function itemSubtotal(item: OrderItemSnapshot): number {
+  return (item.finalPrice ?? item.price) * item.qty;
+}
+
+// Porsi nilai satu item dari total invoice-nya (dipakai membagi payment/
+// outstanding proporsional, karena DP dicatat per-invoice, bukan per-item).
+function itemShareOfOrder(order: OrderRecord, item: OrderItemSnapshot): number {
+  if (order.subtotal <= 0) return 0;
+  return itemSubtotal(item) / order.subtotal;
+}
+
 // ===== COLLECTION STATS =====
 
 export type CollectionStats = {
@@ -381,17 +467,37 @@ export type CollectionStats = {
 };
 
 export function getCollectionStats(collectionId: string): CollectionStats {
-  const orders = getOrdersForCollection(collectionId);
-  const totalOrders = orders.length;
-  const totalItems = orders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.qty, 0), 0);
-  const totalOutstanding = orders
-    .filter(o => o.status !== "paid")
-    .reduce((sum, o) => sum + (o.total - o.dp), 0);
-  const totalPayment = orders.reduce((sum, o) => sum + o.dp, 0);
-  const draftOrders = orders.filter(o => o.status === "draft").length;
-  const unlinkedCustomers = orders.filter(o => !o.customerId).length;
-  const totalCustomers = new Set(orders.map(o => o.customerId).filter(Boolean)).size;
-  const shipped = orders.filter(o => o.status === "paid").length;
+  const orders = getOrdersForCollection(collectionId); // legacy: whole-order (batch bridge, tambah order manual)
+  const legacyOrderIds = new Set(orders.map(o => o.id));
+  // Item-level ("Kategori Produk") — kalau order yang sama KEBETULAN juga
+  // sudah tertaut order-level ke Collection ini, item-nya gak ikut dihitung
+  // lagi di sini supaya gak dobel.
+  const itemLinks = getItemLinksForCollection(collectionId).filter(l => !legacyOrderIds.has(l.order.id));
+
+  const totalOrders = legacyOrderIds.size + new Set(itemLinks.map(l => l.order.id)).size;
+  const totalItems = orders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.qty, 0), 0)
+    + itemLinks.reduce((sum, l) => sum + l.item.qty, 0);
+  const legacyOutstanding = orders.filter(o => o.status !== "paid").reduce((sum, o) => sum + (o.total - o.dp), 0);
+  const legacyPayment = orders.reduce((sum, o) => sum + o.dp, 0);
+  const itemOutstanding = itemLinks.reduce((sum, l) => {
+    if (l.order.status === "paid") return sum;
+    return sum + (l.order.total - l.order.dp) * itemShareOfOrder(l.order, l.item);
+  }, 0);
+  const itemPayment = itemLinks.reduce((sum, l) => sum + l.order.dp * itemShareOfOrder(l.order, l.item), 0);
+  // Pembagian proporsional (itemShareOfOrder) menghasilkan pecahan rupiah —
+  // dibulatkan supaya gak tampil "Rp 25.789,474" di layar.
+  const totalOutstanding = Math.round(legacyOutstanding + itemOutstanding);
+  const totalPayment = Math.round(legacyPayment + itemPayment);
+  const draftOrders = orders.filter(o => o.status === "draft").length
+    + new Set(itemLinks.filter(l => l.order.status === "draft").map(l => l.order.id)).size;
+  const unlinkedCustomers = orders.filter(o => !o.customerId).length
+    + new Set(itemLinks.filter(l => !l.order.customerId).map(l => l.order.id)).size;
+  const totalCustomers = new Set([
+    ...orders.map(o => o.customerId).filter(Boolean),
+    ...itemLinks.map(l => l.order.customerId).filter(Boolean),
+  ]).size;
+  const shipped = orders.filter(o => o.status === "paid").length
+    + new Set(itemLinks.filter(l => l.order.status === "paid").map(l => l.order.id)).size;
   const shipmentProgress = totalOrders > 0 ? Math.round((shipped / totalOrders) * 100) : 0;
 
   return {

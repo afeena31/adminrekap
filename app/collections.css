@@ -521,6 +521,32 @@
   color: var(--muted);
   white-space: nowrap;
 }
+.collection-customer-info a { text-decoration: none; color: inherit; }
+.collection-customer-info a:hover b { color: var(--brown); text-decoration: underline; }
+
+/* --- Collection Item Breakdown (Kategori Produk) --- */
+.collection-item-breakdown {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 4px;
+}
+.collection-item-breakdown h3 { font-size: 14px; margin: 0 0 2px; color: var(--ink); }
+.collection-item-breakdown .muted { font-size: 11px; color: var(--muted); margin: 0 0 10px; }
+.collection-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.collection-item-row:first-of-type { border-top: 0; }
+.collection-item-info b { font-size: 12px; color: var(--ink); }
+.collection-item-info small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.collection-item-info small a { color: inherit; text-decoration: underline; }
+.collection-item-amount { font-size: 12px; font-weight: 700; color: var(--brown); white-space: nowrap; }
 
 /* --- Collection Payment List --- */
 .collection-payment-list {

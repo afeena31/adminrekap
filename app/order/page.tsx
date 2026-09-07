@@ -13,7 +13,7 @@ import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
 import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
-import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections } from "../data/collections";
+import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections, getCollections, getCollectionIdsForItem, setCategoriesForItem, removeItemLinksForOrder, type Collection } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
 import { MoneyInput } from "../components/MoneyInput";
 
@@ -164,6 +164,12 @@ function OrderPageInner() {
   // Kosong dulu di render pertama (server tidak punya localStorage) — diisi di
   // HYDRATION FIX effect di bawah, sama seperti productList/marketers.
   const [customerList, setCustomerList] = useState<{ id: string; name: string; city: string }[]>([]);
+  const [collectionsList, setCollectionsList] = useState<Collection[]>([]);
+  // Kategori Produk yang dicentang per-item (bukan per-invoice) — key: item.id,
+  // value: daftar collectionId. Diisi ulang dari getCollectionIdsForItem saat
+  // order dibuka utk diedit; disimpan lewat setCategoriesForItem tiap Generate
+  // Invoice diklik.
+  const [itemCategoryMap, setItemCategoryMap] = useState<Record<string, string[]>>({});
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
@@ -184,6 +190,7 @@ function OrderPageInner() {
     setCustomerAddresses(getCustomerAddresses(customer.id));
     setCustomerList(getCustomers());
     setBatchNames(getBatchNames());
+    setCollectionsList(getCollections());
   }, [customer.id]);
 
   // ===== CUSTOMER & SHIPPING ADDRESS =====
@@ -383,6 +390,18 @@ function OrderPageInner() {
 
   const removeItem = (id: string) => {
     setItems(prev => prev.filter(item => item.id !== id));
+    setItemCategoryMap(prev => {
+      const { [id]: _removed, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  const toggleItemCategory = (itemId: string, collectionId: string) => {
+    setItemCategoryMap(prev => {
+      const current = prev[itemId] || [];
+      const next = current.includes(collectionId) ? current.filter(c => c !== collectionId) : [...current, collectionId];
+      return { ...prev, [itemId]: next };
+    });
   };
 
   // ===== GENERATE INVOICE TEXT (sesuai Operating Manual) =====
@@ -550,6 +569,14 @@ function OrderPageInner() {
       batch: hasAmna ? batch : undefined,
       createdAt: Date.now(),
     };
+
+    // ===== KATEGORI PRODUK: simpan tautan per-item ke Collection =====
+    // Dipanggil utk KEDUA mode (baru & edit) — key-nya orderId+itemId, jadi
+    // aman idempotent baik order baru maupun order yang sudah ada sebelumnya.
+    snapshots.forEach(item => {
+      setCategoriesForItem(orderId, item.id, itemCategoryMap[item.id] || []);
+    });
+
     if (editingOrderId) {
       updateOrder(orderRecord);
       // PHASE 11C: Re-project edited order into central (idempotent by order ID).
@@ -695,6 +722,9 @@ function OrderPageInner() {
       finalPrice: item.finalPrice,
     }));
     setItems(loadedItems);
+    const loadedCategoryMap: Record<string, string[]> = {};
+    loadedItems.forEach(item => { loadedCategoryMap[item.id] = getCollectionIdsForItem(order.id, item.id); });
+    setItemCategoryMap(loadedCategoryMap);
 
     // Load settings
     setDiscountType(order.discountType);
@@ -786,9 +816,11 @@ function OrderPageInner() {
     deleteOrder(deletedId);
     removeFeeForOrder(deletedId);
     removePaymentsForOrder(deletedId);
+    removeItemLinksForOrder(deletedId);
     try { removeOrderFromAllCollections(deletedId); } catch { /* non-fatal */ }
     setEditingOrderId(null);
     setItems([]);
+    setItemCategoryMap({});
     setDpAmount(0);
     setOrderPayments([]);
     setTopUpAmount(0);
@@ -855,6 +887,7 @@ function OrderPageInner() {
           <button className="cancel-edit-btn" onClick={() => {
             setEditingOrderId(null);
             setItems([]);
+            setItemCategoryMap({});
             setDpAmount(0);
             setOrderPayments([]);
             setTopUpAmount(0);
@@ -1097,21 +1130,46 @@ function OrderPageInner() {
       </div>}
 
       {items.map(item => (
-        <div className="order-item" key={item.id}>
-          <span className="order-item-emoji">{item.emoji}</span>
-          <div className="order-item-info">
-            <b>{item.name}</b>
-            {item.detail && <small>{item.detail}</small>}
-            <div className="order-item-price">{formatRupiah(item.price)}</div>
-            {item.feeMarketer > 0 && <small className="fee-tag">Fee {formatRupiah(item.feeMarketer)}/pcs</small>}
-          </div>
-          <div className="order-item-actions">
-            <div className="qty-control">
-              <button onClick={() => updateQty(item.id, -1)}><Minus size={14} /></button>
-              <span>{item.qty}</span>
-              <button onClick={() => updateQty(item.id, 1)}><Plus size={14} /></button>
+        <div className="order-item-block" key={item.id}>
+          <div className="order-item">
+            <span className="order-item-emoji">{item.emoji}</span>
+            <div className="order-item-info">
+              <b>{item.name}</b>
+              {item.detail && <small>{item.detail}</small>}
+              <div className="order-item-price">{formatRupiah(item.price)}</div>
+              {item.feeMarketer > 0 && <small className="fee-tag">Fee {formatRupiah(item.feeMarketer)}/pcs</small>}
             </div>
-            <button className="remove-btn" onClick={() => removeItem(item.id)}><Trash2 size={15} /></button>
+            <div className="order-item-actions">
+              <div className="qty-control">
+                <button onClick={() => updateQty(item.id, -1)}><Minus size={14} /></button>
+                <span>{item.qty}</span>
+                <button onClick={() => updateQty(item.id, 1)}><Plus size={14} /></button>
+              </div>
+              <button className="remove-btn" onClick={() => removeItem(item.id)}><Trash2 size={15} /></button>
+            </div>
+          </div>
+          {/* ===== KATEGORI PRODUK — tautkan item ini ke Collection Workspace ===== */}
+          <div className="order-item-categories">
+            <small className="category-label">🏷️ Kategori Produk</small>
+            {collectionsList.length === 0 ? (
+              <small className="field-hint">Belum ada Collection — buat dulu di tab Collection Workspace.</small>
+            ) : (
+              <div className="category-chips">
+                {collectionsList.map(col => {
+                  const active = (itemCategoryMap[item.id] || []).includes(col.id);
+                  return (
+                    <button
+                      type="button"
+                      key={col.id}
+                      className={`category-chip ${active ? "active" : ""}`}
+                      onClick={() => toggleItemCategory(item.id, col.id)}
+                    >
+                      {col.icon} {col.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       ))}
@@ -1468,7 +1526,7 @@ function OrderPageInner() {
           <button className="secondary" onClick={copyInvoice}><Copy size={16} /> Salin Invoice</button>
         </div>
         <div className="invoice-actions">
-          <button className="secondary" onClick={() => { setInvoice(null); setItems([]); setDpAmount(0); setOrderPayments([]); setTopUpAmount(0); setNote(""); setInternalNote(""); setDiscountValue(0); setMarketerId(""); setEditingOrderId(null); notify("Order baru siap dibuat"); }}><Check size={16} /> Selesai</button>
+          <button className="secondary" onClick={() => { setInvoice(null); setItems([]); setItemCategoryMap({}); setDpAmount(0); setOrderPayments([]); setTopUpAmount(0); setNote(""); setInternalNote(""); setDiscountValue(0); setMarketerId(""); setEditingOrderId(null); notify("Order baru siap dibuat"); }}><Check size={16} /> Selesai</button>
         </div>
       </section>
     </div>}

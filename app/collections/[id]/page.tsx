@@ -14,11 +14,12 @@ import {
   removeOrderFromCollection,
   updateCollection, softDeleteCollection, hardDeleteCollection,
   createOrderInCollection, matchCustomerId,
+  getItemLinksForCollection,
   collectionTypeInfo, collectionStatusInfo,
   collectionColors, collectionIcons,
   type Collection, type CollectionType, type CollectionStatus,
 } from "../../data/collections";
-import { formatRupiah, type OrderRecord } from "../../data/store";
+import { formatRupiah, type OrderRecord, type OrderItemSnapshot } from "../../data/store";
 
 import { getCustomers } from "../../data/central";
 
@@ -44,6 +45,11 @@ export default function CollectionDetailPage() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
+  // Order lama ("PO Batch" bridge, "Tambah Order" manual) dihitung UTUH per
+  // order (`orders` di atas); "Kategori Produk" baru dihitung per-ITEM supaya
+  // invoice campuran (mis. Amna + Kaos Kaki + Boardbook sekaligus) gak bikin
+  // Collection lain ikut menghitung nilai penuh invoice-nya.
+  const [itemLinks, setItemLinks] = useState<{ order: OrderRecord; item: OrderItemSnapshot }[]>([]);
   const [editForm, setEditForm] = useState({
     name: "",
     type: "custom" as CollectionType,
@@ -72,6 +78,7 @@ export default function CollectionDetailPage() {
   useEffect(() => {
     setCollection(getCollection(id));
     setOrders(getOrdersForCollection(id));
+    setItemLinks(getItemLinksForCollection(id));
   }, [id]);
 
   if (!collection) {
@@ -94,8 +101,9 @@ export default function CollectionDetailPage() {
   const typeInfo = collectionTypeInfo[collection.type];
   const statusInfo = collectionStatusInfo[collection.status];
 
-  // ===== CUSTOMER AGGREGATION =====
-  const customerMap = new Map<string, { name: string; orders: number; total: number }>();
+  // ===== CUSTOMER AGGREGATION (order utuh + item per-kategori digabung) =====
+  const itemSubtotal = (item: OrderItemSnapshot) => (item.finalPrice ?? item.price) * item.qty;
+  const customerMap = new Map<string, { name: string; customerId: string | null; orders: number; total: number }>();
   orders.forEach(o => {
     const key = o.customerId || o.customer;
     const existing = customerMap.get(key);
@@ -103,10 +111,33 @@ export default function CollectionDetailPage() {
       existing.orders += 1;
       existing.total += o.total;
     } else {
-      customerMap.set(key, { name: o.customer, orders: 1, total: o.total });
+      customerMap.set(key, { name: o.customer, customerId: o.customerId, orders: 1, total: o.total });
+    }
+  });
+  itemLinks.forEach(({ order: o, item }) => {
+    const key = o.customerId || o.customer;
+    const existing = customerMap.get(key);
+    if (existing) {
+      existing.orders += 1;
+      existing.total += itemSubtotal(item);
+    } else {
+      customerMap.set(key, { name: o.customer, customerId: o.customerId, orders: 1, total: itemSubtotal(item) });
     }
   });
   const customerList = Array.from(customerMap.entries()).map(([key, val]) => ({ key, ...val }));
+
+  // ===== ITEM BREAKDOWN (per Kategori Produk) — "kaos kaki closing berapa,
+  // siapa saja yang pesan" =====
+  const itemBreakdown = itemLinks.map(({ order: o, item }) => ({
+    orderId: o.id,
+    orderNumber: o.number,
+    customerName: o.customer,
+    customerId: o.customerId,
+    productName: item.name,
+    detail: item.detail,
+    qty: item.qty,
+    subtotal: itemSubtotal(item),
+  }));
 
   // ===== PAYMENT AGGREGATION =====
   const paymentList = orders.map(o => ({
@@ -387,6 +418,21 @@ export default function CollectionDetailPage() {
 
     {activeTab === "customer" && (
       <div className="collection-customer-list">
+        {itemBreakdown.length > 0 && (
+          <div className="collection-item-breakdown">
+            <h3>Rincian per Item</h3>
+            <p className="muted">Closing per produk di collection ini, lengkap siapa yang pesan.</p>
+            {itemBreakdown.map((it, i) => (
+              <div className="collection-item-row" key={it.orderId + "-" + i}>
+                <div className="collection-item-info">
+                  <b>{it.productName}</b>{it.detail && <small> · {it.detail}</small>}
+                  <small>{it.customerId ? <Link href={`/?customerId=${it.customerId}`}>{it.customerName}</Link> : it.customerName} · {it.orderNumber}</small>
+                </div>
+                <div className="collection-item-amount">{it.qty}x · {formatRupiah(it.subtotal)}</div>
+              </div>
+            ))}
+          </div>
+        )}
         {customerList.length === 0 && <div className="collection-empty">
           <span>👥</span>
           <h3>Belum ada customer</h3>
@@ -396,8 +442,8 @@ export default function CollectionDetailPage() {
           <div className="collection-customer-row" key={c.key}>
             <span className="collection-customer-avatar">{c.name.charAt(0)}</span>
             <div className="collection-customer-info">
-              <b>{c.name}</b>
-              <small>{c.key.startsWith("cust-") ? "Terhubung ke Customer Workspace" : "Belum terhubung ke Customer"}</small>
+              {c.customerId ? <Link href={`/?customerId=${c.customerId}`}><b>{c.name}</b></Link> : <b>{c.name}</b>}
+              <small>{c.customerId ? "Terhubung ke Customer Workspace — klik nama utk lihat pesanan lain" : "Belum terhubung ke Customer"}</small>
             </div>
             <div className="collection-customer-orders">
               {c.orders} order · {formatRupiah(c.total)}

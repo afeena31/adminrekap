@@ -986,7 +986,12 @@ body {
   .avatar { width: 82px; height: 82px; font-size: 46px; }
   .profile-copy h1 { font-size: 27px; }
   .profile-copy p { font-size: 12px; }
-  .profile-actions { display: none; }
+  /* Sebelumnya display:none — tombol Edit/Hapus/Chat/Favorite jadi TIDAK BISA
+     diakses sama sekali di HP (mayoritas penggunaan app ini). Diganti supaya
+     tetap tampil, cuma dirapatkan & boleh membungkus ke baris ke-2. */
+  .profile-actions { flex-wrap: wrap; gap: 7px; }
+  .profile-actions .chat, .profile-actions .add-order { padding: 8px 12px; font-size: 13px; }
+  .profile-actions .save { padding: 8px; }
   .situation-strip { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .situation-item { padding: 11px 13px; }
   .metrics { grid-template-columns: repeat(2, 1fr); gap: 9px; }

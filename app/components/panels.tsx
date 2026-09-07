@@ -32,6 +32,7 @@ import {
 export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab: string) => void }) {
   const [ops, setOps] = useState<CustomerOperations>(() => getOperations(customer.id));
   const [notice, setNotice] = useState("");
+  const [realOrders, setRealOrders] = useState<OrderRecord[]>([]);
 
   // Komponen ini gak di-remount pas pindah customer (cuma re-render dengan
   // props baru), jadi ops-nya harus dimuat ulang sendiri tiap customer.id
@@ -39,7 +40,17 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
   // punya customer sebelumnya.
   useEffect(() => {
     setOps(getOperations(customer.id));
+    setRealOrders(getOrdersForCustomer(customer.id));
   }, [customer.id]);
+
+  // Action Center di atas (ops.actionCenter) baca dari operations.ts — state
+  // mesin lama yang cuma pernah diisi utk 3 customer demo, jadi BUTA total
+  // terhadap order asli (dibuat lewat /order, disimpan di store.ts). Tanpa ini,
+  // customer dengan order asli yang outstanding selalu tampil "Semua beres!"
+  // walau ada tagihan yang belum lunas. Ini bridge ringan & read-only — bukan
+  // migrasi penuh ke central.ts (itu tetap PR Tahap 4) — supaya minimal
+  // "perlu ditagih" untuk order asli benar-benar muncul di sini.
+  const unpaidRealOrders = realOrders.filter(o => o.total - o.dp > 0);
 
   const act = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
@@ -56,7 +67,7 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
 
   return <div className="content">
     {/* ===== ACTION CENTER ===== */}
-    <ActionCenter ops={ops} onAction={handleAction} />
+    <ActionCenter ops={ops} onAction={handleAction} unpaidRealOrders={unpaidRealOrders} onRealOrderClick={() => onTab("Order")} />
 
     {/* ===== PERLU PERHATIAN ===== */}
     <section className="attention card">
@@ -182,14 +193,22 @@ function resolveActionForNextAction(card: ProductStatusCard): ActionType | null 
 }
 
 // ===== ACTION CENTER =====
-function ActionCenter({ ops, onAction }: { ops: CustomerOperations; onAction: (cardId: string, action: ActionType) => void }) {
+function ActionCenter({ ops, onAction, unpaidRealOrders, onRealOrderClick }: { ops: CustomerOperations; onAction: (cardId: string, action: ActionType) => void; unpaidRealOrders: OrderRecord[]; onRealOrderClick: () => void }) {
   const priorityLabel: Record<string, string> = { red: "🔴", yellow: "🟡", green: "🟢", blue: "🔵" };
+  const totalCount = ops.actionCenter.length + unpaidRealOrders.length;
   return <section className="card action-center">
     <div className="section-head">
       <div><h2>Action Center</h2><p>Pekerjaan admin untuk customer ini — sistem sudah menyusunnya.</p></div>
-      <span className="ready">{ops.actionCenter.length} aksi</span>
+      <span className="ready">{totalCount} aksi</span>
     </div>
-    {ops.actionCenter.length === 0 && <p className="panel-hint" style={{ marginTop: 10 }}>Tidak ada aksi yang perlu dilakukan. Semua beres! 🎉</p>}
+    {totalCount === 0 && <p className="panel-hint" style={{ marginTop: 10 }}>Tidak ada aksi yang perlu dilakukan. Semua beres! 🎉</p>}
+    {unpaidRealOrders.map(order => (
+      <button key={order.id} className="action-item" onClick={onRealOrderClick}>
+        <span className="action-priority">🔴</span>
+        <div className="action-copy"><b>Tagih pelunasan {order.number}</b><small>Sisa {formatRupiah(order.total - order.dp)}</small></div>
+        <ChevronRight size={17}/>
+      </button>
+    ))}
     {ops.actionCenter.map(item => (
       <button key={item.id} className="action-item" onClick={() => {
         const card = ops.productCards.find(c => c.id === item.productId);

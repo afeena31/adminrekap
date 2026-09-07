@@ -390,7 +390,7 @@ export default function HomePage() {
         <div className="situation-item"><small>Produksi</small><b>{ops.productCards.filter(c => c.progressStatus === "produksi" || c.progressStatus === "qc").length} berjalan</b></div>
         <div className="situation-item"><small>Pengiriman</small><b>{ops.productCards.filter(c => c.shipmentStatus === "menunggu-pickup" || c.shipmentStatus === "dalam-perjalanan").length} aktif</b></div>
 
-        <div className="situation-item"><small>Prioritas</small><b className="situation-priority">{ops.actionCenter.length > 0 ? `${ops.actionCenter.length} aksi` : "Tenang"}</b></div>
+        <div className="situation-item"><small>Prioritas</small><b className="situation-priority">{(ops.actionCenter.length + customerOrders.filter(o => o.total - o.dp > 0).length) > 0 ? `${ops.actionCenter.length + customerOrders.filter(o => o.total - o.dp > 0).length} aksi` : "Tenang"}</b></div>
       </div>
     </section>
 

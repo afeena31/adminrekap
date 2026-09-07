@@ -9,7 +9,7 @@ import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
 
 
-import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, determineRekening, type Product, type InvoiceType } from "../data/products";
+import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, determineRekening, SPLIT_BILL_PRODUK, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
 import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
@@ -105,7 +105,6 @@ function OrderPageInner() {
   const [ongkirId, setOngkirId] = useState("id-jawa");
   const [customOngkir, setCustomOngkir] = useState(0);
   const [customOngkirLabel, setCustomOngkirLabel] = useState("");
-  const [splitShopee, setSplitShopee] = useState(false);
   const [dpAmount, setDpAmount] = useState(0);
   const [note, setNote] = useState("");
   const [internalNote, setInternalNote] = useState("");
@@ -266,6 +265,11 @@ function OrderPageInner() {
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const discountAmount = calculateDiscount(subtotal, discountType, discountValue);
   const ongkir = ongkirId === "custom" ? customOngkir : (ongkirOptions.find(o => o.id === ongkirId)?.price || 0);
+  // Split Bill Shopee: begitu ongkir dipilih "Shopee", customer otomatis checkout
+  // lewat trik Split Bill (lihat Master Data bagian 9) — Rp1.500 dari situ SUDAH
+  // otomatis terhitung sebagai bagian yang lunas, admin tidak perlu tambah manual.
+  const splitShopee = ongkirId === "shopee";
+  const splitShopeeCredit = splitShopee ? SPLIT_BILL_PRODUK : 0;
   // "total" adalah TOTAL UTUH invoice (dipakai buildInvoiceText & disimpan ke
   // orderRecord.total) — JANGAN kurangi DP di sini. Sebelumnya DP ikut
   // dikurangkan di sini, jadi order.total yang tersimpan jadi salah (bahkan
@@ -409,15 +413,23 @@ function OrderPageInner() {
       lines.push(fmt(inv.ongkir));
     }
     lines.push("");
-    if (inv.type === "po-amna") {
+    const splitCredit = inv.splitShopee ? SPLIT_BILL_PRODUK : 0;
+    if (inv.type === "po-amna" || inv.dp > 0 || splitCredit > 0) {
       lines.push("TOTAL:");
       lines.push("Rp" + fmt(inv.total));
-      lines.push("");
-      lines.push("Deposit:");
-      lines.push("Rp" + fmt(inv.dp));
+      if (inv.dp > 0) {
+        lines.push("");
+        lines.push("Deposit:");
+        lines.push("Rp" + fmt(inv.dp));
+      }
+      if (splitCredit > 0) {
+        lines.push("");
+        lines.push("Split Bill Shopee (sudah checkout):");
+        lines.push("Rp" + fmt(splitCredit));
+      }
       lines.push("");
       lines.push("Sisa Pelunasan:");
-      lines.push("Rp" + fmt(inv.total - inv.dp));
+      lines.push("Rp" + fmt(inv.total - inv.dp - splitCredit));
     } else {
       lines.push("TOTAL:");
       lines.push("Rp" + fmt(inv.total));
@@ -521,7 +533,10 @@ function OrderPageInner() {
       discountAmount,
       ongkir,
       ongkirLabel,
-      dp: dpAmount,
+      // order.dp = TOTAL yang sudah beneran diterima (dipakai Payment/Outstanding
+      // di seluruh app) — termasuk Rp1.500 Split Bill Shopee yang otomatis lunas
+      // lewat checkout Shopee, bukan cuma DP manual yang diketik admin.
+      dp: dpAmount + splitShopeeCredit,
       note,
       internalNote: internalNote.trim() || undefined,
       marketerId: marketer?.id || null,
@@ -646,7 +661,11 @@ function OrderPageInner() {
     setOngkirId(matchedOngkir ? matchedOngkir.id : "custom");
     setCustomOngkir(order.ongkir);
     setCustomOngkirLabel(matchedOngkir ? "" : order.ongkirLabel);
-    setDpAmount(order.dp);
+    // order.dp tersimpan SUDAH termasuk Rp1.500 Split Bill Shopee (lihat generateInvoice)
+    // — kurangi lagi di sini supaya field DP manual di form kembali menampilkan
+    // angka yang benar-benar diketik admin, bukan dobel dengan kredit otomatis.
+    const loadedSplitShopee = matchedOngkir?.id === "shopee";
+    setDpAmount(order.dp - (loadedSplitShopee ? SPLIT_BILL_PRODUK : 0));
     setNote(order.note);
     setInternalNote(order.internalNote || "");
     setMarketerId(order.marketerId || "");
@@ -1102,17 +1121,9 @@ function OrderPageInner() {
         {ongkirId !== "custom" && <div className="ongkir-preview">Ongkir: <b>{formatRupiah(ongkir)}</b></div>}
       </div>
 
-      <div className="setting-row">
-        <label className="checkbox-label">
-          <input type="checkbox" checked={splitShopee} onChange={e => setSplitShopee(e.target.checked)} />
-          Split Shopee (checkout via Shopee)
-        </label>
-      </div>
-
       {splitShopee && <div className="shopee-split-info">
-        <p>📚 Buku: Shopee <b>Rp3.385</b> (Rp1.500 produk + Rp1.885 admin) · Transfer: Total − Rp1.500</p>
-        <p>🧕 Afeena: Shopee <b>Rp3.500</b> (Rp1.500 produk + Rp2.000 admin) · Transfer: Total − Rp1.500</p>
-        <p>💰 DP Amna: Tetap Rp100.000, potongan Rp1.500 dihitung saat pelunasan</p>
+        <p>🛒 <b>Split Bill Shopee aktif</b> (ongkir = Shopee) — Rp{fmt(SPLIT_BILL_PRODUK)} dari Total Tagihan otomatis dianggap sudah terbayar lewat checkout Shopee. Sisa yang perlu ditransfer manual sudah dikurangi otomatis di bawah.</p>
+        <p className="muted">Detail biaya admin per kategori ada di halaman Katalog → tab Split Shopee.</p>
       </div>}
 
       <div className="setting-row">
@@ -1140,7 +1151,8 @@ function OrderPageInner() {
       <div className="summary-row"><span>Ongkir</span><b>{ongkir > 0 ? formatRupiah(ongkir) : "—"}</b></div>
       <div className="summary-row total-row"><span>Total Tagihan</span><b>{formatRupiah(total)}</b></div>
       {dpAmount > 0 && <div className="summary-row"><span>DP / Deposit</span><b>-{formatRupiah(dpAmount)}</b></div>}
-      {dpAmount > 0 && <div className="summary-row"><span>Sisa Pelunasan</span><b>{formatRupiah(total - dpAmount)}</b></div>}
+      {splitShopeeCredit > 0 && <div className="summary-row"><span>Split Bill Shopee (produk)</span><b>-{formatRupiah(splitShopeeCredit)}</b></div>}
+      {(dpAmount > 0 || splitShopeeCredit > 0) && <div className="summary-row"><span>Sisa Pelunasan</span><b>{formatRupiah(total - dpAmount - splitShopeeCredit)}</b></div>}
       {marketerId && effectiveFee > 0 && <div className="summary-row fee-row"><span>Fee marketer (internal)</span><b>{formatRupiah(effectiveFee)}</b></div>}
     </div>
 
@@ -1316,9 +1328,10 @@ function OrderPageInner() {
           {invoice.discountAmount > 0 && <div><span>Diskon</span><b>-{formatRupiah(invoice.discountAmount)}</b></div>}
           {invoice.ongkir > 0 && <div><span>Ongkir</span><b>{formatRupiah(invoice.ongkir)}</b></div>}
           {invoice.dp > 0 && <div><span>DP / Deposit</span><b>-{formatRupiah(invoice.dp)}</b></div>}
+          {invoice.splitShopee && <div><span>Split Bill Shopee (produk)</span><b>-{formatRupiah(SPLIT_BILL_PRODUK)}</b></div>}
           <div className="invoice-grand"><span>Total Tagihan</span><b>{formatRupiah(invoice.total)}</b></div>
-          {invoice.type === "po-amna" && <div className="invoice-sisa">
-            <span>Sisa Pelunasan</span><b>{formatRupiah(invoice.total - invoice.dp)}</b>
+          {(invoice.type === "po-amna" || invoice.dp > 0 || invoice.splitShopee) && <div className="invoice-sisa">
+            <span>Sisa Pelunasan</span><b>{formatRupiah(invoice.total - invoice.dp - (invoice.splitShopee ? SPLIT_BILL_PRODUK : 0))}</b>
           </div>}
         </div>
         {invoice.note && <div className="invoice-note"><b>Catatan:</b> {invoice.note}</div>}

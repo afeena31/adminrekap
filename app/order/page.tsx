@@ -470,7 +470,7 @@ function OrderPageInner() {
       }
       lines.push("");
       lines.push("Sisa Pelunasan:");
-      lines.push("Rp" + fmt(inv.total - inv.dp - splitCredit));
+      lines.push("Rp" + fmt(Math.max(0, inv.total - inv.dp - splitCredit)));
     } else {
       lines.push("TOTAL:");
       lines.push("Rp" + fmt(inv.total));
@@ -618,6 +618,35 @@ function OrderPageInner() {
       } catch {
         // Projection failure is non-authoritative; legacy edit already saved.
       }
+      // ===== SINKRON RIWAYAT PEMBAYARAN — SPLIT BILL SHOPEE =====
+      // dp di atas sudah dihitung ulang pakai splitShopeeCredit dari ongkir yang
+      // dipilih SEKARANG di form, tapi baris PaymentRecord "Split Bill Shopee"
+      // cuma pernah dibuat sekali saat order BARU dibuat (blok di bawah, cabang
+      // else). Kalau admin ganti ongkir ke/dari Shopee pas EDIT, order.dp ikut
+      // berubah tapi Riwayat Pembayaran bisa nyimpang (dp nambah 1.500 tanpa
+      // baris baru, atau baris lama masih ada padahal dp sudah dikurangi lagi).
+      // Disamakan di sini: tambah/hapus baris ledger biar order.dp & Riwayat
+      // Pembayaran tetap 1:1, sama seperti alur order baru.
+      const shopeePayment = getPaymentsForOrder(orderId).find(p => p.note === "Split Bill Shopee (checkout otomatis)");
+      if (splitShopeeCredit > 0 && !shopeePayment) {
+        addPayment({
+          id: "pay-" + Date.now() + "-shopee",
+          orderId,
+          orderNumber,
+          customerId: customer.id || null,
+          customerName: customer.name,
+          productSummary: snapshots.map(s => s.name).join(", "),
+          amount: splitShopeeCredit,
+          dateReceived: now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
+          status: "belum-ditarik",
+          dateWithdrawn: null,
+          note: "Split Bill Shopee (checkout otomatis)",
+          createdAt: Date.now(),
+        });
+      } else if (splitShopeeCredit === 0 && shopeePayment) {
+        deletePayment(shopeePayment.id);
+      }
+      setOrderPayments(getPaymentsForOrder(orderId));
     } else {
       saveOrder(orderRecord);
       // PHASE 11C: Project new order into central (idempotent by order ID).
@@ -1387,7 +1416,7 @@ function OrderPageInner() {
       <div className="summary-row total-row"><span>Total Tagihan</span><b>{formatRupiah(total)}</b></div>
       {dpAmount > 0 && <div className="summary-row"><span>DP / Deposit</span><b>-{formatRupiah(dpAmount)}</b></div>}
       {splitShopeeCredit > 0 && <div className="summary-row"><span>Split Bill Shopee (produk)</span><b>-{formatRupiah(splitShopeeCredit)}</b></div>}
-      {(dpAmount > 0 || splitShopeeCredit > 0) && <div className="summary-row"><span>Sisa Pelunasan</span><b>{formatRupiah(total - dpAmount - splitShopeeCredit)}</b></div>}
+      {(dpAmount > 0 || splitShopeeCredit > 0) && <div className="summary-row"><span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, total - dpAmount - splitShopeeCredit))}</b></div>}
       {marketerId && effectiveFee > 0 && <div className="summary-row fee-row"><span>Fee marketer (internal)</span><b>{formatRupiah(effectiveFee)}</b></div>}
     </div>
 
@@ -1471,7 +1500,7 @@ function OrderPageInner() {
         {/* ===== PREVIEW PRODUK ===== */}
         <div className="jilbab-preview">
           <h3>Preview Produk</h3>
-          <div className="preview-title">Amna Jilbab {AMNA_DEFAULT_FABRIC}</div>
+          <div className="preview-title">Jilbab {AMNA_DEFAULT_FABRIC}</div>
           <div className="preview-row"><span>Size</span><b>{jilbabSizes.find(s => s.id === jSize)!.name}</b></div>
           <div className="preview-row"><span>Pad</span><b>{jilbabPads.find(p => p.id === jPad)!.name}</b></div>
           <div className="preview-row"><span>Warna</span><b>{AMNA_DEFAULT_COLOR}</b></div>
@@ -1566,7 +1595,7 @@ function OrderPageInner() {
           {invoice.splitShopee && <div><span>Split Bill Shopee (produk)</span><b>-{formatRupiah(SPLIT_BILL_PRODUK)}</b></div>}
           <div className="invoice-grand"><span>Total Tagihan</span><b>{formatRupiah(invoice.total)}</b></div>
           {(invoice.type === "po-amna" || invoice.dp > 0 || invoice.splitShopee) && <div className="invoice-sisa">
-            <span>Sisa Pelunasan</span><b>{formatRupiah(invoice.total - invoice.dp - (invoice.splitShopee ? SPLIT_BILL_PRODUK : 0))}</b>
+            <span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, invoice.total - invoice.dp - (invoice.splitShopee ? SPLIT_BILL_PRODUK : 0)))}</b>
           </div>}
         </div>
         {invoice.note && <div className="invoice-note"><b>Catatan:</b> {invoice.note}</div>}

@@ -58,7 +58,7 @@ export function QuickPaymentModal({ onClose, onRecorded }: { onClose: () => void
   const handleSubmit = () => {
     if (!selectedOrder || amount <= 0) return;
     const { updatedOrder } = recordPaymentForOrder(selectedOrder, amount);
-    setDone({ orderNumber: updatedOrder.number, sisa: updatedOrder.total - updatedOrder.dp });
+    setDone({ orderNumber: updatedOrder.number, sisa: Math.max(0, updatedOrder.total - updatedOrder.dp) });
     onRecorded?.();
   };
 

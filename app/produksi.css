@@ -1,5 +1,25 @@
 /* ===== PAPAN PRODUKSI & PENGIRIMAN ===== */
 
+/* Background gradient halaman — pola sama dgn *-page lain (dashboard-page,
+   order-page, dst), sebelumnya kelewat gak ditambahkan pas halaman ini
+   dibuat, jadi render flat gak sinkron dgn halaman lain. */
+.produksi-page {
+  background:
+    radial-gradient(1100px 520px at 8% -6%, rgba(255, 250, 240, 0.95), transparent 60%),
+    radial-gradient(900px 600px at 100% 4%, rgba(232, 235, 221, 0.5), transparent 55%),
+    radial-gradient(700px 500px at 50% 110%, rgba(240, 231, 218, 0.5), transparent 60%),
+    linear-gradient(180deg, #faf7f2 0%, #f6efe6 45%, #f1e7da 100%);
+  background-attachment: fixed;
+}
+.produksi-page .topbar {
+  position: sticky;
+  top: 0;
+  background: rgba(251, 247, 241, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 5;
+}
+
 .produksi-hero {
   padding: 20px 2px 6px;
 }

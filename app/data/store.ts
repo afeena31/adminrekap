@@ -414,7 +414,7 @@ export function computePaymentTotals(orders: OrderRecord[]) {
 // klik "Tagih pelunasan" langsung buka WhatsApp dgn pesan pelunasan siap
 // kirim (item, total, sudah dibayar, sisa, rekening), bukan cuma pindah tab.
 export function buildPelunasanMessage(order: OrderRecord): string {
-  const outstanding = order.total - order.dp;
+  const outstanding = Math.max(0, order.total - order.dp);
   const fmt = (v: number) => "Rp" + v.toLocaleString("id-ID");
   const lines: string[] = [];
   lines.push(`Assalamu'alaikum ${order.customer},`);

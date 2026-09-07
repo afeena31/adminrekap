@@ -11,7 +11,7 @@ import { goBack } from "../lib/goBack";
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, determineRekening, SPLIT_BILL_PRODUK, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
-import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
+import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, recordPaymentForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
 import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections, getCollections, getCollectionIdsForItem, setCategoriesForItem, removeItemLinksForOrder, type Collection } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
@@ -794,29 +794,14 @@ function OrderPageInner() {
     if (!editingOrderId || topUpAmount <= 0) return;
     const existingOrder = getOrderById(editingOrderId);
     if (!existingOrder) return;
-    const newDp = existingOrder.dp + topUpAmount;
-    updateOrder({ ...existingOrder, dp: newDp });
-    addPayment({
-      id: "pay-" + Date.now(),
-      orderId: editingOrderId,
-      orderNumber: existingOrder.number,
-      customerId: customer.id || null,
-      customerName: customer.name,
-      productSummary: items.map(i => i.name).join(", "),
-      amount: topUpAmount,
-      dateReceived: new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
-      status: "belum-ditarik",
-      dateWithdrawn: null,
-      note: "",
-      createdAt: Date.now(),
-    });
+    const { updatedOrder } = recordPaymentForOrder(existingOrder, topUpAmount);
     // Dasar kredit Split Bill Shopee dari ongkir yang BENERAN tersimpan di
     // order (existingOrder.ongkirLabel), BUKAN dari pilihan ongkir di form
     // (ongkirId/splitShopeeCredit) — kalau admin sempat ganti ongkir di form
     // tapi belum klik Generate Invoice, keduanya bisa beda dan bikin dpAmount
     // salah hitung (bahkan bisa negatif). Math.max(0, ...) jaga-jaga tambahan.
     const persistedSplitShopee = ongkirOptions.find(o => o.name === existingOrder.ongkirLabel)?.id === "shopee";
-    setDpAmount(Math.max(0, newDp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0)));
+    setDpAmount(Math.max(0, updatedOrder.dp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0)));
     setOrderPayments(getPaymentsForOrder(editingOrderId));
     setExistingOrders(getOrders());
     setTopUpAmount(0);

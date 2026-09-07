@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { toDisplayCustomer } from "../data/customers";
 import { getOrders, getFees, getMarketers, getProducts, formatRupiah, getOrderById, getPelunasanWhatsAppUrl, productionStageInfo } from "../data/store";
 import { BottomNav } from "../components/BottomNav";
+import { QuickPaymentModal } from "../components/QuickPaymentModal";
 import { goBack } from "../lib/goBack";
 import { getOperations } from "../data/operations";
 import { getCustomers, getCustomerAddresses as getCentralCustomerAddresses, getDashboardWorkQueue, type WorkQueueItem, type PrimaryCondition } from "../data/central";
@@ -24,6 +25,7 @@ function loadAllDisplayCustomers() {
 
 export default function DashboardPage() {
   const [notice, setNotice] = useState("");
+  const [quickPaymentOpen, setQuickPaymentOpen] = useState(false);
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
   // Item "PERLU DITAGIH" langsung buka WhatsApp dgn pesan pelunasan siap
@@ -267,7 +269,7 @@ export default function DashboardPage() {
       <div className="dash-quick-actions">
         <Link href="/order" className="dash-quick-action primary"><span className="dash-quick-icon"><Plus size={20} /></span><span className="dash-quick-copy"><b>New Order</b><small>Buat pesanan baru</small></span></Link>
         <Link href="/" className="dash-quick-action"><span className="dash-quick-icon"><UserPlus size={20} /></span><span className="dash-quick-copy"><b>New Customer</b><small>Tambahkan profil</small></span></Link>
-        <Link href="/order" className="dash-quick-action"><span className="dash-quick-icon"><HandCoins size={20} /></span><span className="dash-quick-copy"><b>Record Payment</b><small>Edit order untuk catat DP/pelunasan</small></span></Link>
+        <button type="button" className="dash-quick-action" onClick={() => setQuickPaymentOpen(true)}><span className="dash-quick-icon"><HandCoins size={20} /></span><span className="dash-quick-copy"><b>Record Payment</b><small>Catat transferan yang baru masuk</small></span></button>
         <button type="button" className="dash-quick-action" onClick={() => notify("Fitur pengiriman/resi belum tersedia")}><span className="dash-quick-icon"><Truck size={20} /></span><span className="dash-quick-copy"><b>Create Shipment</b><small>Belum tersedia</small></span></button>
         <button type="button" className="dash-quick-action" onClick={() => notify("Catatan dikelola per-customer, buka profil customer dulu")}><span className="dash-quick-icon"><StickyNote size={20} /></span><span className="dash-quick-copy"><b>Add Note</b><small>Lewat profil customer</small></span></button>
       </div>
@@ -383,6 +385,7 @@ export default function DashboardPage() {
     {/* ===== BOTTOM NAV ===== */}
     <BottomNav />
 
+    {quickPaymentOpen && <QuickPaymentModal onClose={() => setQuickPaymentOpen(false)} onRecorded={() => setOrders(getOrders())} />}
     {notice && <div className="toast"><Check size={17} />{notice}</div>}
   </main>;
 }

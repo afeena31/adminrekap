@@ -651,6 +651,32 @@ export function removePaymentsForOrder(orderId: string): PaymentRecord[] {
   return updated;
 }
 
+// Satu fungsi INTI utk "catat top up masuk" — dipakai bareng oleh form Edit
+// Order (Riwayat Pembayaran) DAN tombol pintas "Catat Pembayaran" di
+// Dashboard/profil customer, supaya keduanya benar-benar satu sistem yang
+// sama (bukan 2 jalur terpisah yang bisa nyimpang kayak bug yang pernah
+// ditemukan sebelumnya). order.dp bertambah + satu baris PaymentRecord baru.
+export function recordPaymentForOrder(order: OrderRecord, amount: number, note?: string): { updatedOrder: OrderRecord; payment: PaymentRecord } {
+  const updatedOrder: OrderRecord = { ...order, dp: order.dp + amount };
+  updateOrder(updatedOrder);
+  const payment: PaymentRecord = {
+    id: "pay-" + Date.now(),
+    orderId: order.id,
+    orderNumber: order.number,
+    customerId: order.customerId,
+    customerName: order.customer,
+    productSummary: order.items.map(i => i.name).join(", "),
+    amount,
+    dateReceived: new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
+    status: "belum-ditarik",
+    dateWithdrawn: null,
+    note: note || "",
+    createdAt: Date.now(),
+  };
+  addPayment(payment);
+  return { updatedOrder, payment };
+}
+
 // ===== WAREHOUSE STORE =====
 
 export function getWarehouses(): Warehouse[] {

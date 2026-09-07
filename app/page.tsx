@@ -1,7 +1,7 @@
 "use client";
 
 
-import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, CreditCard, Heart, MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Search, ShoppingBag, Trash2, Truck } from "lucide-react";
+import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, CreditCard, HandCoins, Heart, MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Search, ShoppingBag, Trash2, Truck } from "lucide-react";
 
 
 import Link from "next/link";
@@ -12,6 +12,7 @@ import { getCustomers, getCustomer, addCustomer, updateCustomer as updateCentral
 import { Overview, CustomerPanel } from "./components/panels";
 import { NewCustomerForm, EditCustomerForm, type EditableCustomerFields } from "./components/NewCustomerForm";
 import { BottomNav } from "./components/BottomNav";
+import { QuickPaymentModal } from "./components/QuickPaymentModal";
 import { goBack } from "./lib/goBack";
 import { getCollections, getAllCollections, seedCollections, getCollectionStats, addCollection, saveCollections, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "./data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "./data/demoSeed";
@@ -84,6 +85,7 @@ function HomePageInner() {
   const [addrForm, setAddrForm] = useState({ label: "", recipientName: "", phone: "", address: "", landmark: "", courier: "", note: "", isDefault: false });
   const [searchQuery, setSearchQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [quickPaymentOpen, setQuickPaymentOpen] = useState(false);
   const [editCustomerOpen, setEditCustomerOpen] = useState(false);
   const [deleteCustomerConfirmOpen, setDeleteCustomerConfirmOpen] = useState(false);
   const [backups, setBackups] = useState<BackupInfo[]>([]);
@@ -390,7 +392,7 @@ function HomePageInner() {
       <button className="icon-btn" aria-label="Kembali" onClick={goBack}><ArrowLeft size={21} /></button>
 
       <div className="brand">UmayasLa<span>·</span></div>
-      <div className="header-actions"><Link href="/products" className="icon-btn" aria-label="Katalog produk"><ShoppingBag size={19} /></Link><button className="icon-btn"><Bell size={19} /></button><button className="icon-btn" onClick={openSettings}><MoreHorizontal size={21} /></button></div>
+      <div className="header-actions"><button className="icon-btn" aria-label="Catat Pembayaran Cepat" onClick={() => setQuickPaymentOpen(true)}><HandCoins size={19} /></button><Link href="/products" className="icon-btn" aria-label="Katalog produk"><ShoppingBag size={19} /></Link><button className="icon-btn"><Bell size={19} /></button><button className="icon-btn" onClick={openSettings}><MoreHorizontal size={21} /></button></div>
     </header>
     <button className="customer-finder" onClick={() => setFinderOpen(true)}><Search size={17}/><span>Cari atau pindah customer...</span><kbd>⌘ K</kbd></button>
 
@@ -483,6 +485,7 @@ function HomePageInner() {
     </section></div>}
 
     {newCustomerOpen && <NewCustomerForm onClose={() => setNewCustomerOpen(false)} onSave={(name, city) => { handleCreateCustomer(name, city); setNewCustomerOpen(false); setActiveTab("Ringkasan"); notify(`Profil ${name} berhasil dibuat`); }}/>}
+    {quickPaymentOpen && <QuickPaymentModal onClose={() => setQuickPaymentOpen(false)} onRecorded={() => setCustomerOrders(getOrdersForCustomer(customer.id))} />}
     {settingsAndBackupModals}
     {editCustomerOpen && <EditCustomerForm customer={customer} onClose={() => setEditCustomerOpen(false)} onSave={handleUpdateCustomer} />}
     {deleteCustomerConfirmOpen && (

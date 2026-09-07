@@ -120,6 +120,18 @@ body {
   margin: 0 0 6px;
 }
 
+/* Teks status kosong/hint (mis. "Belum ada data", "Tidak ada aksi yang
+   perlu dilakukan") — dipakai puluhan kali di panels.tsx/order/page.tsx/
+   page.tsx, sama seperti .eyebrow di atas TIDAK PERNAH punya CSS dasar
+   (cuma ada varian tersempit ".order-list > .panel-hint" yg gak nyetel
+   warna/ukuran) — ditemukan saat membangun QuickPaymentModal. */
+.panel-hint {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
 .brand {
   font-size: 20px;
   font-weight: 700;
@@ -1016,5 +1028,65 @@ body {
   .bottom-nav button, .bottom-nav a { padding: 7px 9px; }
   .bottom-nav span { font-size: 10px; }
 }
+
+/* ===== QUICK PAYMENT MODAL — tombol pintas "Catat Pembayaran" ===== */
+.quick-payment label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 14px 0;
+  color: var(--ink);
+}
+.quick-payment-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 10px;
+}
+.quick-payment-back:hover { color: var(--brown); }
+.quick-payment-order-list { display: grid; gap: 8px; }
+.quick-payment-order-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 10px;
+  padding: 11px 13px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.quick-payment-order-row b { display: block; font-size: 13px; color: var(--ink); }
+.quick-payment-order-row small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.quick-payment-order-row.active { border-color: var(--brown); background: rgba(116, 80, 52, 0.05); }
+.quick-payment-order-sisa { font-size: 12px; font-weight: 700; color: var(--terracotta); white-space: nowrap; }
+.quick-payment-preview { font-size: 12.5px; color: var(--muted); margin: 4px 0 14px; }
+.quick-payment-preview b { color: var(--brown); }
+.quick-payment-success { text-align: center; padding: 10px 0 4px; }
+.quick-payment-success-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e7efdf, #dbe8cf);
+  color: var(--olive);
+  margin-bottom: 14px;
+}
+.quick-payment-success h2 { margin: 0 0 8px; }
+.quick-payment-success p { margin: 0 0 6px; font-size: 13px; }
+.quick-payment-success .form-actions { margin-top: 16px; justify-content: center; }
 
 

@@ -1,12 +1,12 @@
 "use client";
 
-import { ArrowLeft, Bell, Check, ChevronRight, Copy, ExternalLink, Heart, MoreHorizontal, Pencil, Plus, Search, ShoppingCart, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ArrowLeft, Bell, Check, ChevronRight, Copy, ExternalLink, Heart, MoreHorizontal, Package, Pencil, Plus, Search, ShoppingCart, SlidersHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 
 import { productCategories, formatRupiah, modifikasiInfo, ongkirInfo, splitShopeeInfo, rekeningInfo, nonBookMasterCatalog, type Product } from "../data/products";
-import { getProducts, addProduct, updateProduct, deleteProduct, calculateProductMetrics } from "../data/store";
+import { getProducts, addProduct, updateProduct, deleteProduct, calculateProductMetrics, getWarehouses, getInventoryForProduct, getTotalAvailable, inventoryAvailable, setStock, type Warehouse } from "../data/store";
 import { getCollections, type Collection } from "../data/collections";
 import { MoneyInput } from "../components/MoneyInput";
 import { BottomNav } from "../components/BottomNav";
@@ -62,6 +62,9 @@ export default function ProductsPage() {
   const [form, setForm] = useState<ProductFormState>(emptyForm);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [collectionList, setCollectionList] = useState<Collection[]>([]);
+  const [warehouseList, setWarehouseList] = useState<Warehouse[]>([]);
+  const [stockModalProduct, setStockModalProduct] = useState<Product | null>(null);
+  const [stockForm, setStockForm] = useState<Record<string, string>>({});
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
@@ -69,7 +72,26 @@ export default function ProductsPage() {
   useEffect(() => {
     setProductList(getProducts());
     setCollectionList(getCollections());
+    setWarehouseList(getWarehouses());
   }, []);
+
+  // ===== KELOLA STOK — per gudang, per produk =====
+  const openStockModal = (product: Product) => {
+    const inv = getInventoryForProduct(product.id);
+    const initial: Record<string, string> = {};
+    getWarehouses().forEach(w => { initial[w.id] = String(inv.find(i => i.warehouseId === w.id)?.stockOnHand || 0); });
+    setStockForm(initial);
+    setStockModalProduct(product);
+  };
+
+  const handleSaveStock = () => {
+    if (!stockModalProduct) return;
+    warehouseList.forEach(w => {
+      setStock(stockModalProduct.id, w.id, Number(stockForm[w.id]) || 0);
+    });
+    notify(`Stok ${stockModalProduct.name} diperbarui`);
+    setStockModalProduct(null);
+  };
 
   const toggleFormCollection = (collectionId: string) => {
     setForm(f => ({
@@ -283,8 +305,15 @@ export default function ProductsPage() {
                   <span className="metric-chip discount">-{formatRupiah(metrics.discountAmount)}</span>
                   <span className="metric-chip profit">Laba {formatRupiah(metrics.grossProfit)}</span>
                 </div>}
+                {warehouseList.length > 0 && (() => {
+                  const stok = getTotalAvailable(product.id);
+                  return <div className="product-metrics">
+                    <span className={`metric-chip ${stok > 0 ? "profit" : "discount"}`}>{stok > 0 ? `📦 Stok ${stok}` : "📦 Stok Habis"}</span>
+                  </div>;
+                })()}
                 <div className="product-card-actions">
                   <button className="product-add" onClick={e => { e.stopPropagation(); addToCart(product); }}><Plus size={16} /> Tambah</button>
+                  <button className="product-edit" onClick={e => { e.stopPropagation(); openStockModal(product); }} title="Kelola Stok"><Package size={14} /></button>
                   <button className="product-edit" onClick={e => { e.stopPropagation(); openEditForm(product); }}><Pencil size={14} /></button>
                 </div>
               </div>
@@ -563,6 +592,35 @@ export default function ProductsPage() {
           <div className="confirm-actions">
             <button className="secondary" onClick={() => setShowDeleteConfirm(false)}>Batal</button>
             <button className="danger" onClick={handleDeleteProduct}><Trash2 size={15} /> Hapus</button>
+          </div>
+        </section>
+      </div>
+    )}
+
+    {stockModalProduct && (
+      <div className="overlay" onClick={() => setStockModalProduct(null)}>
+        <section className="modal marketer-modal" onClick={e => e.stopPropagation()}>
+          <button className="close" onClick={() => setStockModalProduct(null)}>×</button>
+          <p className="eyebrow">KELOLA STOK</p>
+          <h2>{stockModalProduct.emoji} {stockModalProduct.name}</h2>
+          {warehouseList.length === 0 ? (
+            <p className="field-hint">Belum ada gudang terdaftar.</p>
+          ) : (
+            warehouseList.map(w => (
+              <label key={w.id}>{w.name} ({w.code})
+                <input
+                  type="number"
+                  min="0"
+                  value={stockForm[w.id] ?? "0"}
+                  onChange={e => setStockForm({ ...stockForm, [w.id]: e.target.value })}
+                  placeholder="0"
+                />
+              </label>
+            ))
+          )}
+          <p className="marketer-modal-hint">Angka di sini adalah stok fisik yang benar-benar ada di gudang sekarang — dipakai buat mengurangi otomatis tiap ada order "Ready Stock", dan buat koreksi manual (barang baru datang, hasil cek fisik, dst).</p>
+          <div className="form-actions">
+            <button className="primary" onClick={handleSaveStock}><Check size={16} /> Simpan Stok</button>
           </div>
         </section>
       </div>

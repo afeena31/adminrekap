@@ -11,7 +11,7 @@ import { goBack } from "../lib/goBack";
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, determineRekening, SPLIT_BILL_PRODUK, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
-import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, recordPaymentForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus } from "../data/store";
+import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, recordPaymentForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, getWarehouses, getTotalAvailable, adjustStock, getInventoryForProduct, inventoryAvailable, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus, type Warehouse } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
 import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections, getCollections, getCollectionIdsForItem, setCategoriesForItem, removeItemLinksForOrder, type Collection } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
@@ -52,6 +52,8 @@ type OrderItem = {
   finalPrice?: number;
   productionStage?: ProductionStage;
   shipmentStage?: ShipmentStage;
+  stockSource?: "ready" | "po";
+  warehouseId?: string;
 };
 
 
@@ -168,6 +170,7 @@ function OrderPageInner() {
   // HYDRATION FIX effect di bawah, sama seperti productList/marketers.
   const [customerList, setCustomerList] = useState<{ id: string; name: string; city: string }[]>([]);
   const [collectionsList, setCollectionsList] = useState<Collection[]>([]);
+  const [warehouseList, setWarehouseList] = useState<Warehouse[]>([]);
   // Kategori Produk yang dicentang per-item (bukan per-invoice) — key: item.id,
   // value: daftar collectionId. Diisi ulang dari getCollectionIdsForItem saat
   // order dibuka utk diedit; disimpan lewat setCategoriesForItem tiap Generate
@@ -191,6 +194,7 @@ function OrderPageInner() {
     setCustomerList(getCustomers());
     setBatchNames(getBatchNames());
     setCollectionsList(getCollections());
+    setWarehouseList(getWarehouses());
   }, []);
 
   useEffect(() => {
@@ -430,6 +434,17 @@ function OrderPageInner() {
     setItems(prev => prev.map(item => item.id === id ? { ...item, shipmentStage: stage || undefined } : item));
   };
 
+  // Produk yang sama bisa PO di satu order & Ready Stock di order lain
+  // (mis. Niqab/Manset kadang PO kadang sisa stok jadi ready) — ditandai
+  // per-item di sini, bukan tetap di Product. Ganti ke "po" bersihkan
+  // warehouseId (gak relevan lagi).
+  const updateStockSource = (id: string, source: "ready" | "po") => {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, stockSource: source, warehouseId: source === "po" ? undefined : item.warehouseId } : item));
+  };
+  const updateItemWarehouse = (id: string, warehouseId: string) => {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, warehouseId: warehouseId || undefined } : item));
+  };
+
   const removeItem = (id: string) => {
     setItems(prev => prev.filter(item => item.id !== id));
     setItemCategoryMap(prev => {
@@ -579,7 +594,27 @@ function OrderPageInner() {
       finalPrice: item.finalPrice,
       productionStage: item.productionStage || "po",
       shipmentStage: item.shipmentStage,
+      stockSource: item.stockSource,
+      warehouseId: item.warehouseId,
     }));
+
+    // ===== REKONSILIASI STOK GUDANG =====
+    // Cuma item "Ready Stock" (stockSource==="ready") yang benar-benar
+    // memotong Inventory — item "PO"/tanpa tanda SENGAJA tidak menyentuh
+    // stok sama sekali (barangnya belum ada fisiknya). Dikerjakan dgn pola
+    // "kembalikan yang lama dulu, baru potong yang baru" — aman dipakai
+    // baik utk order baru (existingOrder.items kosong, restore jadi no-op)
+    // maupun edit (qty/gudang/sumber berubah bebas tanpa bikin stok nyimpang).
+    (existingOrder?.items || []).forEach(oldItem => {
+      if (oldItem.stockSource === "ready" && oldItem.productId && oldItem.warehouseId) {
+        adjustStock(oldItem.productId, oldItem.warehouseId, oldItem.qty);
+      }
+    });
+    snapshots.forEach(item => {
+      if (item.stockSource === "ready" && item.productId && item.warehouseId) {
+        adjustStock(item.productId, item.warehouseId, -item.qty);
+      }
+    });
 
 
     const orderRecord: OrderRecord = {
@@ -812,6 +847,8 @@ function OrderPageInner() {
       finalPrice: item.finalPrice,
       productionStage: item.productionStage,
       shipmentStage: item.shipmentStage,
+      stockSource: item.stockSource,
+      warehouseId: item.warehouseId,
     }));
     setItems(loadedItems);
     const loadedCategoryMap: Record<string, string[]> = {};
@@ -897,6 +934,15 @@ function OrderPageInner() {
     if (!editingOrderId) return;
     const deletedId = editingOrderId;
     const deletedNumber = existingOrders.find(o => o.id === deletedId)?.number || "";
+    // Order yang mau dihapus mungkin punya item "Ready Stock" yang udah
+    // motong Inventory — kembalikan dulu sebelum order-nya beneran hilang,
+    // supaya stok gudang gak nyangkut "hilang" nunjuk order yang udah gak ada.
+    const orderBeingDeleted = getOrderById(deletedId);
+    orderBeingDeleted?.items.forEach(item => {
+      if (item.stockSource === "ready" && item.productId && item.warehouseId) {
+        adjustStock(item.productId, item.warehouseId, item.qty);
+      }
+    });
     deleteOrder(deletedId);
     removeFeeForOrder(deletedId);
     removePaymentsForOrder(deletedId);
@@ -1252,6 +1298,32 @@ function OrderPageInner() {
                     </button>
                   );
                 })}
+              </div>
+            )}
+          </div>
+          {/* ===== SUMBER STOK — PO (default) atau Ready Stock dari gudang ===== */}
+          {/* Produk yang sama bisa PO di 1 order & Ready Stock di order lain
+              (mis. Niqab/Manset kadang PO kadang sisa stok), makanya ditandai
+              per-item di sini, bukan tetap per Product. */}
+          <div className="order-item-stages">
+            <div className="order-item-stage-field">
+              <small className="category-label">📦 Sumber Stok</small>
+              <select value={item.stockSource || "po"} onChange={e => updateStockSource(item.id, e.target.value as "ready" | "po")}>
+                <option value="po">📝 PO / Pre-Order</option>
+                <option value="ready">✅ Ready Stock</option>
+              </select>
+            </div>
+            {item.stockSource === "ready" && (
+              <div className="order-item-stage-field">
+                <small className="category-label">🏬 Gudang</small>
+                <select value={item.warehouseId || ""} onChange={e => updateItemWarehouse(item.id, e.target.value)}>
+                  <option value="">— Pilih gudang —</option>
+                  {warehouseList.filter(w => w.active).map(w => {
+                    const inv = item.productId ? getInventoryForProduct(item.productId).find(i => i.warehouseId === w.id) : undefined;
+                    const avail = inv ? inventoryAvailable(inv) : 0;
+                    return <option key={w.id} value={w.id}>{w.name} (sisa {avail})</option>;
+                  })}
+                </select>
               </div>
             )}
           </div>

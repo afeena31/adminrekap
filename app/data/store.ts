@@ -100,6 +100,13 @@ export type OrderItemSnapshot = {
   // ===== Tahap produksi & pengiriman (opsional — undefined = "po", belum diisi) =====
   productionStage?: ProductionStage;
   shipmentStage?: ShipmentStage;
+  // ===== Stok (opsional — undefined = "po", TIDAK memotong stok gudang) =====
+  // Produk yang sama bisa PO di satu order dan Ready Stock di order lain
+  // (mis. Niqab/Manset kadang PO kadang sisa stok jadi ready) — makanya ini
+  // ditandai per-ITEM, bukan tetap di level Product. warehouseId cuma
+  // relevan kalau stockSource === "ready".
+  stockSource?: "ready" | "po";
+  warehouseId?: string;
 };
 
 
@@ -801,6 +808,23 @@ export function deductStock(productId: string, warehouseId: string, qty: number)
   });
   saveInventory(updated);
   return updated;
+}
+
+// Set stok on-hand produk di 1 gudang secara langsung — dipakai form
+// "Kelola Stok" di Katalog (input stok awal / koreksi manual). Bikin record
+// baru kalau belum pernah ada Inventory utk pasangan produk+gudang ini.
+export function setStock(productId: string, warehouseId: string, stockOnHand: number): Inventory[] {
+  const list = getInventory();
+  const existing = list.find(i => i.productId === productId && i.warehouseId === warehouseId);
+  if (existing) return updateInventory({ ...existing, stockOnHand: Math.max(0, stockOnHand) });
+  return addInventory({ id: "inv-" + productId + "-" + warehouseId, productId, warehouseId, stockOnHand: Math.max(0, stockOnHand), reserved: 0, minimumStock: 0 });
+}
+
+// Tambah/kurangi stok on-hand (delta boleh negatif) — dipakai saat order
+// dengan item "Ready Stock" disimpan (kurangi) atau dihapus/diedit (kembalikan).
+export function adjustStock(productId: string, warehouseId: string, delta: number): Inventory[] {
+  const current = getInventory().find(i => i.productId === productId && i.warehouseId === warehouseId)?.stockOnHand || 0;
+  return setStock(productId, warehouseId, current + delta);
 }
 
 // Tambah reserved ke gudang tertentu (saat order di-reserve)

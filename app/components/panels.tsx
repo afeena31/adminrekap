@@ -96,24 +96,6 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
       {ops.attention.map(item => <button key={item.title} onClick={() => onTab("Order")}><b>{item.title}</b><span>{item.desc}</span><ChevronRight size={17}/></button>)}
     </section>
 
-    {/* ===== FULFILLMENT DECISION — premium recommendation ===== */}
-    <section className="card fulfillment">
-      <div className="section-head">
-        <div><h2>Fulfillment Decision</h2><p>Rekomendasi operasional lintas semua order customer ini.</p></div>
-        <span className="ready">{fulfillmentDecisionInfo[ops.fulfillmentDecision].emoji} {fulfillmentDecisionInfo[ops.fulfillmentDecision].name}</span>
-      </div>
-      <div className="decision">
-        <b>{ops.fulfillmentDecisionNote}</b>
-        <p>Keputusan ini memengaruhi bagaimana setiap produk dikirim.</p>
-        <div className="decision-reason">
-          <div><Check size={15}/><span>Rekomendasi sistem berdasarkan status produksi & permintaan customer.</span></div>
-          <div><Clock size={15}/><span>Estimasi siap kirim: <span className="decision-expected">12 Juni</span></span></div>
-        </div>
-        <button onClick={() => onTab("Shipment")}>Kelola Pengiriman <ArrowRight size={14}/></button>
-      </div>
-    </section>
-
-
     {/* ===== PRODUCT STATUS CARDS ===== */}
     <section className="card product-cards">
       <div className="section-head">

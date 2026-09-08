@@ -11,7 +11,7 @@ import { goBack } from "../../lib/goBack";
 
 import {
   getCollection, getCollectionStats, getOrdersForCollection,
-  removeOrderFromCollection,
+  removeOrderFromCollection, removeOrderItemLinksFromCollection,
   updateCollection, softDeleteCollection, hardDeleteCollection,
   createOrderInCollection, matchCustomerId,
   getItemLinksForCollection,
@@ -133,6 +133,19 @@ export default function CollectionDetailPage() {
   });
   const customerList = Array.from(customerMap.entries()).map(([key, val]) => ({ key, ...val }));
 
+  // ===== SEMUA ORDER collection ini, gabungan order-level + item-level =====
+  // orders (getOrdersForCollection) cuma tau tautan order-level ("Tambah
+  // Order" manual / batch Amna) — order yang tertaut LEWAT Kategori Produk
+  // per-item aja gak pernah muncul di situ. Sebelumnya tab Order/Payment/
+  // Shipment/Aktivitas semua pakai `orders` mentah, jadi collection yang
+  // orders-nya cuma dari Kategori Produk (mis. "Manset") tampil "Belum ada
+  // order" di situ padahal tab Customer (yang sudah pakai dedupedItemLinks)
+  // justru nampilin data dengan benar — dua tab collection yang sama
+  // nunjukin kesimpulan berbeda. Disamakan di sini.
+  const itemLinkedOrdersMap = new Map<string, OrderRecord>();
+  dedupedItemLinks.forEach(({ order: o }) => { if (!itemLinkedOrdersMap.has(o.id)) itemLinkedOrdersMap.set(o.id, o); });
+  const allOrders = [...orders, ...Array.from(itemLinkedOrdersMap.values())];
+
   // ===== ITEM BREAKDOWN (per Kategori Produk) — "kaos kaki closing berapa,
   // siapa saja yang pesan" =====
   const itemBreakdown = dedupedItemLinks.map(({ order: o, item }) => ({
@@ -147,7 +160,7 @@ export default function CollectionDetailPage() {
   }));
 
   // ===== PAYMENT AGGREGATION =====
-  const paymentList = orders.map(o => ({
+  const paymentList = allOrders.map(o => ({
     orderId: o.id,
     orderNumber: o.number,
     customer: o.customer,
@@ -157,7 +170,7 @@ export default function CollectionDetailPage() {
   }));
 
   // ===== SHIPMENT AGGREGATION =====
-  const shipmentList = orders.map(o => ({
+  const shipmentList = allOrders.map(o => ({
     orderId: o.id,
     orderNumber: o.number,
     customer: o.customer,
@@ -166,7 +179,7 @@ export default function CollectionDetailPage() {
   }));
 
   // ===== ACTIVITY (derived from orders) =====
-  const activityList = [...orders]
+  const activityList = [...allOrders]
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 10)
     .map(o => ({
@@ -247,8 +260,13 @@ export default function CollectionDetailPage() {
   };
 
   const handleRemoveOrder = (orderId: string) => {
+    // Order bisa tertaut ke collection ini lewat 2 jalur (order-level "Tambah
+    // Order" manual/batch, ATAU item-level Kategori Produk) — lepas keduanya
+    // sekaligus, gak peduli order ini masuk lewat jalur yang mana.
     removeOrderFromCollection(collection.id, orderId);
+    removeOrderItemLinksFromCollection(collection.id, orderId);
     setOrders(getOrdersForCollection(collection.id));
+    setItemLinks(getItemLinksForCollection(collection.id));
     notify("Order dihapus dari collection");
   };
 
@@ -388,7 +406,7 @@ export default function CollectionDetailPage() {
 
     {activeTab === "order" && (
       <div className="collection-order-list">
-        {orders.length === 0 && <div className="collection-empty">
+        {allOrders.length === 0 && <div className="collection-empty">
           <span>📦</span>
           <h3>Belum ada order</h3>
           <p>Tambahkan order pertama untuk collection ini.</p>
@@ -396,7 +414,7 @@ export default function CollectionDetailPage() {
             <Plus size={15} /> Tambah Order
           </button>
         </div>}
-        {orders.map(o => (
+        {allOrders.map(o => (
           <div className="collection-order-row" key={o.id}>
             <span className="collection-order-emoji">{o.items[0]?.emoji || "📦"}</span>
             <div className="collection-order-info">

@@ -408,6 +408,18 @@ export function removeOrderFromCollection(collectionId: string, orderId: string)
   return updated;
 }
 
+// Lepaskan SEMUA tautan per-item order ini dari SATU collection tertentu
+// (beda dari removeItemLinksForOrder di bawah yang melepas dari SEMUA
+// collection) — dipakai bareng removeOrderFromCollection saat admin klik
+// "Hapus dari collection" di tab Order, supaya order yang cuma tertaut lewat
+// Kategori Produk (per-item, bukan lewat "Tambah Order" manual) juga beneran
+// lepas, bukan cuma order-level yang gak pernah ada tautannya sejak awal.
+export function removeOrderItemLinksFromCollection(collectionId: string, orderId: string): CollectionOrderItem[] {
+  const updated = getCollectionOrderItems().filter(l => !(l.collectionId === collectionId && l.orderId === orderId));
+  saveCollectionOrderItems(updated);
+  return updated;
+}
+
 // Lepaskan order dari SEMUA Collection sekaligus — dipakai saat order itu
 // sendiri dihapus permanen, supaya tidak ada Collection yang masih menghitung
 // order yang sudah tidak ada.

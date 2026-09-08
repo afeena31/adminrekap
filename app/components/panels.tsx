@@ -4,7 +4,7 @@ import { AlertCircle, Check, ChevronRight, ClipboardList, MapPin, UserRound, Box
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { Customer, PaymentData } from "../data/customers";
-import { getOrdersForCustomer, formatRupiah, computePaymentTotals, getPelunasanWhatsAppUrl, productionStageInfo, shipmentStageInfo, type OrderRecord, type OrderItemSnapshot } from "../data/store";
+import { getOrdersForCustomer, formatRupiah, computePaymentTotals, getPelunasanWhatsAppUrl, productionStageInfo, shipmentStageInfo, productionStageOrder, shipmentStageOrder, updateItemStage, type OrderRecord, type OrderItemSnapshot, type ProductionStage, type ShipmentStage } from "../data/store";
 
 import {
   getOperations,
@@ -103,7 +103,7 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
         <button onClick={() => onTab("Order")}>Lihat semua</button>
       </div>
       {realProductItems.map(({ order, item }) => (
-        <RealProductCard key={item.id} order={order} item={item} />
+        <RealProductCard key={item.id} order={order} item={item} onChange={() => setRealOrders(getOrdersForCustomer(customer.id))} />
       ))}
       {ops.productCards.map(card => (
         <ProductCard key={card.id} card={card} onAction={handleAction} />
@@ -229,11 +229,15 @@ function ActionCenter({ ops, onAction, unpaidRealOrders, onTagihPelunasan }: { o
 
 // ===== PRODUCT STATUS CARD =====
 // ===== PRODUCT STATUS CARD — order ASLI (bukan demo) =====
-// Read-only di sini (ubah tahap lewat halaman Order) — cuma 2 dimensi yang
-// beneran ada datanya (Produksi, Pengiriman) + Payment (dihitung dari
-// order.dp/total). TIDAK ikut menampilkan Lokasi/Shipping Plan/Fulfillment
-// seperti kartu demo — itu dimensi yang gak ada tracking asli-nya sama
-// sekali, daripada ditebak/dikosongkan asal, mendingan gak ditampilkan.
+// Bisa diubah langsung dari sini (dropdown Produksi/Pengiriman) lewat
+// updateItemStage (store.ts) — sebelumnya read-only, admin harus buka form
+// Order lengkap & scroll ke item yang benar cuma utk ganti 1 tahap, yang
+// bikin fitur ini kerasa "gak ada" padahal datanya sudah ada. Payment TETAP
+// read-only di sini (dihitung dari order.dp/total, bukan field yang bisa
+// diketik manual) — hanya 2 dimensi yang beneran ada datanya. TIDAK ikut
+// menampilkan Lokasi/Shipping Plan/Fulfillment seperti kartu demo — itu
+// dimensi yang gak ada tracking asli-nya sama sekali, daripada
+// ditebak/dikosongkan asal, mendingan gak ditampilkan.
 // Tone dipetakan ke kosakata yang SUDAH ada CSS-nya (dipakai kartu demo) —
 // bukan bikin nama tone baru yang gak pernah punya gaya (className tanpa
 // definisi CSS = tampil polos, sama seperti bug ".eyebrow" yang pernah
@@ -241,12 +245,11 @@ function ActionCenter({ ops, onAction, unpaidRealOrders, onTagihPelunasan }: { o
 const productionTone: Record<string, string> = { po: "po", produksi: "production", qc: "qc", packing: "packing", "siap-kirim": "ready" };
 const paymentTone: Record<string, string> = { lunas: "paid", dp: "dp", belum: "unpaid" };
 
-function RealProductCard({ order, item }: { order: OrderRecord; item: OrderItemSnapshot }) {
+function RealProductCard({ order, item, onChange }: { order: OrderRecord; item: OrderItemSnapshot; onChange: () => void }) {
   const payStatus = order.dp >= order.total ? "lunas" : order.dp > 0 ? "dp" : "belum";
   const paymentLabel = payStatus === "lunas" ? "🟢 Lunas" : payStatus === "dp" ? "🟡 DP" : "🔴 Belum Bayar";
   const prod = productionStageInfo[item.productionStage || "po"];
   const prodTone = productionTone[item.productionStage || "po"];
-  const ship = item.shipmentStage ? shipmentStageInfo[item.shipmentStage] : null;
   return <article className="product-card real">
     <div className="product-card-head">
       <span className="product-card-emoji">{item.emoji}</span>
@@ -258,10 +261,20 @@ function RealProductCard({ order, item }: { order: OrderRecord; item: OrderItemS
     </div>
     <div className="product-card-grid">
       <div className="psc-field"><small>💰 Payment</small><b className={`psc-value ${paymentTone[payStatus]}`}>{paymentLabel}</b></div>
-      <div className="psc-field"><small>🏭 Produksi</small><b className={`psc-value ${prodTone}`}>{prod.emoji} {prod.name}</b></div>
-      <div className="psc-field"><small>🚚 Pengiriman</small><b className={`psc-value ${ship ? "" : "none"}`}>{ship ? `${ship.emoji} ${ship.name}` : "— Belum diisi"}</b></div>
+      <div className="order-item-stage-field">
+        <small className="category-label">🏭 Produksi</small>
+        <select value={item.productionStage || "po"} onChange={e => { updateItemStage(order.id, item.id, { productionStage: e.target.value as ProductionStage }); onChange(); }}>
+          {productionStageOrder.map(s => <option key={s} value={s}>{productionStageInfo[s].emoji} {productionStageInfo[s].name}</option>)}
+        </select>
+      </div>
+      <div className="order-item-stage-field">
+        <small className="category-label">🚚 Pengiriman</small>
+        <select value={item.shipmentStage || ""} onChange={e => { updateItemStage(order.id, item.id, { shipmentStage: (e.target.value || undefined) as ShipmentStage | undefined }); onChange(); }}>
+          <option value="">— Belum diisi —</option>
+          {shipmentStageOrder.map(s => <option key={s} value={s}>{shipmentStageInfo[s].emoji} {shipmentStageInfo[s].name}</option>)}
+        </select>
+      </div>
     </div>
-    <Link href={`/order?orderId=${order.id}`} className="product-card-edit-link">Ubah tahap di halaman Order <ArrowRight size={13} /></Link>
   </article>;
 }
 

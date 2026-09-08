@@ -459,6 +459,20 @@ export function updateOrder(order: OrderRecord): OrderRecord[] {
   return updated;
 }
 
+// Ubah tahap produksi/pengiriman SATU item, tanpa harus buka form Order
+// lengkap dulu — dipakai dari kartu produk di profil customer (RealProductCard,
+// panels.tsx) supaya admin bisa klik-ubah langsung dari situ.
+export function updateItemStage(orderId: string, itemId: string, patch: { productionStage?: ProductionStage; shipmentStage?: ShipmentStage }): OrderRecord | null {
+  const order = getOrderById(orderId);
+  if (!order) return null;
+  const updated: OrderRecord = {
+    ...order,
+    items: order.items.map(it => (it.id === itemId ? { ...it, ...patch } : it)),
+  };
+  updateOrder(updated);
+  return updated;
+}
+
 // Hapus order permanen. Pemanggil (order/page.tsx) bertanggung jawab juga
 // membersihkan data terkait (removeFeeForOrder, removeOrderFromAllCollections)
 // supaya tidak ada fee/collection yang nyangkut menunjuk ke order yang sudah hilang.

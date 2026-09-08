@@ -1,7 +1,7 @@
 "use client";
 
 
-import { ArrowLeft, Bell, Check, ChevronRight, Copy, FileText, MessageCircle, Minus, Plus, Search, Trash2, Landmark } from "lucide-react";
+import { ArrowLeft, Bell, Check, ChevronLeft, ChevronRight, Copy, FileText, MessageCircle, Minus, Plus, Search, Trash2, Landmark } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -104,6 +104,7 @@ function OrderPageInner() {
   const [showJilbabForm, setShowJilbabForm] = useState(false);
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState("");
+  const [variantPickProduct, setVariantPickProduct] = useState<Product | null>(null);
   const [ongkirId, setOngkirId] = useState("id-jawa");
   const [customOngkir, setCustomOngkir] = useState(0);
   const [customOngkirLabel, setCustomOngkirLabel] = useState("");
@@ -380,7 +381,14 @@ function OrderPageInner() {
   };
 
 
-  const addProduct = (product: Product) => {
+  // variant diisi dari Product.variants (mis. warna Manset) — DITANYAKAN
+  // dulu kalau produknya punya >1 varian (lihat picker di bawah), supaya
+  // tersimpan di item.detail dan ikut kebaca di semua tempat yang nampilin
+  // detail item (invoice, WA, rincian Collection). Sebelumnya field
+  // Product.variants ada datanya tapi TIDAK PERNAH ditanyakan sama sekali
+  // di sini — jadi mis. "Manset Standar" (5 warna) gak pernah kejelasan
+  // warna apa yang benar-benar dipesan.
+  const addProduct = (product: Product, variant?: string) => {
     setItems(prev => [...prev, {
       id: product.id + "-" + Date.now(),
       name: product.name,
@@ -391,9 +399,11 @@ function OrderPageInner() {
       feeMarketer: product.feeMarketer || 0,
       category: product.category,
       productId: product.id,
+      detail: variant,
     }]);
     setShowProductPicker(false);
-    notify(`${product.name} ditambahkan`);
+    setVariantPickProduct(null);
+    notify(`${product.name}${variant ? ` (${variant})` : ""} ditambahkan`);
   };
 
   const updateQty = (id: string, delta: number) => {
@@ -1528,26 +1538,41 @@ function OrderPageInner() {
 
 
     {/* ===== PRODUCT PICKER MODAL ===== */}
-    {showProductPicker && <div className="overlay" onClick={() => setShowProductPicker(false)}>
+    {showProductPicker && <div className="overlay" onClick={() => { setShowProductPicker(false); setVariantPickProduct(null); }}>
       <section className="modal product-picker" onClick={e => e.stopPropagation()}>
-        <button className="close" onClick={() => setShowProductPicker(false)}>×</button>
-        <h2>Pilih Produk</h2>
-        <div className="picker-search">
-          <Search size={16} />
-          <input placeholder="Cari produk..." value={productSearch} onChange={e => setProductSearch(e.target.value)} />
-        </div>
-        <div className="picker-list">
-          {productList
-            .filter(p => p.category !== "amna-jilbab" && p.active !== false)
-            .filter(p => p.name.toLowerCase().includes(productSearch.trim().toLowerCase()))
-            .map(p => (
-            <button key={p.id} onClick={() => addProduct(p)}>
-              <span className="picker-emoji">{p.emoji}</span>
-              <div><b>{p.name}</b><small>{formatRupiah(p.price)}</small></div>
-              <Plus size={16} />
-            </button>
-          ))}
-        </div>
+        <button className="close" onClick={() => { setShowProductPicker(false); setVariantPickProduct(null); }}>×</button>
+        {variantPickProduct ? (
+          <>
+            <button type="button" className="quick-payment-back" onClick={() => setVariantPickProduct(null)}><ChevronLeft size={16} /> Kembali</button>
+            <h2>Pilih Warna/Varian</h2>
+            <p className="field-hint" style={{ marginBottom: 14 }}>{variantPickProduct.emoji} {variantPickProduct.name} · {formatRupiah(variantPickProduct.price)}</p>
+            <div className="warna-chips">
+              {variantPickProduct.variants!.map(v => (
+                <button key={v} type="button" onClick={() => addProduct(variantPickProduct, v)}>{v}</button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <h2>Pilih Produk</h2>
+            <div className="picker-search">
+              <Search size={16} />
+              <input placeholder="Cari produk..." value={productSearch} onChange={e => setProductSearch(e.target.value)} />
+            </div>
+            <div className="picker-list">
+              {productList
+                .filter(p => p.category !== "amna-jilbab" && p.active !== false)
+                .filter(p => p.name.toLowerCase().includes(productSearch.trim().toLowerCase()))
+                .map(p => (
+                <button key={p.id} onClick={() => (p.variants && p.variants.length > 1) ? setVariantPickProduct(p) : addProduct(p, p.variants?.[0])}>
+                  <span className="picker-emoji">{p.emoji}</span>
+                  <div><b>{p.name}</b><small>{formatRupiah(p.price)}</small></div>
+                  <Plus size={16} />
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </section>
     </div>}
 

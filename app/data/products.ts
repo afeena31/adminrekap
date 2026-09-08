@@ -32,7 +32,6 @@ export type ProductCategory = {
 export const productCategories: ProductCategory[] = [
   { id: "buku-parenting", name: "Buku Parenting", emoji: "📚", description: "Buku parenting pilihan" },
   { id: "boardbook", name: "Boardbook", emoji: "📖", description: "Boardbook anak" },
-  { id: "lebah-asaqu", name: "Lebah AsaQu", emoji: "🐝", description: "Buku Lebah AsaQu" },
   { id: "amna-jilbab", name: "Amna Jilbab", emoji: "🧕", description: "Jilbab Pitch Black Anti UV" },
   { id: "niqab", name: "Niqab", emoji: "🖤", description: "Niqab pilihan" },
   { id: "aksesoris", name: "Aksesoris", emoji: "🧤", description: "Handsock, kaos kaki, dll" },

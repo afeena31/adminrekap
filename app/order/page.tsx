@@ -1254,7 +1254,7 @@ function OrderPageInner() {
             <div className="order-item-stage-field">
               <small className="category-label">🚚 Tahap Pengiriman</small>
               <select value={item.shipmentStage || ""} onChange={e => updateShipmentStage(item.id, e.target.value as ShipmentStage | "")}>
-                <option value="">— Belum diisi —</option>
+                <option value="">— Perlu Diresi —</option>
                 {(Object.keys(shipmentStageInfo) as ShipmentStage[]).map(stage => <option key={stage} value={stage}>{shipmentStageInfo[stage].emoji} {shipmentStageInfo[stage].name}</option>)}
               </select>
             </div>

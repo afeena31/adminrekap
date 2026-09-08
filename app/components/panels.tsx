@@ -242,7 +242,7 @@ function ActionCenter({ ops, onAction, unpaidRealOrders, onTagihPelunasan }: { o
 // bukan bikin nama tone baru yang gak pernah punya gaya (className tanpa
 // definisi CSS = tampil polos, sama seperti bug ".eyebrow" yang pernah
 // ditemukan sebelumnya).
-const productionTone: Record<string, string> = { po: "po", produksi: "production", qc: "qc", packing: "packing", "siap-kirim": "ready" };
+const productionTone: Record<string, string> = { po: "po", produksi: "production", "antre-qc": "qc", qc: "qc", "antre-packing": "packing", packing: "packing", "siap-kirim": "ready" };
 const paymentTone: Record<string, string> = { lunas: "paid", dp: "dp", belum: "unpaid" };
 
 function RealProductCard({ order, item, onChange }: { order: OrderRecord; item: OrderItemSnapshot; onChange: () => void }) {
@@ -270,7 +270,7 @@ function RealProductCard({ order, item, onChange }: { order: OrderRecord; item: 
       <div className="order-item-stage-field">
         <small className="category-label">🚚 Pengiriman</small>
         <select value={item.shipmentStage || ""} onChange={e => { updateItemStage(order.id, item.id, { shipmentStage: (e.target.value || undefined) as ShipmentStage | undefined }); onChange(); }}>
-          <option value="">— Belum diisi —</option>
+          <option value="">— Perlu Diresi —</option>
           {shipmentStageOrder.map(s => <option key={s} value={s}>{shipmentStageInfo[s].emoji} {shipmentStageInfo[s].name}</option>)}
         </select>
       </div>

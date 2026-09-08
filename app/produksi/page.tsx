@@ -17,7 +17,7 @@ import {
 
 type BoardMode = "produksi" | "pengiriman";
 
-const shipmentStageColumns: ShipmentStage[] = ["proses-resi", "dalam-pengiriman", "ditunda", "selesai", "retur", "refund"];
+const shipmentStageColumns: ShipmentStage[] = ["antre-packing", "sudah-dipacking", "proses-resi", "dalam-pengiriman", "ditunda", "selesai", "retur", "refund"];
 
 // ===== PAPAN PRODUKSI & PENGIRIMAN — lintas customer =====
 // Tahap 4 (lanjutan kecil): item order ASLI (productionStage/shipmentStage,

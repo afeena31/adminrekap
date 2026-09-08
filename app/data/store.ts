@@ -29,28 +29,49 @@ export type CustomRequest = {
 // Kaki sudah Siap Kirim), sama seperti Kategori Produk. Ini tracking ASLI
 // pertama utk order asli — sebelumnya cuma ada versi demo (operations.ts,
 // ProductStatusCard) yang gak pernah tersambung ke order beneran.
-export type ProductionStage = "po" | "produksi" | "qc" | "packing" | "siap-kirim";
-export type ShipmentStage = "proses-resi" | "dalam-pengiriman" | "selesai" | "ditunda" | "retur" | "refund";
+// Rute produksi diperinci sesuai alur kerja nyata (2026-09-08, atas
+// permintaan user): PO → Dalam Produksi → Antre QC → Proses QC →
+// Antre Packing → Proses Packing. "qc"/"packing" adalah KEY LAMA yang
+// dipertahankan (cuma label-nya diperbarui jadi "Proses QC"/"Proses
+// Packing") supaya data order lama yang sudah tersimpan gak jadi nyasar ke
+// tahap tak dikenal. "siap-kirim" TETAP ada di tipe & info (bukan dihapus)
+// supaya order lama dgn tahap ini masih render normal, tapi SENGAJA gak
+// dimasukkan ke productionStageOrder lagi (gak muncul lagi sbg pilihan baru
+// di dropdown) — sesuai rute baru yang berhenti di "Proses Packing".
+export type ProductionStage = "po" | "produksi" | "antre-qc" | "qc" | "antre-packing" | "packing" | "siap-kirim";
+export type ShipmentStage = "antre-packing" | "sudah-dipacking" | "proses-resi" | "dalam-pengiriman" | "selesai" | "ditunda" | "retur" | "refund";
 
-export const productionStageOrder: ProductionStage[] = ["po", "produksi", "qc", "packing", "siap-kirim"];
+export const productionStageOrder: ProductionStage[] = ["po", "produksi", "antre-qc", "qc", "antre-packing", "packing"];
 export const productionStageInfo: Record<ProductionStage, { name: string; emoji: string }> = {
   "po": { name: "PO", emoji: "📝" },
   "produksi": { name: "Dalam Produksi", emoji: "🏭" },
-  "qc": { name: "QC", emoji: "🔍" },
-  "packing": { name: "Packing", emoji: "📦" },
+  "antre-qc": { name: "Antre QC", emoji: "⏳" },
+  "qc": { name: "Proses QC", emoji: "🔍" },
+  "antre-packing": { name: "Antre Packing", emoji: "🗂️" },
+  "packing": { name: "Proses Packing", emoji: "📦" },
   "siap-kirim": { name: "Siap Kirim", emoji: "✅" },
 };
 
-// Sengaja cuma 3 dari 6 ShipmentStage — ini urutan LINEAR normal saja.
-// "ditunda"/"retur"/"refund" SENGAJA gak dimasukkan: itu status khusus yang
-// bisa terjadi kapan saja (keputusan user, dikonfirmasi saat fitur ini
-// dibangun), bukan tahap lanjutan dari urutan di atas.
-export const shipmentStageOrder: ShipmentStage[] = ["proses-resi", "dalam-pengiriman", "selesai"];
+// Rute pengiriman juga diperinci (2026-09-08): Antre Packing → Sudah
+// Dipacking → Proses Resi → Terkirim → Selesai. 2 tahap pertama SENGAJA
+// tumpang tindih konsepnya dengan tahap akhir Produksi di atas — atas
+// penjelasan user: "kadang produk udah ready, tapi belum dipacking...
+// kalau produksinya belum siap kirim, maka pengiriman pun statusnya masih
+// menunggu ready" — jadi tahap Pengiriman perlu bisa berdiri sendiri
+// menunjukkan "belum bisa dikirim krn masih nunggu packing", TANPA admin
+// harus cek field Produksi terpisah dulu buat tahu alasannya.
+// "dalam-pengiriman"/"ditunda" adalah KEY LAMA (dipertahankan demi data
+// lama) yang cuma label-nya diperbarui jadi "Terkirim"/"Dihold".
+// "ditunda"/"retur"/"refund" TETAP di luar shipmentStageOrder (linear) —
+// status khusus yang bisa terjadi kapan saja, bukan tahap lanjutan.
+export const shipmentStageOrder: ShipmentStage[] = ["antre-packing", "sudah-dipacking", "proses-resi", "dalam-pengiriman", "selesai"];
 export const shipmentStageInfo: Record<ShipmentStage, { name: string; emoji: string }> = {
+  "antre-packing": { name: "Antre Packing", emoji: "🗂️" },
+  "sudah-dipacking": { name: "Sudah Dipacking", emoji: "📦" },
   "proses-resi": { name: "Proses Resi", emoji: "🧾" },
-  "dalam-pengiriman": { name: "Dalam Pengiriman", emoji: "🚚" },
+  "dalam-pengiriman": { name: "Terkirim", emoji: "🚚" },
   "selesai": { name: "Selesai", emoji: "🎉" },
-  "ditunda": { name: "Ditunda", emoji: "⏸️" },
+  "ditunda": { name: "Dihold", emoji: "⏸️" },
   "retur": { name: "Retur", emoji: "↩️" },
   "refund": { name: "Refund", emoji: "💸" },
 };

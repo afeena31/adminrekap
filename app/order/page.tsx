@@ -352,8 +352,9 @@ function OrderPageInner() {
     const hpp = baseProduct?.hpp || 180000;
     const fee = baseProduct?.feeMarketer || 15000;
 
+    const newItemId = "jilbab-" + Date.now();
     setItems(prev => [...prev, {
-      id: "jilbab-" + Date.now(),
+      id: newItemId,
       name: "Amna Jilbab",
       emoji: "🧕",
       qty: jQty,
@@ -372,6 +373,11 @@ function OrderPageInner() {
       additionalPrice,
       finalPrice: unitPrice,
     }]);
+    // Collection Default produk (Katalog) otomatis tercentang — gak perlu
+    // pilih manual per order lagi kalau produknya sudah diberi default.
+    if (baseProduct?.defaultCollectionIds?.length) {
+      setItemCategoryMap(prev => ({ ...prev, [newItemId]: baseProduct.defaultCollectionIds! }));
+    }
     setShowJilbabForm(false);
     setJMods([]);
     setJQty(1);
@@ -389,8 +395,9 @@ function OrderPageInner() {
   // di sini — jadi mis. "Manset Standar" (5 warna) gak pernah kejelasan
   // warna apa yang benar-benar dipesan.
   const addProduct = (product: Product, variant?: string) => {
+    const newItemId = product.id + "-" + Date.now();
     setItems(prev => [...prev, {
-      id: product.id + "-" + Date.now(),
+      id: newItemId,
       name: product.name,
       emoji: product.emoji,
       qty: 1,
@@ -401,6 +408,11 @@ function OrderPageInner() {
       productId: product.id,
       detail: variant,
     }]);
+    // Collection Default produk (Katalog) otomatis tercentang — gak perlu
+    // pilih manual per order lagi kalau produknya sudah diberi default.
+    if (product.defaultCollectionIds?.length) {
+      setItemCategoryMap(prev => ({ ...prev, [newItemId]: product.defaultCollectionIds! }));
+    }
     setShowProductPicker(false);
     setVariantPickProduct(null);
     notify(`${product.name}${variant ? ` (${variant})` : ""} ditambahkan`);

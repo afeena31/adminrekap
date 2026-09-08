@@ -15,6 +15,10 @@ export type Product = {
   discountDefault?: number;  // Diskon default (persen atau nominal)
   discountType?: "percent" | "nominal";  // Jenis diskon default
   active?: boolean;      // Status aktif / nonaktif
+  // Collection yang otomatis tercentang tiap produk ini ditambahkan ke order
+  // (order/page.tsx) — diisi sekali di sini, gak perlu centang manual per
+  // order lagi. Admin masih bisa tambah/lepas per-order kalau perlu.
+  defaultCollectionIds?: string[];
 };
 
 

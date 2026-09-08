@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 import { productCategories, formatRupiah, modifikasiInfo, ongkirInfo, splitShopeeInfo, rekeningInfo, nonBookMasterCatalog, type Product } from "../data/products";
 import { getProducts, addProduct, updateProduct, deleteProduct, calculateProductMetrics } from "../data/store";
+import { getCollections, type Collection } from "../data/collections";
 import { MoneyInput } from "../components/MoneyInput";
 import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
@@ -25,6 +26,7 @@ type ProductFormState = {
   emoji: string;
   description: string;
   active: boolean;
+  defaultCollectionIds: string[];
 };
 
 const emptyForm: ProductFormState = {
@@ -41,6 +43,7 @@ const emptyForm: ProductFormState = {
   emoji: "📦",
   description: "",
   active: true,
+  defaultCollectionIds: [],
 };
 
 const emojiOptions = ["📚", "📖", "🐝", "🧕", "🖤", "🧤", "🧦", "🌸", "🚚", "💰", "✨", "📦", "🎈", "🔤", "🔢", "🕌", "🌍", "✂️", "🧵", "🎀"];
@@ -58,13 +61,24 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [form, setForm] = useState<ProductFormState>(emptyForm);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [collectionList, setCollectionList] = useState<Collection[]>([]);
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
   // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
   useEffect(() => {
     setProductList(getProducts());
+    setCollectionList(getCollections());
   }, []);
+
+  const toggleFormCollection = (collectionId: string) => {
+    setForm(f => ({
+      ...f,
+      defaultCollectionIds: f.defaultCollectionIds.includes(collectionId)
+        ? f.defaultCollectionIds.filter(id => id !== collectionId)
+        : [...f.defaultCollectionIds, collectionId],
+    }));
+  };
 
   // Isi katalog ASLI (bukan demo) dari Master Data Bisnis — sengaja tidak
   // termasuk buku sama sekali. Dicek dulu per-ID biar aman diklik berkali-kali
@@ -132,6 +146,7 @@ export default function ProductsPage() {
       emoji: product.emoji || "📦",
       description: product.description || "",
       active: product.active !== false,
+      defaultCollectionIds: product.defaultCollectionIds || [],
     });
     setShowForm(true);
   };
@@ -144,6 +159,10 @@ export default function ProductsPage() {
     const modalKotor = Number(form.modalKotor) || 0;
     const biayaOperasional = Number(form.biayaOperasional) || 0;
     const product: Product = {
+      // Field yang gak punya kontrol form (variants — warna/ukuran preset
+      // dari Master Data) HARUS dibawa dari produk lama saat diedit, jangan
+      // sampai objek baru ini nimpa jadi undefined & warnanya hilang diam-diam.
+      variants: editingProduct?.variants,
       id: editingProduct ? editingProduct.id : "prod-" + Date.now(),
       name: form.name.trim(),
       category: form.category,
@@ -158,6 +177,7 @@ export default function ProductsPage() {
       emoji: form.emoji,
       description: form.description || undefined,
       active: form.active,
+      defaultCollectionIds: form.defaultCollectionIds.length > 0 ? form.defaultCollectionIds : undefined,
     };
 
     if (editingProduct) {
@@ -479,6 +499,28 @@ export default function ProductsPage() {
 
           <label>Deskripsi (opsional)
             <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Catatan singkat" />
+          </label>
+
+          <label>Collection Default (opsional)
+            {collectionList.length === 0 ? (
+              <p className="field-hint" style={{ margin: "4px 0 0" }}>Belum ada Collection — buat dulu di tab Collection Workspace.</p>
+            ) : (
+              <>
+                <p className="field-hint" style={{ margin: "4px 0 10px" }}>Tiap produk ini ditambahkan ke order, Collection yang dicentang di sini otomatis ikut tercentang juga — gak perlu pilih manual tiap order lagi.</p>
+                <div className="category-chips">
+                  {collectionList.map(c => (
+                    <button
+                      type="button"
+                      key={c.id}
+                      className={`category-chip ${form.defaultCollectionIds.includes(c.id) ? "active" : ""}`}
+                      onClick={() => toggleFormCollection(c.id)}
+                    >
+                      {c.icon} {c.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </label>
 
           <label className="checkbox-label">

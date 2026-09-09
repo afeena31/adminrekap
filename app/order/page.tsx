@@ -377,10 +377,11 @@ function OrderPageInner() {
       additionalPrice,
       finalPrice: unitPrice,
     }]);
-    // Collection Default produk (Katalog) otomatis tercentang — gak perlu
-    // pilih manual per order lagi kalau produknya sudah diberi default.
-    if (baseProduct?.defaultCollectionIds?.length) {
-      setItemCategoryMap(prev => ({ ...prev, [newItemId]: baseProduct.defaultCollectionIds! }));
+    // Collection Default produk (Katalog) otomatis tercentang — disaring dulu
+    // terhadap collectionsList (lihat penjelasan sama di addProduct di bawah).
+    const validJilbabDefaultCollections = (baseProduct?.defaultCollectionIds || []).filter(id => collectionsList.some(c => c.id === id));
+    if (validJilbabDefaultCollections.length > 0) {
+      setItemCategoryMap(prev => ({ ...prev, [newItemId]: validJilbabDefaultCollections }));
     }
     setShowJilbabForm(false);
     setJMods([]);
@@ -414,8 +415,13 @@ function OrderPageInner() {
     }]);
     // Collection Default produk (Katalog) otomatis tercentang — gak perlu
     // pilih manual per order lagi kalau produknya sudah diberi default.
-    if (product.defaultCollectionIds?.length) {
-      setItemCategoryMap(prev => ({ ...prev, [newItemId]: product.defaultCollectionIds! }));
+    // Disaring dulu terhadap collectionsList (Collection yg masih aktif/gak
+    // dihapus) — kalau gak, Collection yg sudah dihapus tapi masih nyantol
+    // sbg default produk lama bakal nautkan item ke id Collection yg gak
+    // ada lagi (invisible di chip, tapi tetap kesimpen sbg tautan mati).
+    const validDefaultCollections = (product.defaultCollectionIds || []).filter(id => collectionsList.some(c => c.id === id));
+    if (validDefaultCollections.length > 0) {
+      setItemCategoryMap(prev => ({ ...prev, [newItemId]: validDefaultCollections }));
     }
     setShowProductPicker(false);
     setVariantPickProduct(null);
@@ -1318,10 +1324,14 @@ function OrderPageInner() {
                 <small className="category-label">🏬 Gudang</small>
                 <select value={item.warehouseId || ""} onChange={e => updateItemWarehouse(item.id, e.target.value)}>
                   <option value="">— Pilih gudang —</option>
-                  {warehouseList.filter(w => w.active).map(w => {
+                  {/* Gudang nonaktif tetap ditampilkan KALAU sedang terpilih di item
+                      ini — supaya value dropdown gak "hilang" (gak match opsi manapun)
+                      cuma karena gudangnya dinonaktifkan belakangan. Gudang nonaktif
+                      lain (belum pernah dipilih) tetap disembunyikan dari pilihan baru. */}
+                  {warehouseList.filter(w => w.active || w.id === item.warehouseId).map(w => {
                     const inv = item.productId ? getInventoryForProduct(item.productId).find(i => i.warehouseId === w.id) : undefined;
                     const avail = inv ? inventoryAvailable(inv) : 0;
-                    return <option key={w.id} value={w.id}>{w.name} (sisa {avail})</option>;
+                    return <option key={w.id} value={w.id}>{w.name}{w.active ? "" : " (nonaktif)"} (sisa {avail})</option>;
                   })}
                 </select>
               </div>

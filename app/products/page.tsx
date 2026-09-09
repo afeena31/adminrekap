@@ -181,10 +181,13 @@ export default function ProductsPage() {
     const modalKotor = Number(form.modalKotor) || 0;
     const biayaOperasional = Number(form.biayaOperasional) || 0;
     const product: Product = {
-      // Field yang gak punya kontrol form (variants — warna/ukuran preset
-      // dari Master Data) HARUS dibawa dari produk lama saat diedit, jangan
-      // sampai objek baru ini nimpa jadi undefined & warnanya hilang diam-diam.
+      // Field yang gak punya kontrol form (variants — warna/ukuran preset dari
+      // Master Data; badge — label promo mis. "Diskon") HARUS dibawa dari
+      // produk lama saat diedit, jangan sampai objek baru ini nimpa jadi
+      // undefined & datanya hilang diam-diam (persis bug variants yg sudah
+      // ketemu & diperbaiki sebelumnya — badge kena kelas bug yang sama).
       variants: editingProduct?.variants,
+      badge: editingProduct?.badge,
       id: editingProduct ? editingProduct.id : "prod-" + Date.now(),
       name: form.name.trim(),
       category: form.category,

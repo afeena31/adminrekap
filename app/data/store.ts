@@ -292,6 +292,11 @@ export function deleteProduct(id: string): Product[] {
   const list = getProducts();
   const updated = list.filter(p => p.id !== id);
   saveProducts(updated);
+  // Bersihkan juga Inventory produk ini (pola sama dgn deleteWarehouse) —
+  // kalau gak, sisa stok gudangnya nyangkut permanen di localStorage, dan
+  // kalau nanti ada produk baru kebetulan pakai id yang sama, dia bakal
+  // "mewarisi" angka stok lama yang gak nyambung.
+  saveInventory(getInventory().filter(i => i.productId !== id));
   return updated;
 }
 
@@ -821,10 +826,19 @@ export function setStock(productId: string, warehouseId: string, stockOnHand: nu
 }
 
 // Tambah/kurangi stok on-hand (delta boleh negatif) — dipakai saat order
-// dengan item "Ready Stock" disimpan (kurangi) atau dihapus/diedit (kembalikan).
+// dengan item "Ready Stock" disimpan (kurangi) atau dihapus/diedit
+// (kembalikan). SENGAJA TIDAK di-floor ke 0 di sini (beda dari setStock) —
+// kalau admin oversell (qty order > stok fisik yang ada), stockOnHand boleh
+// sempat minus di dalam sistem supaya nanti kalau order itu dihapus/qty
+// dikurangi, angkanya kembali PERSIS ke nilai semula (bukan malah nambah
+// dari 0 yang sudah salah/ke-floor duluan). Tampilan ke admin (badge Katalog,
+// pilihan gudang di form Order) tetap gak pernah nunjukin minus karena
+// inventoryAvailable()/getTotalAvailable() sendiri yang floor pas ditampilkan.
 export function adjustStock(productId: string, warehouseId: string, delta: number): Inventory[] {
-  const current = getInventory().find(i => i.productId === productId && i.warehouseId === warehouseId)?.stockOnHand || 0;
-  return setStock(productId, warehouseId, current + delta);
+  const list = getInventory();
+  const existing = list.find(i => i.productId === productId && i.warehouseId === warehouseId);
+  if (existing) return updateInventory({ ...existing, stockOnHand: existing.stockOnHand + delta });
+  return addInventory({ id: "inv-" + productId + "-" + warehouseId, productId, warehouseId, stockOnHand: delta, reserved: 0, minimumStock: 0 });
 }
 
 // Tambah reserved ke gudang tertentu (saat order di-reserve)

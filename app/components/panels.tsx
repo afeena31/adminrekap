@@ -263,15 +263,23 @@ function RealProductCard({ order, item, onChange }: { order: OrderRecord; item: 
       <div className="psc-field"><small>💰 Payment</small><b className={`psc-value ${paymentTone[payStatus]}`}>{paymentLabel}</b></div>
       <div className="order-item-stage-field">
         <small className="category-label">🏭 Produksi</small>
+        {/* "siap-kirim" (legacy, gak lagi ditawarkan sbg tahap baru) tetap
+            ditambahkan sbg opsi KALAU item ini masih bertahap itu — sama
+            spt penanganan gudang nonaktif, biar value select gak "hilang". */}
         <select value={item.productionStage || "po"} onChange={e => { updateItemStage(order.id, item.id, { productionStage: e.target.value as ProductionStage }); onChange(); }}>
           {productionStageOrder.map(s => <option key={s} value={s}>{productionStageInfo[s].emoji} {productionStageInfo[s].name}</option>)}
+          {item.productionStage === "siap-kirim" && <option value="siap-kirim">{productionStageInfo["siap-kirim"].emoji} {productionStageInfo["siap-kirim"].name}</option>}
         </select>
       </div>
       <div className="order-item-stage-field">
         <small className="category-label">🚚 Pengiriman</small>
+        {/* Semua 8 tahap (termasuk Dihold/Retur/Refund) — sebelumnya cuma
+            5 tahap linear yg ditawarkan di sini, jadi item yg statusnya
+            Dihold/Retur/Refund gak match opsi manapun di dropdown ini
+            (beda dari form Order lengkap yg sudah benar dari awal). */}
         <select value={item.shipmentStage || ""} onChange={e => { updateItemStage(order.id, item.id, { shipmentStage: (e.target.value || undefined) as ShipmentStage | undefined }); onChange(); }}>
           <option value="">— Perlu Diresi —</option>
-          {shipmentStageOrder.map(s => <option key={s} value={s}>{shipmentStageInfo[s].emoji} {shipmentStageInfo[s].name}</option>)}
+          {(Object.keys(shipmentStageInfo) as ShipmentStage[]).map(s => <option key={s} value={s}>{shipmentStageInfo[s].emoji} {shipmentStageInfo[s].name}</option>)}
         </select>
       </div>
     </div>

@@ -132,11 +132,14 @@ export default function DashboardPage() {
     customer.batches.map(b => ({ customer, batch: b }))
   ).filter(({ batch }) => batch.status !== "selesai");
 
-  // Item order ASLI yang tahap produksinya lagi berjalan (produksi/qc/packing)
-  // — sebelumnya section ini cuma baca customer.batches (operations.ts, demo),
-  // jadi order asli gak pernah kelihatan di sini walau lagi diproses.
+  // Item order ASLI yang tahap produksinya lagi berjalan (semua tahap SELAIN
+  // "po" — belum mulai — dan "siap-kirim" — legacy, sudah kelar) — sebelumnya
+  // section ini cuma baca customer.batches (operations.ts, demo), jadi order
+  // asli gak pernah kelihatan di sini walau lagi diproses. Dulu list-nya
+  // hardcode 3 tahap ("produksi"/"qc"/"packing"), jadi item yang lagi di
+  // "Antre QC"/"Antre Packing" (tahap baru) ikut kelewat gak kehitung.
   const realProductionItems = orders.flatMap(o => o.items
-    .filter(i => i.productionStage === "produksi" || i.productionStage === "qc" || i.productionStage === "packing")
+    .filter(i => i.productionStage && i.productionStage !== "po" && i.productionStage !== "siap-kirim")
     .map(i => ({ order: o, item: i }))
   );
 
@@ -238,8 +241,8 @@ export default function DashboardPage() {
             {group.items.map(item => {
               const isTagihan = item.primaryCondition === "PERLU DITAGIH";
               const realOrder = orderMap.get(item.orderId);
-              const activeProdItem = realOrder?.items.find(i => i.productionStage === "produksi" || i.productionStage === "qc" || i.productionStage === "packing");
-              const activeShipItem = realOrder?.items.find(i => i.shipmentStage === "proses-resi" || i.shipmentStage === "dalam-pengiriman" || i.shipmentStage === "ditunda");
+              const activeProdItem = realOrder?.items.find(i => i.productionStage && i.productionStage !== "po" && i.productionStage !== "siap-kirim");
+              const activeShipItem = realOrder?.items.find(i => i.shipmentStage && i.shipmentStage !== "selesai");
               const body = <>
                 <span className="mini-avatar">{item.customerName.slice(0, 2).toUpperCase()}</span>
                 <div className="dash-queue-body">

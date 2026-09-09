@@ -146,6 +146,30 @@ export default function CollectionDetailPage() {
   dedupedItemLinks.forEach(({ order: o }) => { if (!itemLinkedOrdersMap.has(o.id)) itemLinkedOrdersMap.set(o.id, o); });
   const allOrders = [...orders, ...Array.from(itemLinkedOrdersMap.values())];
 
+  // ===== PORSI order utk order yang tertaut lewat item-level SAJA =====
+  // Order-level (legacyOrderIds) ditampilkan utuh (o.total/o.dp/semua qty) —
+  // itu memang HAK PENUH Collection ini atas order tsb. Tapi order yang cuma
+  // tertaut lewat Kategori Produk per-item HARUS ditampilkan PRORATA (cuma
+  // porsi item yg ditandai ke Collection ini), sama persis dgn cara header
+  // stats (getCollectionStats, collections.ts) menghitung Outstanding/Payment
+  // — supaya nominal di tab Order/Payment/Shipment gak lebih besar dari yg
+  // seharusnya (sebelumnya nampilin o.total UTUH utk order gabungan padahal
+  // cuma sebagian item-nya yg terhubung ke Collection ini).
+  const itemLinkedShare = new Map<string, { subtotal: number; qty: number }>();
+  dedupedItemLinks.forEach(({ order: o, item }) => {
+    const existing = itemLinkedShare.get(o.id) || { subtotal: 0, qty: 0 };
+    existing.subtotal += itemSubtotal(item);
+    existing.qty += item.qty;
+    itemLinkedShare.set(o.id, existing);
+  });
+  const collectionPortionFor = (o: OrderRecord): { total: number; dp: number; qty: number } => {
+    if (legacyOrderIds.has(o.id)) return { total: o.total, dp: o.dp, qty: o.items.reduce((s, i) => s + i.qty, 0) };
+    const share = itemLinkedShare.get(o.id);
+    if (!share || o.subtotal <= 0) return { total: 0, dp: 0, qty: 0 };
+    const fraction = share.subtotal / o.subtotal;
+    return { total: Math.round(o.total * fraction), dp: Math.round(o.dp * fraction), qty: share.qty };
+  };
+
   // ===== ITEM BREAKDOWN (per Kategori Produk) — "kaos kaki closing berapa,
   // siapa saja yang pesan" =====
   const itemBreakdown = dedupedItemLinks.map(({ order: o, item }) => ({
@@ -159,23 +183,26 @@ export default function CollectionDetailPage() {
     subtotal: itemSubtotal(item),
   }));
 
-  // ===== PAYMENT AGGREGATION =====
-  const paymentList = allOrders.map(o => ({
-    orderId: o.id,
-    orderNumber: o.number,
-    customer: o.customer,
-    dp: o.dp,
-    total: o.total,
-    status: o.status === "paid" ? "paid" : o.dp > 0 ? "dp" : "unpaid",
-  }));
+  // ===== PAYMENT AGGREGATION ===== (dp/total diprorata utk order item-level)
+  const paymentList = allOrders.map(o => {
+    const portion = collectionPortionFor(o);
+    return {
+      orderId: o.id,
+      orderNumber: o.number,
+      customer: o.customer,
+      dp: portion.dp,
+      total: portion.total,
+      status: o.status === "paid" ? "paid" : portion.dp > 0 ? "dp" : "unpaid",
+    };
+  });
 
-  // ===== SHIPMENT AGGREGATION =====
+  // ===== SHIPMENT AGGREGATION ===== (qty diprorata utk order item-level)
   const shipmentList = allOrders.map(o => ({
     orderId: o.id,
     orderNumber: o.number,
     customer: o.customer,
     status: o.status,
-    items: o.items.reduce((s, i) => s + i.qty, 0),
+    items: collectionPortionFor(o).qty,
   }));
 
   // ===== ACTIVITY (derived from orders) =====
@@ -414,7 +441,10 @@ export default function CollectionDetailPage() {
             <Plus size={15} /> Tambah Order
           </button>
         </div>}
-        {allOrders.map(o => (
+        {allOrders.map(o => {
+          const isPartial = !legacyOrderIds.has(o.id);
+          const portion = collectionPortionFor(o);
+          return (
           <div className="collection-order-row" key={o.id}>
             <span className="collection-order-emoji">{o.items[0]?.emoji || "📦"}</span>
             <div className="collection-order-info">
@@ -426,10 +456,15 @@ export default function CollectionDetailPage() {
               {!o.customerId && <span className="order-status-tag" style={{ background: "#e8e4f0", color: "#6d5d8a", marginLeft: 4 }}>Belum Terhubung</span>}
             </div>
             <div className="collection-order-total">
-              {formatRupiah(o.total)}
-              {o.status !== "paid" && o.total - o.dp > 0 && (
+              {formatRupiah(portion.total)}
+              {/* Order yang cuma sebagian item-nya tertaut ke Collection ini
+                  (lewat Kategori Produk) ditandai — nominalnya PORSI, bukan
+                  nilai invoice utuh (order bisa punya produk kategori lain
+                  juga di dalamnya). */}
+              {isPartial && <small style={{ display: "block", fontSize: 10, color: "#6d5d8a" }}>Porsi Collection ini</small>}
+              {o.status !== "paid" && portion.total - portion.dp > 0 && (
                 <small style={{ display: "block", fontSize: 10, color: "#9b583d" }}>
-                  Outstanding: {formatRupiah(o.total - o.dp)}
+                  Outstanding: {formatRupiah(portion.total - portion.dp)}
                 </small>
               )}
             </div>
@@ -437,7 +472,8 @@ export default function CollectionDetailPage() {
               <Trash2 size={15} />
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
     )}
 

@@ -5,7 +5,7 @@ import {
   Package, PackageCheck, Plus, ShoppingBag, Truck, UserPlus, Users,
   UserRound, AlertCircle, Factory, PackageOpen,
   FileText, HandCoins, Send, Clock, CircleDot, TrendingUp, StickyNote,
-  Settings, Sparkles, ArrowUpRight, MessageCircle, CalendarDays
+  Settings, Sparkles, ArrowUpRight, MessageCircle, CalendarDays, LogOut
 } from "lucide-react";
 
 import Link from "next/link";
@@ -18,6 +18,7 @@ import { QuickPaymentModal } from "./components/QuickPaymentModal";
 import { goBack } from "./lib/goBack";
 import { getOperations } from "./data/operations";
 import { getCustomers, getCustomerAddresses as getCentralCustomerAddresses, getDashboardWorkQueue, type WorkQueueItem, type PrimaryCondition } from "./data/central";
+import { useAuth } from "./data/authContext";
 
 function loadAllDisplayCustomers() {
   return getCustomers().map(c => toDisplayCustomer(c, getCentralCustomerAddresses(c.id)));
@@ -25,6 +26,8 @@ function loadAllDisplayCustomers() {
 
 export default function DashboardPage() {
   const [notice, setNotice] = useState("");
+  const { role: authRole, name: authName, session, signOut } = useAuth();
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [quickPaymentOpen, setQuickPaymentOpen] = useState(false);
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
@@ -206,9 +209,24 @@ export default function DashboardPage() {
       <div className="header-actions">
         <button className="icon-btn" aria-label="Notifikasi" onClick={() => notify("Belum ada notifikasi baru")}><Bell size={19} /></button>
         <button className="icon-btn" aria-label="Pengaturan" onClick={() => notify("Pengaturan ada di halaman Customer (tombol ⋯)")}><Settings size={19} /></button>
-        <button className="profile-chip" aria-label="Profil" onClick={() => notify("Profil pemilik akun belum tersedia")}><span className="profile-chip-avatar">U</span></button>
+        <button className="profile-chip" aria-label="Akun" onClick={() => setAccountMenuOpen(true)}><span className="profile-chip-avatar">{(authName || session?.user.email || "U").charAt(0).toUpperCase()}</span></button>
       </div>
     </header>
+
+    {accountMenuOpen && (
+      <div className="overlay" onClick={() => setAccountMenuOpen(false)}>
+        <section className="modal confirm-modal" onClick={event => event.stopPropagation()}>
+          <button className="close" onClick={() => setAccountMenuOpen(false)}>×</button>
+          <h2>Akun</h2>
+          <p style={{ fontWeight: 600, marginBottom: 2 }}>{authName || session?.user.email}</p>
+          <p className="muted" style={{ marginBottom: 20 }}>{authRole === "owner" ? "Owner — lihat semua data" : authRole === "admin" ? "Admin" : "—"}</p>
+          <button
+            onClick={() => { signOut(); setAccountMenuOpen(false); }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", borderRadius: 10, padding: "11px 15px", fontWeight: 600, cursor: "pointer" }}
+          ><LogOut size={16} /> Keluar</button>
+        </section>
+      </div>
+    )}
 
     {/* ===== HERO / GREETING ===== */}
     <div className="dash-hero">

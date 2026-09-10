@@ -2,6 +2,7 @@
 
 import { products as seedProducts, determineRekening, type Product } from "./products";
 import { type CustomerAddress } from "./customers";
+import { supabase } from "./supabaseClient";
 
 
 // ===== TYPES =====
@@ -293,11 +294,18 @@ export function deleteProduct(id: string): Product[] {
   const updated = list.filter(p => p.id !== id);
   saveProducts(updated);
   // Bersihkan juga Inventory produk ini (pola sama dgn deleteWarehouse) —
-  // kalau gak, sisa stok gudangnya nyangkut permanen di localStorage, dan
-  // kalau nanti ada produk baru kebetulan pakai id yang sama, dia bakal
-  // "mewarisi" angka stok lama yang gak nyambung.
-  saveInventory(getInventory().filter(i => i.productId !== id));
+  // kalau gak, sisa stok gudangnya nyangkut permanen, dan kalau nanti ada
+  // produk baru kebetulan pakai id yang sama, dia bakal "mewarisi" angka
+  // stok lama yang gak nyambung. Inventory sudah pindah ke Supabase (async)
+  // sementara Product ini sendiri belum (masih localStorage) — cleanup-nya
+  // sengaja gak ditunggu (fire-and-forget), bukan critical-path.
+  deleteInventoryForProduct(id);
   return updated;
+}
+
+async function deleteInventoryForProduct(productId: string): Promise<void> {
+  const { error } = await supabase.from("inventory").delete().eq("product_id", productId);
+  if (error) console.error("[deleteInventoryForProduct]", error.message);
 }
 
 // ===== MARKETER STORE =====
@@ -724,105 +732,111 @@ export function recordPaymentForOrder(order: OrderRecord, amount: number, note?:
   return { updatedOrder, payment };
 }
 
-// ===== WAREHOUSE STORE =====
+// ===== WAREHOUSE STORE (Tahap 4 migrasi backend — Supabase, bukan localStorage lagi) =====
+// Semua fungsi di bawah sekarang ASYNC (query Supabase). Dipertahankan
+// entity-list-return-nya (Warehouse[]/Inventory[]) biar bentuk data yg
+// dibaca UI gak berubah, cuma cara ambilnya yg beda. Belum ada UI CRUD
+// gudang di app manapun sampai sekarang — kalau nanti dibutuhkan, tinggal
+// pakai addWarehouse/updateWarehouse/deleteWarehouse yg sudah siap ini.
 
-export function getWarehouses(): Warehouse[] {
-  return load<Warehouse[]>(KEYS.warehouses, defaultWarehouses);
+function mapWarehouseRow(w: { id: string; name: string; code: string; active: boolean }): Warehouse {
+  return { id: w.id, name: w.name, code: w.code, active: w.active };
 }
 
-export function saveWarehouses(list: Warehouse[]) {
-  save(KEYS.warehouses, list);
+export async function getWarehouses(): Promise<Warehouse[]> {
+  const { data, error } = await supabase.from("warehouses").select("*");
+  if (error) { console.error("[getWarehouses]", error.message); return defaultWarehouses; }
+  return data.length > 0 ? data.map(mapWarehouseRow) : defaultWarehouses;
 }
 
-export function addWarehouse(warehouse: Warehouse): Warehouse[] {
-  const list = getWarehouses();
-  const updated = [...list, warehouse];
-  saveWarehouses(updated);
-  return updated;
+export async function addWarehouse(warehouse: Warehouse): Promise<Warehouse[]> {
+  const { error } = await supabase.from("warehouses").insert({ id: warehouse.id, name: warehouse.name, code: warehouse.code, active: warehouse.active });
+  if (error) console.error("[addWarehouse]", error.message);
+  return getWarehouses();
 }
 
-export function updateWarehouse(warehouse: Warehouse): Warehouse[] {
-  const list = getWarehouses();
-  const updated = list.map(w => (w.id === warehouse.id ? warehouse : w));
-  saveWarehouses(updated);
-  return updated;
+export async function updateWarehouse(warehouse: Warehouse): Promise<Warehouse[]> {
+  const { error } = await supabase.from("warehouses").update({ name: warehouse.name, code: warehouse.code, active: warehouse.active }).eq("id", warehouse.id);
+  if (error) console.error("[updateWarehouse]", error.message);
+  return getWarehouses();
 }
 
-export function deleteWarehouse(id: string): Warehouse[] {
-  const list = getWarehouses();
-  const updated = list.filter(w => w.id !== id);
-  saveWarehouses(updated);
-  // Hapus juga inventory yang terkait gudang tersebut
-  const inv = getInventory().filter(i => i.warehouseId !== id);
-  save(KEYS.inventory, inv);
-  return updated;
+export async function deleteWarehouse(id: string): Promise<Warehouse[]> {
+  // Inventory milik gudang ini ikut terhapus otomatis (FK "on delete cascade"
+  // di supabase/schema.sql) — gak perlu hapus manual dari sini lagi.
+  const { error } = await supabase.from("warehouses").delete().eq("id", id);
+  if (error) console.error("[deleteWarehouse]", error.message);
+  return getWarehouses();
 }
 
 // ===== INVENTORY STORE =====
 
-export function getInventory(): Inventory[] {
-  return load<Inventory[]>(KEYS.inventory, []);
+function mapInventoryRow(i: { id: string; product_id: string; warehouse_id: string; stock_on_hand: number; reserved: number; minimum_stock: number; location: string | null }): Inventory {
+  return { id: i.id, productId: i.product_id, warehouseId: i.warehouse_id, stockOnHand: i.stock_on_hand, reserved: i.reserved, minimumStock: i.minimum_stock, location: i.location ?? undefined };
 }
 
-export function saveInventory(list: Inventory[]) {
-  save(KEYS.inventory, list);
+export async function getInventory(): Promise<Inventory[]> {
+  const { data, error } = await supabase.from("inventory").select("*");
+  if (error) { console.error("[getInventory]", error.message); return []; }
+  return data.map(mapInventoryRow);
 }
 
 // Inventory untuk satu produk (di semua gudang)
-export function getInventoryForProduct(productId: string): Inventory[] {
-  return getInventory().filter(i => i.productId === productId);
+export async function getInventoryForProduct(productId: string): Promise<Inventory[]> {
+  const { data, error } = await supabase.from("inventory").select("*").eq("product_id", productId);
+  if (error) { console.error("[getInventoryForProduct]", error.message); return []; }
+  return data.map(mapInventoryRow);
 }
 
 // Inventory untuk satu gudang (semua produk)
-export function getInventoryByWarehouse(warehouseId: string): Inventory[] {
-  return getInventory().filter(i => i.warehouseId === warehouseId);
+export async function getInventoryByWarehouse(warehouseId: string): Promise<Inventory[]> {
+  const { data, error } = await supabase.from("inventory").select("*").eq("warehouse_id", warehouseId);
+  if (error) { console.error("[getInventoryByWarehouse]", error.message); return []; }
+  return data.map(mapInventoryRow);
 }
 
 // Total stok (on hand) sebuah produk di semua gudang
-export function getTotalStock(productId: string): number {
-  return getInventoryForProduct(productId).reduce((sum, i) => sum + i.stockOnHand, 0);
+export async function getTotalStock(productId: string): Promise<number> {
+  const inv = await getInventoryForProduct(productId);
+  return inv.reduce((sum, i) => sum + i.stockOnHand, 0);
 }
 
 // Total available sebuah produk di semua gudang
-export function getTotalAvailable(productId: string): number {
-  return getInventoryForProduct(productId).reduce((sum, i) => sum + inventoryAvailable(i), 0);
+export async function getTotalAvailable(productId: string): Promise<number> {
+  const inv = await getInventoryForProduct(productId);
+  return inv.reduce((sum, i) => sum + inventoryAvailable(i), 0);
 }
 
-export function addInventory(inv: Inventory): Inventory[] {
-  const list = getInventory();
-  const updated = [...list, inv];
-  saveInventory(updated);
-  return updated;
+export async function addInventory(inv: Inventory): Promise<Inventory[]> {
+  const { error } = await supabase.from("inventory").insert({ id: inv.id, product_id: inv.productId, warehouse_id: inv.warehouseId, stock_on_hand: inv.stockOnHand, reserved: inv.reserved, minimum_stock: inv.minimumStock, location: inv.location ?? null });
+  if (error) console.error("[addInventory]", error.message);
+  return getInventory();
 }
 
-export function updateInventory(inv: Inventory): Inventory[] {
-  const list = getInventory();
-  const updated = list.map(i => (i.id === inv.id ? inv : i));
-  saveInventory(updated);
-  return updated;
+export async function updateInventory(inv: Inventory): Promise<Inventory[]> {
+  const { error } = await supabase.from("inventory").update({ stock_on_hand: inv.stockOnHand, reserved: inv.reserved, minimum_stock: inv.minimumStock, location: inv.location ?? null }).eq("id", inv.id);
+  if (error) console.error("[updateInventory]", error.message);
+  return getInventory();
 }
 
 // Kurangi stok on hand dari gudang tertentu (saat order dibuat)
-export function deductStock(productId: string, warehouseId: string, qty: number): Inventory[] {
-  const list = getInventory();
-  const updated = list.map(i => {
-    if (i.productId === productId && i.warehouseId === warehouseId) {
-      return { ...i, stockOnHand: Math.max(0, i.stockOnHand - qty) };
-    }
-    return i;
-  });
-  saveInventory(updated);
-  return updated;
+export async function deductStock(productId: string, warehouseId: string, qty: number): Promise<void> {
+  await adjustStock(productId, warehouseId, -qty);
 }
 
 // Set stok on-hand produk di 1 gudang secara langsung — dipakai form
 // "Kelola Stok" di Katalog (input stok awal / koreksi manual). Bikin record
 // baru kalau belum pernah ada Inventory utk pasangan produk+gudang ini.
-export function setStock(productId: string, warehouseId: string, stockOnHand: number): Inventory[] {
-  const list = getInventory();
-  const existing = list.find(i => i.productId === productId && i.warehouseId === warehouseId);
-  if (existing) return updateInventory({ ...existing, stockOnHand: Math.max(0, stockOnHand) });
-  return addInventory({ id: "inv-" + productId + "-" + warehouseId, productId, warehouseId, stockOnHand: Math.max(0, stockOnHand), reserved: 0, minimumStock: 0 });
+export async function setStock(productId: string, warehouseId: string, stockOnHand: number): Promise<void> {
+  const { data: existing } = await supabase.from("inventory").select("id").eq("product_id", productId).eq("warehouse_id", warehouseId).maybeSingle();
+  const value = Math.max(0, stockOnHand);
+  if (existing) {
+    const { error } = await supabase.from("inventory").update({ stock_on_hand: value }).eq("id", existing.id);
+    if (error) console.error("[setStock]", error.message);
+  } else {
+    const { error } = await supabase.from("inventory").insert({ id: "inv-" + productId + "-" + warehouseId, product_id: productId, warehouse_id: warehouseId, stock_on_hand: value, reserved: 0, minimum_stock: 0 });
+    if (error) console.error("[setStock]", error.message);
+  }
 }
 
 // Tambah/kurangi stok on-hand (delta boleh negatif) — dipakai saat order
@@ -834,24 +848,25 @@ export function setStock(productId: string, warehouseId: string, stockOnHand: nu
 // dari 0 yang sudah salah/ke-floor duluan). Tampilan ke admin (badge Katalog,
 // pilihan gudang di form Order) tetap gak pernah nunjukin minus karena
 // inventoryAvailable()/getTotalAvailable() sendiri yang floor pas ditampilkan.
-export function adjustStock(productId: string, warehouseId: string, delta: number): Inventory[] {
-  const list = getInventory();
-  const existing = list.find(i => i.productId === productId && i.warehouseId === warehouseId);
-  if (existing) return updateInventory({ ...existing, stockOnHand: existing.stockOnHand + delta });
-  return addInventory({ id: "inv-" + productId + "-" + warehouseId, productId, warehouseId, stockOnHand: delta, reserved: 0, minimumStock: 0 });
+export async function adjustStock(productId: string, warehouseId: string, delta: number): Promise<void> {
+  const { data: existing } = await supabase.from("inventory").select("id, stock_on_hand").eq("product_id", productId).eq("warehouse_id", warehouseId).maybeSingle();
+  if (existing) {
+    const { error } = await supabase.from("inventory").update({ stock_on_hand: existing.stock_on_hand + delta }).eq("id", existing.id);
+    if (error) console.error("[adjustStock]", error.message);
+  } else {
+    const { error } = await supabase.from("inventory").insert({ id: "inv-" + productId + "-" + warehouseId, product_id: productId, warehouse_id: warehouseId, stock_on_hand: delta, reserved: 0, minimum_stock: 0 });
+    if (error) console.error("[adjustStock]", error.message);
+  }
 }
 
-// Tambah reserved ke gudang tertentu (saat order di-reserve)
-export function reserveStock(productId: string, warehouseId: string, qty: number): Inventory[] {
-  const list = getInventory();
-  const updated = list.map(i => {
-    if (i.productId === productId && i.warehouseId === warehouseId) {
-      return { ...i, reserved: i.reserved + qty };
-    }
-    return i;
-  });
-  saveInventory(updated);
-  return updated;
+// Tambah reserved ke gudang tertentu (saat order di-reserve) — TIDAK ADA
+// call site di app manapun sampai sekarang, dipertahankan siap pakai.
+export async function reserveStock(productId: string, warehouseId: string, qty: number): Promise<void> {
+  const { data: existing } = await supabase.from("inventory").select("id, reserved").eq("product_id", productId).eq("warehouse_id", warehouseId).maybeSingle();
+  if (existing) {
+    const { error } = await supabase.from("inventory").update({ reserved: existing.reserved + qty }).eq("id", existing.id);
+    if (error) console.error("[reserveStock]", error.message);
+  }
 }
 
 // ===== INVOICE NUMBER =====

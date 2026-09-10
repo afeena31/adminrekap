@@ -11,7 +11,7 @@ import { goBack } from "../lib/goBack";
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, determineRekening, SPLIT_BILL_PRODUK, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
-import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, recordPaymentForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, getWarehouses, getTotalAvailable, adjustStock, getInventoryForProduct, inventoryAvailable, type OrderItemSnapshot, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus, type Warehouse } from "../data/store";
+import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, recordPaymentForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, getWarehouses, getTotalAvailable, adjustStock, getInventory, inventoryAvailable, type OrderItemSnapshot, type Inventory, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus, type Warehouse } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
 import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections, getCollections, getCollectionIdsForItem, setCategoriesForItem, removeItemLinksForOrder, type Collection } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
@@ -171,6 +171,7 @@ function OrderPageInner() {
   const [customerList, setCustomerList] = useState<{ id: string; name: string; city: string }[]>([]);
   const [collectionsList, setCollectionsList] = useState<Collection[]>([]);
   const [warehouseList, setWarehouseList] = useState<Warehouse[]>([]);
+  const [inventoryList, setInventoryList] = useState<Inventory[]>([]);
   // Kategori Produk yang dicentang per-item (bukan per-invoice) — key: item.id,
   // value: daftar collectionId. Diisi ulang dari getCollectionIdsForItem saat
   // order dibuka utk diedit; disimpan lewat setCategoriesForItem tiap Generate
@@ -194,7 +195,10 @@ function OrderPageInner() {
     setCustomerList(getCustomers());
     setBatchNames(getBatchNames());
     setCollectionsList(getCollections());
-    setWarehouseList(getWarehouses());
+    // Gudang & Stok sudah pindah ke Supabase (Tahap 4 migrasi backend) —
+    // async, dimuat terpisah dari getter localStorage lain di atas.
+    getWarehouses().then(setWarehouseList);
+    getInventory().then(setInventoryList);
   }, []);
 
   useEffect(() => {
@@ -537,7 +541,7 @@ function OrderPageInner() {
     return lines.join("\n");
   };
 
-  const generateInvoice = () => {
+  const generateInvoice = async () => {
     if (items.length === 0) { notify("Tambahkan produk dulu"); return; }
     const now = new Date();
     const number = getNextInvoiceNumber();
@@ -611,16 +615,17 @@ function OrderPageInner() {
     // "kembalikan yang lama dulu, baru potong yang baru" — aman dipakai
     // baik utk order baru (existingOrder.items kosong, restore jadi no-op)
     // maupun edit (qty/gudang/sumber berubah bebas tanpa bikin stok nyimpang).
-    (existingOrder?.items || []).forEach(oldItem => {
+    for (const oldItem of existingOrder?.items || []) {
       if (oldItem.stockSource === "ready" && oldItem.productId && oldItem.warehouseId) {
-        adjustStock(oldItem.productId, oldItem.warehouseId, oldItem.qty);
+        await adjustStock(oldItem.productId, oldItem.warehouseId, oldItem.qty);
       }
-    });
-    snapshots.forEach(item => {
+    }
+    for (const item of snapshots) {
       if (item.stockSource === "ready" && item.productId && item.warehouseId) {
-        adjustStock(item.productId, item.warehouseId, -item.qty);
+        await adjustStock(item.productId, item.warehouseId, -item.qty);
       }
-    });
+    }
+    getInventory().then(setInventoryList);
 
 
     const orderRecord: OrderRecord = {
@@ -936,7 +941,7 @@ function OrderPageInner() {
   // ===== HAPUS ORDER =====
   // Ikut membersihkan FeeRecord & tautan Collection order ini supaya tidak
   // ada catatan lain yang menunjuk ke order yang sudah tidak ada.
-  const handleDeleteOrder = () => {
+  const handleDeleteOrder = async () => {
     if (!editingOrderId) return;
     const deletedId = editingOrderId;
     const deletedNumber = existingOrders.find(o => o.id === deletedId)?.number || "";
@@ -944,11 +949,11 @@ function OrderPageInner() {
     // motong Inventory — kembalikan dulu sebelum order-nya beneran hilang,
     // supaya stok gudang gak nyangkut "hilang" nunjuk order yang udah gak ada.
     const orderBeingDeleted = getOrderById(deletedId);
-    orderBeingDeleted?.items.forEach(item => {
+    for (const item of orderBeingDeleted?.items || []) {
       if (item.stockSource === "ready" && item.productId && item.warehouseId) {
-        adjustStock(item.productId, item.warehouseId, item.qty);
+        await adjustStock(item.productId, item.warehouseId, item.qty);
       }
-    });
+    }
     deleteOrder(deletedId);
     removeFeeForOrder(deletedId);
     removePaymentsForOrder(deletedId);
@@ -1329,7 +1334,7 @@ function OrderPageInner() {
                       cuma karena gudangnya dinonaktifkan belakangan. Gudang nonaktif
                       lain (belum pernah dipilih) tetap disembunyikan dari pilihan baru. */}
                   {warehouseList.filter(w => w.active || w.id === item.warehouseId).map(w => {
-                    const inv = item.productId ? getInventoryForProduct(item.productId).find(i => i.warehouseId === w.id) : undefined;
+                    const inv = item.productId ? inventoryList.find(i => i.productId === item.productId && i.warehouseId === w.id) : undefined;
                     const avail = inv ? inventoryAvailable(inv) : 0;
                     return <option key={w.id} value={w.id}>{w.name}{w.active ? "" : " (nonaktif)"} (sisa {avail})</option>;
                   })}

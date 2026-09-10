@@ -22,8 +22,8 @@ export default function MigrasiPage() {
 
   if (loading || role !== "owner") return null;
 
-  const handleExport = () => {
-    const data = collectAllLocalData();
+  const handleExport = async () => {
+    const data = await collectAllLocalData();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

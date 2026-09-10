@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 
 import { productCategories, formatRupiah, modifikasiInfo, ongkirInfo, splitShopeeInfo, rekeningInfo, nonBookMasterCatalog, type Product } from "../data/products";
-import { getProducts, addProduct, updateProduct, deleteProduct, calculateProductMetrics, getWarehouses, getInventoryForProduct, getTotalAvailable, inventoryAvailable, setStock, type Warehouse } from "../data/store";
+import { getProducts, addProduct, updateProduct, deleteProduct, calculateProductMetrics, getWarehouses, getInventory, getInventoryForProduct, inventoryAvailable, setStock, type Warehouse, type Inventory } from "../data/store";
 import { getCollections, type Collection } from "../data/collections";
 import { MoneyInput } from "../components/MoneyInput";
 import { BottomNav } from "../components/BottomNav";
@@ -63,6 +63,7 @@ export default function ProductsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [collectionList, setCollectionList] = useState<Collection[]>([]);
   const [warehouseList, setWarehouseList] = useState<Warehouse[]>([]);
+  const [inventoryList, setInventoryList] = useState<Inventory[]>([]);
   const [stockModalProduct, setStockModalProduct] = useState<Product | null>(null);
   const [stockForm, setStockForm] = useState<Record<string, string>>({});
 
@@ -72,23 +73,27 @@ export default function ProductsPage() {
   useEffect(() => {
     setProductList(getProducts());
     setCollectionList(getCollections());
-    setWarehouseList(getWarehouses());
+    // Gudang & Stok sudah pindah ke Supabase (Tahap 4 migrasi backend) — async.
+    getWarehouses().then(setWarehouseList);
+    getInventory().then(setInventoryList);
   }, []);
 
   // ===== KELOLA STOK — per gudang, per produk =====
-  const openStockModal = (product: Product) => {
-    const inv = getInventoryForProduct(product.id);
+  const openStockModal = async (product: Product) => {
+    const inv = await getInventoryForProduct(product.id);
+    const warehouses = await getWarehouses();
     const initial: Record<string, string> = {};
-    getWarehouses().forEach(w => { initial[w.id] = String(inv.find(i => i.warehouseId === w.id)?.stockOnHand || 0); });
+    warehouses.forEach(w => { initial[w.id] = String(inv.find(i => i.warehouseId === w.id)?.stockOnHand || 0); });
     setStockForm(initial);
     setStockModalProduct(product);
   };
 
-  const handleSaveStock = () => {
+  const handleSaveStock = async () => {
     if (!stockModalProduct) return;
-    warehouseList.forEach(w => {
-      setStock(stockModalProduct.id, w.id, Number(stockForm[w.id]) || 0);
-    });
+    for (const w of warehouseList) {
+      await setStock(stockModalProduct.id, w.id, Number(stockForm[w.id]) || 0);
+    }
+    getInventory().then(setInventoryList);
     notify(`Stok ${stockModalProduct.name} diperbarui`);
     setStockModalProduct(null);
   };
@@ -309,7 +314,7 @@ export default function ProductsPage() {
                   <span className="metric-chip profit">Laba {formatRupiah(metrics.grossProfit)}</span>
                 </div>}
                 {warehouseList.length > 0 && (() => {
-                  const stok = getTotalAvailable(product.id);
+                  const stok = inventoryList.filter(i => i.productId === product.id).reduce((sum, i) => sum + inventoryAvailable(i), 0);
                   return <div className="product-metrics">
                     <span className={`metric-chip ${stok > 0 ? "profit" : "discount"}`}>{stok > 0 ? `📦 Stok ${stok}` : "📦 Stok Habis"}</span>
                   </div>;

@@ -19,14 +19,21 @@ import { getAllCollections, getCollectionOrders, getCollectionOrderItems } from 
 // marketers, customers, products, orders) harus masuk duluan sebelum
 // entity yang merujuknya (order_items, payments, fees, dst).
 
-export function collectAllLocalData() {
+// Gudang & Stok sudah pindah ke Supabase duluan (Tahap 4 sebagian jalan) —
+// jadi fungsi ini sekarang ASYNC, dan utk 2 entity itu isinya "snapshot
+// dari Supabase" bukan murni localStorage lagi. Gak masalah: tombol Export
+// tetap berguna sbg cadangan kondisi TERKINI, dan upsert ulang ke Supabase
+// (migrateToSupabase di bawah) tetap aman/idempotent kalaupun sebagian data
+// ini sumbernya udah Supabase sendiri (upsert baris yang sama ke dirinya
+// sendiri, gak ada efek samping).
+export async function collectAllLocalData() {
   return {
     customers: getAllCustomers(),
     addresses: getAddresses(),
     marketers: getMarketers(),
     products: getProducts(),
-    warehouses: getWarehouses(),
-    inventory: getInventory(),
+    warehouses: await getWarehouses(),
+    inventory: await getInventory(),
     orders: getOrders(),
     payments: getPayments(),
     fees: getFees(),
@@ -48,7 +55,7 @@ async function upsertBatch(table: string, rows: Record<string, unknown>[], confl
 export async function migrateToSupabase(
   onProgress?: (step: string) => void
 ): Promise<MigrationStepResult[]> {
-  const data = collectAllLocalData();
+  const data = await collectAllLocalData();
   const results: MigrationStepResult[] = [];
 
   const run = async (label: string, table: string, rows: Record<string, unknown>[], conflictColumn = "id") => {

@@ -1,7 +1,6 @@
 "use client";
 
 import { products as seedProducts, determineRekening, type Product } from "./products";
-import { type CustomerAddress } from "./customers";
 import { supabase } from "./supabaseClient";
 
 
@@ -420,34 +419,11 @@ export async function getMarketerStats(marketerId: string): Promise<MarketerStat
 }
 
 
-// ===== ADDRESS STORE =====
-// Alamat pengiriman disimpan permanen di localStorage (key yang sama dipakai
-// central.ts's addAddress/getCustomerAddresses — lihat app/data/central.ts).
-
-export function getSavedAddresses(): CustomerAddress[] {
-  return load<CustomerAddress[]>(KEYS.addresses, []);
-}
-
-// Semua alamat tersimpan untuk satu customer
-export function getCustomerAddresses(customerId: string): CustomerAddress[] {
-  return getSavedAddresses().filter(a => a.customerId === customerId);
-}
-
-// Simpan alamat baru secara permanen
-export function saveAddress(address: CustomerAddress): CustomerAddress[] {
-  const list = getSavedAddresses();
-  const updated = [...list, address];
-  save(KEYS.addresses, updated);
-  return updated;
-}
-
-// Hapus alamat yang tersimpan (hanya yang disimpan user, bukan seed)
-export function deleteSavedAddress(id: string): CustomerAddress[] {
-  const list = getSavedAddresses();
-  const updated = list.filter(a => a.id !== id);
-  save(KEYS.addresses, updated);
-  return updated;
-}
+// Address (alamat pengiriman) pindah sepenuhnya ke central.ts (Tahap 5
+// migrasi backend, Supabase) — dulu ada duplikat sederhana di sini yang
+// baca/tulis localStorage key yang SAMA dengan central.ts ("umayasla_addresses",
+// sekelas hack), sekarang dihapus supaya cuma ada SATU sumber kebenaran.
+// Konsumen (order/page.tsx) pakai central.ts's getCustomerAddresses/addAddress.
 
 // ===== ORDER STORE =====
 

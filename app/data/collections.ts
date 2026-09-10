@@ -558,8 +558,8 @@ export async function getCollectionStats(collectionId: string): Promise<Collecti
 // Saat order dibuat dari Collection, sistem mencoba mencocokkan customer
 // berdasarkan: Customer ID → WhatsApp → Email → Nama (fuzzy)
 
-export function matchCustomerId(name: string, phone: string): string | null {
-  const customers = getCustomers();
+export async function matchCustomerId(name: string, phone: string): Promise<string | null> {
+  const customers = await getCustomers();
   if (customers.length === 0) return null;
 
 
@@ -617,7 +617,7 @@ export async function createOrderInCollection(
   const orderNumber = "ORD/" + now.getFullYear() + "/" + String(now.getMonth() + 1).padStart(2, "0") + "/" + String(now.getDate()).padStart(2, "0") + "-" + String(Math.floor(1000 + Math.random() * 9000));
 
   // Coba cocokkan customer
-  const customerId = matchCustomerId(data.customerName, data.phone || "");
+  const customerId = await matchCustomerId(data.customerName, data.phone || "");
 
   const order: OrderRecord = {
     id: orderId,

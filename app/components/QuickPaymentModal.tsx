@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, ChevronRight, ChevronLeft, Check } from "lucide-react";
 import { getCustomers, type Customer as CentralCustomer } from "../data/central";
 import { getOrdersForCustomer, recordPaymentForOrder, formatRupiah, type OrderRecord } from "../data/store";
@@ -25,14 +25,23 @@ export function QuickPaymentModal({ onClose, onRecorded }: { onClose: () => void
   // dari outstanding terbesar supaya yang paling perlu ditagih kelihatan
   // duluan. Customer yang gak punya tagihan sengaja gak muncul di sini —
   // gak ada gunanya "catat pembayaran" utk yang gak punya utang.
+  // Customer sekarang Supabase (async) — dipreload sekali saat modal dibuka.
+  const [customersWithOutstanding, setCustomersWithOutstanding] = useState<{ customer: CentralCustomer; outstanding: number }[]>([]);
+
+  useEffect(() => {
+    getCustomers().then(list => {
+      const withOutstanding = list
+        .map(c => {
+          const outstanding = getOrdersForCustomer(c.id).reduce((sum, o) => sum + Math.max(0, o.total - o.dp), 0);
+          return { customer: c, outstanding };
+        })
+        .filter(x => x.outstanding > 0)
+        .sort((a, b) => b.outstanding - a.outstanding);
+      setCustomersWithOutstanding(withOutstanding);
+    });
+  }, []);
+
   const q = query.toLowerCase().trim();
-  const customersWithOutstanding = getCustomers()
-    .map(c => {
-      const outstanding = getOrdersForCustomer(c.id).reduce((sum, o) => sum + Math.max(0, o.total - o.dp), 0);
-      return { customer: c, outstanding };
-    })
-    .filter(x => x.outstanding > 0)
-    .sort((a, b) => b.outstanding - a.outstanding);
   const results = q
     ? customersWithOutstanding.filter(x => x.customer.name.toLowerCase().includes(q) || x.customer.waName.toLowerCase().includes(q))
     : customersWithOutstanding;

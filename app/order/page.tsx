@@ -11,17 +11,17 @@ import { goBack } from "../lib/goBack";
 
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, determineRekening, SPLIT_BILL_PRODUK, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
-import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getCustomerAddresses, saveAddress, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, recordPaymentForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, getWarehouses, getTotalAvailable, adjustStock, getInventory, inventoryAvailable, type OrderItemSnapshot, type Inventory, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus, type Warehouse } from "../data/store";
-import { getCustomers, getCustomer as getCentralCustomer, addCustomer, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
+import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, recordPaymentForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, getWarehouses, getTotalAvailable, adjustStock, getInventory, inventoryAvailable, type OrderItemSnapshot, type Inventory, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus, type Warehouse } from "../data/store";
+import { getCustomers, getCustomer as getCentralCustomer, addCustomer, getCustomerAddresses, addAddress, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
 import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections, getCollections, getCollectionIdsForItem, setCategoriesForItem, removeItemLinksForOrder, type Collection } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
 import { MoneyInput } from "../components/MoneyInput";
 
 const NEW_CUSTOMER_OPTION = "__new_customer__";
 
-function loadFirstCustomer(): Customer {
-  const first = getCustomers()[0];
-  return first ? toDisplayCustomer(first, getCustomerAddresses(first.id)) : EMPTY_CUSTOMER;
+async function loadFirstCustomer(): Promise<Customer> {
+  const first = (await getCustomers())[0];
+  return first ? toDisplayCustomer(first, await getCustomerAddresses(first.id)) : EMPTY_CUSTOMER;
 }
 
 
@@ -165,7 +165,7 @@ function OrderPageInner() {
 
   const [productList, setProductList] = useState<Product[]>([]);
   const [marketers, setMarketers] = useState<Marketer[]>([]);
-  const [customerAddresses, setCustomerAddresses] = useState<CustomerAddress[]>(() => getCustomerAddresses(customer.id));
+  const [customerAddresses, setCustomerAddresses] = useState<CustomerAddress[]>([]);
   // Kosong dulu di render pertama (server tidak punya localStorage) — diisi di
   // HYDRATION FIX effect di bawah, sama seperti productList/marketers.
   const [customerList, setCustomerList] = useState<{ id: string; name: string; city: string }[]>([]);
@@ -192,7 +192,8 @@ function OrderPageInner() {
     setExistingOrders(getOrders());
     getProducts().then(setProductList);
     getMarketers().then(setMarketers);
-    setCustomerList(getCustomers());
+    // Customer sekarang Supabase (Tahap 5 migrasi backend) — async.
+    getCustomers().then(setCustomerList);
     setBatchNames(getBatchNames());
     getCollections().then(setCollectionsList);
     // Gudang & Stok sudah pindah ke Supabase (Tahap 4 migrasi backend) —
@@ -202,17 +203,23 @@ function OrderPageInner() {
   }, []);
 
   useEffect(() => {
-    if (customer.id === "") {
-      // Kalau datang dari profil customer (?customerId=...), langsung pilihkan
-      // customer itu — bukan customer pertama di daftar.
-      const fromParam = initialCustomerId ? getCentralCustomer(initialCustomerId) : undefined;
-      const first = fromParam ? toDisplayCustomer(fromParam, getCustomerAddresses(fromParam.id)) : loadFirstCustomer();
-      setCustomer(first);
-      setSelectedAddressId(first.defaultAddressId || "");
-      return;
-    }
-    setCustomerAddresses(getCustomerAddresses(customer.id));
-  }, [customer.id]);
+    let cancelled = false;
+    (async () => {
+      if (customer.id === "") {
+        // Kalau datang dari profil customer (?customerId=...), langsung pilihkan
+        // customer itu — bukan customer pertama di daftar.
+        const fromParam = initialCustomerId ? await getCentralCustomer(initialCustomerId) : undefined;
+        const first = fromParam ? toDisplayCustomer(fromParam, await getCustomerAddresses(fromParam.id)) : await loadFirstCustomer();
+        if (cancelled) return;
+        setCustomer(first);
+        setSelectedAddressId(first.defaultAddressId || "");
+        return;
+      }
+      const addrs = await getCustomerAddresses(customer.id);
+      if (!cancelled) setCustomerAddresses(addrs);
+    })();
+    return () => { cancelled = true; };
+  }, [customer.id, initialCustomerId]);
 
   // ===== CUSTOMER & SHIPPING ADDRESS =====
   // Alamat default otomatis terpilih saat customer dipilih.
@@ -221,13 +228,13 @@ function OrderPageInner() {
   const selectedAddress: CustomerAddress | undefined = customerAddresses.find(a => a.id === selectedAddressId);
 
 
-  const handleCustomerChange = (customerId: string) => {
+  const handleCustomerChange = async (customerId: string) => {
     if (customerId === NEW_CUSTOMER_OPTION) { setNewCustomerOpen(true); return; }
-    const central = getCentralCustomer(customerId);
+    const central = await getCentralCustomer(customerId);
     if (!central) return;
-    const c = toDisplayCustomer(central, getCustomerAddresses(customerId));
+    const all = await getCustomerAddresses(customerId);
+    const c = toDisplayCustomer(central, all);
     setCustomer(c);
-    const all = getCustomerAddresses(customerId);
     const defAddr = all.find(a => a.isDefault) || all[0];
     setSelectedAddressId(defAddr?.id || "");
     setRecipientName(defAddr?.recipientName || "");
@@ -236,10 +243,10 @@ function OrderPageInner() {
   };
 
   // ===== CUSTOMER BARU LANGSUNG DARI HALAMAN ORDER =====
-  const handleCreateCustomer = (name: string, city: string) => {
+  const handleCreateCustomer = async (name: string, city: string) => {
     const created = createNewCustomer(name, city);
-    addCustomer(created);
-    setCustomerList(getCustomers());
+    await addCustomer(created);
+    getCustomers().then(setCustomerList);
     setCustomer(toDisplayCustomer(created, []));
     setCustomerAddresses([]);
     setSelectedAddressId("");
@@ -260,7 +267,7 @@ function OrderPageInner() {
   };
 
   // ===== SIMPAN ALAMAT BARU (permanen) =====
-  const handleSaveAddress = () => {
+  const handleSaveAddress = async () => {
     if (!addrLabel.trim() || !addrAddress.trim()) {
       notify("Label dan alamat wajib diisi");
       return;
@@ -277,7 +284,8 @@ function OrderPageInner() {
       note: addrNote.trim() || undefined,
       isDefault: addrIsDefault,
     };
-    saveAddress(newAddr);
+    await addAddress(newAddr);
+    setCustomerAddresses(await getCustomerAddresses(customer.id));
     // Pilih alamat yang baru disimpan
     setSelectedAddressId(newAddr.id);
     setRecipientName(newAddr.recipientName);
@@ -824,11 +832,11 @@ function OrderPageInner() {
   // ===== LOAD ORDER KE FORM (EDIT MODE) =====
   const loadOrderIntoForm = async (order: OrderRecord) => {
     // Load customer
-    const centralC = (order.customerId ? getCentralCustomer(order.customerId) : undefined) || getCustomers()[0];
-    const c = centralC ? toDisplayCustomer(centralC, getCustomerAddresses(centralC.id)) : EMPTY_CUSTOMER;
+    const centralC = (order.customerId ? await getCentralCustomer(order.customerId) : undefined) || (await getCustomers())[0];
+    const all = centralC ? await getCustomerAddresses(centralC.id) : [];
+    const c = centralC ? toDisplayCustomer(centralC, all) : EMPTY_CUSTOMER;
     setCustomer(c);
     // Set selected address to default if available
-    const all = getCustomerAddresses(c.id);
     const defAddr = all.find(a => a.isDefault) || all[0];
     setSelectedAddressId(defAddr?.id || "");
     setRecipientName(order.phone);

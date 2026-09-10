@@ -1,5 +1,7 @@
 "use client";
 
+import { supabase } from "./supabaseClient";
+
 // =====================================================================
 // CENTRAL DATA LAYER — UmayasLa
 // =====================================================================
@@ -810,7 +812,17 @@ function save<T>(key: string, value: T[]) {
 // Sebelum migrasi apa pun, seluruh localStorage disalin ke key backup.
 // Tidak menghapus / meng-overwrite key lama.
 
-export function backupLocalStorage(): string {
+// Customer & Alamat sudah pindah ke Supabase (Tahap 5 migrasi backend) —
+// data BERSAMA, dipakai Owner+Admin dari device masing-masing. Supaya
+// "Cadangan Data" tetap jadi jaring pengaman yang bisa dipercaya (sesuai
+// keputusan eksplisit user, 2026-09-11: backup HARUS tetap mencakup
+// Customer/Alamat walau sekarang lintas-device), snapshot-nya disatukan
+// dengan localStorage lokal di bawah KEYS.customers/KEYS.addresses yang
+// SAMA — jadi listBackups()/restoreBackup() di bawah gak perlu tau bedanya.
+// PENTING: karena datanya bersama, "Pulihkan Cadangan" dari device MANAPUN
+// akan menimpa data Customer/Alamat utk SEMUA orang (Owner & Admin), bukan
+// cuma device yang mengklik — beda dari sebelumnya yang cuma lokal.
+export async function backupLocalStorage(): Promise<string> {
   if (typeof window === "undefined") return "";
   const timestamp = Date.now();
   const backupKey = KEYS.backupPrefix + timestamp;
@@ -825,6 +837,9 @@ export function backupLocalStorage(): string {
       }
     }
   }
+  const [customers, addresses] = await Promise.all([getAllCustomers(), getAddresses()]);
+  snapshot[KEYS.customers] = customers;
+  snapshot[KEYS.addresses] = addresses;
   window.localStorage.setItem(backupKey, JSON.stringify(snapshot));
   return backupKey;
 }
@@ -857,10 +872,44 @@ export function listBackups(): BackupInfo[] {
   return backups.sort((a, b) => b.timestamp - a.timestamp);
 }
 
-// Pulihkan SATU cadangan — timpa localStorage sekarang dengan isi cadangan itu.
-// Kondisi SEBELUM restore ikut dicadangkan dulu secara otomatis, jadi restore
-// juga tidak menghilangkan apa pun secara permanen.
-export function restoreBackup(backupKey: string): boolean {
+// Samakan Customer/Alamat di Supabase persis dengan isi snapshot (dipanggil
+// dari restoreBackup) — hapus yang gak ada di snapshot, upsert semua yang
+// ada di snapshot. Urutan PENTING karena FK addresses.customer_id ->
+// customers.id: hapus address dulu (anak) baru customer (induk) saat
+// menghapus; upsert customer dulu baru address saat menulis balik.
+async function restoreCustomersAndAddresses(snapshot: Record<string, unknown>) {
+  const snapshotCustomers = (Array.isArray(snapshot[KEYS.customers]) ? snapshot[KEYS.customers] : []) as Customer[];
+  const snapshotAddresses = (Array.isArray(snapshot[KEYS.addresses]) ? snapshot[KEYS.addresses] : []) as Address[];
+  const snapshotCustomerIds = new Set(snapshotCustomers.map(c => c.id));
+  const snapshotAddressIds = new Set(snapshotAddresses.map(a => a.id));
+
+  const [currentCustomers, currentAddresses] = await Promise.all([getAllCustomers(), getAddresses()]);
+
+  const addressIdsToDelete = currentAddresses.filter(a => !snapshotAddressIds.has(a.id)).map(a => a.id);
+  const customerIdsToDelete = currentCustomers.filter(c => !snapshotCustomerIds.has(c.id)).map(c => c.id);
+
+  if (addressIdsToDelete.length > 0) {
+    await supabase.from("addresses").delete().in("id", addressIdsToDelete);
+  }
+  if (customerIdsToDelete.length > 0) {
+    // "on delete cascade" (schema.sql) otomatis ikut bersihin address milik
+    // customer ini kalau ada yang kelewat dari penghapusan address di atas.
+    await supabase.from("customers").delete().in("id", customerIdsToDelete);
+  }
+  if (snapshotCustomers.length > 0) {
+    await supabase.from("customers").upsert(snapshotCustomers.map(customerToRow));
+  }
+  if (snapshotAddresses.length > 0) {
+    await supabase.from("addresses").upsert(snapshotAddresses.map(addressToRow));
+  }
+}
+
+// Pulihkan SATU cadangan — timpa localStorage & Customer/Alamat Supabase
+// sekarang dengan isi cadangan itu. Kondisi SEBELUM restore ikut dicadangkan
+// dulu secara otomatis, jadi restore juga tidak menghilangkan apa pun secara
+// permanen. PERINGATAN: Customer/Alamat data BERSAMA (Supabase) — restore
+// dari device manapun menimpa data itu utk SEMUA orang.
+export async function restoreBackup(backupKey: string): Promise<boolean> {
   if (typeof window === "undefined") return false;
   const raw = window.localStorage.getItem(backupKey);
   if (!raw) return false;
@@ -870,14 +919,16 @@ export function restoreBackup(backupKey: string): boolean {
   } catch {
     return false;
   }
-  backupLocalStorage();
+  await backupLocalStorage();
   // Hapus dulu key yang ADA SEKARANG tapi TIDAK ADA di snapshot lama (mis.
   // data yang baru dibuat setelah cadangan itu diambil) — sebelumnya restore
   // cuma menimpa key yang KEBETULAN sama dengan snapshot, jadi data baru yang
   // dibuat setelah backup TIDAK PERNAH ikut terhapus walau user pulihkan
   // cadangan yang lebih lama — bukan "pulihkan ke kondisi backup" yang
   // sebenarnya, cuma "gabungkan sebagian balik". Cadangan LAIN (key
-  // berawalan backupPrefix) tetap dijaga, tidak ikut dihapus.
+  // berawalan backupPrefix) tetap dijaga, tidak ikut dihapus. KEYS.customers/
+  // KEYS.addresses DILEWATI di sini (bukan localStorage lagi) — ditangani
+  // terpisah lewat restoreCustomersAndAddresses ke Supabase di bawah.
   const snapshotKeys = new Set(Object.keys(snapshot));
   const currentKeys: string[] = [];
   for (let i = 0; i < window.localStorage.length; i++) {
@@ -886,16 +937,19 @@ export function restoreBackup(backupKey: string): boolean {
   }
   for (const key of currentKeys) {
     if (key.startsWith(KEYS.backupPrefix)) continue;
+    if (key === KEYS.customers || key === KEYS.addresses) continue;
     if (!snapshotKeys.has(key)) window.localStorage.removeItem(key);
   }
   for (const [key, value] of Object.entries(snapshot)) {
     if (key.startsWith(KEYS.backupPrefix)) continue;
+    if (key === KEYS.customers || key === KEYS.addresses) continue;
     if (value === null || value === undefined) {
       window.localStorage.removeItem(key);
     } else {
       window.localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
     }
   }
+  await restoreCustomersAndAddresses(snapshot);
   return true;
 }
 
@@ -937,39 +991,103 @@ function getById<T extends { id: string }>(key: string, id: string): T | undefin
 }
 
 // =====================================================================
-// CUSTOMER
+// CUSTOMER & ADDRESS (Tahap 5 migrasi backend — Supabase)
 // =====================================================================
+// Data BERSAMA (bukan cost-sensitive) — RLS "all_authenticated" biasa,
+// query tabel langsung. Sudah ada di Supabase sejak migrasi Tahap 3.
 
-export function getCustomers(): Customer[] {
-  return getAll<Customer>(KEYS.customers).filter(c => c.deletedAt === null);
+function mapCustomerRow(c: Record<string, unknown>): Customer {
+  return {
+    id: c.id as string,
+    name: c.name as string,
+    waName: c.wa_name as string,
+    phone: c.phone as string,
+    receiver: c.receiver as string,
+    receiverPhone: c.receiver_phone as string,
+    city: c.city as string,
+    since: c.since as string,
+    notes: (c.notes as string[]) ?? [],
+    createdAt: Number(c.created_at),
+    deletedAt: c.deleted_at == null ? null : Number(c.deleted_at),
+    initials: (c.initials as string) ?? undefined,
+    defaultAddressId: (c.default_address_id as string) ?? undefined,
+  };
 }
 
-export function getAllCustomers(): Customer[] {
-  return getAll<Customer>(KEYS.customers);
+function customerToRow(customer: Customer) {
+  return {
+    id: customer.id, name: customer.name, wa_name: customer.waName, phone: customer.phone,
+    receiver: customer.receiver, receiver_phone: customer.receiverPhone, city: customer.city,
+    since: customer.since, notes: customer.notes || [], created_at: customer.createdAt,
+    deleted_at: customer.deletedAt, initials: customer.initials ?? null,
+    default_address_id: customer.defaultAddressId ?? null,
+  };
 }
 
-export function getCustomer(id: string): Customer | undefined {
-  return getById<Customer>(KEYS.customers, id);
+function mapAddressRow(a: Record<string, unknown>): Address {
+  return {
+    id: a.id as string,
+    customerId: a.customer_id as string,
+    label: a.label as string,
+    recipientName: a.recipient_name as string,
+    phone: a.phone as string,
+    address: a.address as string,
+    landmark: (a.landmark as string) ?? undefined,
+    courier: (a.courier as string) ?? undefined,
+    note: (a.note as string) ?? undefined,
+    isDefault: a.is_default as boolean,
+  };
 }
 
-export function addCustomer(customer: Customer): Customer[] {
-  return addOne(KEYS.customers, customer);
+function addressToRow(address: Address) {
+  return {
+    id: address.id, customer_id: address.customerId, label: address.label,
+    recipient_name: address.recipientName, phone: address.phone, address: address.address,
+    landmark: address.landmark ?? null, courier: address.courier ?? null,
+    note: address.note ?? null, is_default: address.isDefault,
+  };
 }
 
-export function updateCustomer(customer: Customer): Customer[] {
-  return updateOne(KEYS.customers, customer);
+export async function getAllCustomers(): Promise<Customer[]> {
+  const { data, error } = await supabase.from("customers").select("*").order("created_at", { ascending: false });
+  if (error) { console.error("[getAllCustomers]", error.message); return []; }
+  return ((data || []) as Record<string, unknown>[]).map(mapCustomerRow);
+}
+
+export async function getCustomers(): Promise<Customer[]> {
+  return (await getAllCustomers()).filter(c => c.deletedAt === null);
+}
+
+export async function getCustomer(id: string): Promise<Customer | undefined> {
+  const { data, error } = await supabase.from("customers").select("*").eq("id", id).maybeSingle();
+  if (error) { console.error("[getCustomer]", error.message); return undefined; }
+  return data ? mapCustomerRow(data as Record<string, unknown>) : undefined;
+}
+
+export async function addCustomer(customer: Customer): Promise<Customer[]> {
+  const { error } = await supabase.from("customers").upsert(customerToRow(customer));
+  if (error) { console.error("[addCustomer]", error.message); throw new Error(error.message); }
+  return getAllCustomers();
+}
+
+export async function updateCustomer(customer: Customer): Promise<Customer[]> {
+  const { error } = await supabase.from("customers").update(customerToRow(customer)).eq("id", customer.id);
+  if (error) { console.error("[updateCustomer]", error.message); throw new Error(error.message); }
+  return getAllCustomers();
 }
 
 // Soft delete: hanya menandai deletedAt, transaksi historis tetap utuh.
-export function softDeleteCustomer(id: string): Customer[] {
-  const list = getAll<Customer>(KEYS.customers);
-  const updated = list.map(c => (c.id === id ? { ...c, deletedAt: Date.now() } : c));
-  saveAll(KEYS.customers, updated);
-  return updated;
+export async function softDeleteCustomer(id: string): Promise<Customer[]> {
+  const { error } = await supabase.from("customers").update({ deleted_at: Date.now() }).eq("id", id);
+  if (error) console.error("[softDeleteCustomer]", error.message);
+  return getAllCustomers();
 }
 
 // Hard delete: hanya untuk customer TANPA transaksi (order/payment/shipment).
-export function hardDeleteCustomer(id: string): { ok: boolean; reason?: string } {
+// hasOrder/hasPayment/hasShipment tetap dicek dari shadow-projection central.ts
+// (getOrders/getPayments/getShipments) — TIDAK disentuh Tahap 5 ini, itu
+// entity Tahap 6.
+export async function hardDeleteCustomer(id: string): Promise<{ ok: boolean; reason?: string }> {
   const hasOrder = getOrders().some(o => o.customerId === id);
   const hasPayment = getPayments().some(p => {
     const order = getOrder(p.orderId);
@@ -987,32 +1105,39 @@ export function hardDeleteCustomer(id: string): { ok: boolean; reason?: string }
   if (hasOrder || hasPayment || hasShipment) {
     return { ok: false, reason: "Customer memiliki transaksi. Gunakan soft delete (arsip)." };
   }
-  removeOne<Customer>(KEYS.customers, id);
+  const { error } = await supabase.from("customers").delete().eq("id", id);
+  if (error) { console.error("[hardDeleteCustomer]", error.message); return { ok: false, reason: error.message }; }
   return { ok: true };
 }
 
-// =====================================================================
-// ADDRESS
-// =====================================================================
-
-export function getAddresses(): Address[] {
-  return getAll<Address>(KEYS.addresses);
+export async function getAddresses(): Promise<Address[]> {
+  const { data, error } = await supabase.from("addresses").select("*");
+  if (error) { console.error("[getAddresses]", error.message); return []; }
+  return ((data || []) as Record<string, unknown>[]).map(mapAddressRow);
 }
 
-export function getCustomerAddresses(customerId: string): Address[] {
-  return getAddresses().filter(a => a.customerId === customerId);
+export async function getCustomerAddresses(customerId: string): Promise<Address[]> {
+  const { data, error } = await supabase.from("addresses").select("*").eq("customer_id", customerId);
+  if (error) { console.error("[getCustomerAddresses]", error.message); return []; }
+  return ((data || []) as Record<string, unknown>[]).map(mapAddressRow);
 }
 
-export function addAddress(address: Address): Address[] {
-  return addOne(KEYS.addresses, address);
+export async function addAddress(address: Address): Promise<Address[]> {
+  const { error } = await supabase.from("addresses").upsert(addressToRow(address));
+  if (error) { console.error("[addAddress]", error.message); throw new Error(error.message); }
+  return getAddresses();
 }
 
-export function updateAddress(address: Address): Address[] {
-  return updateOne(KEYS.addresses, address);
+export async function updateAddress(address: Address): Promise<Address[]> {
+  const { error } = await supabase.from("addresses").update(addressToRow(address)).eq("id", address.id);
+  if (error) { console.error("[updateAddress]", error.message); throw new Error(error.message); }
+  return getAddresses();
 }
 
-export function deleteAddress(id: string): Address[] {
-  return removeOne<Address>(KEYS.addresses, id);
+export async function deleteAddress(id: string): Promise<Address[]> {
+  const { error } = await supabase.from("addresses").delete().eq("id", id);
+  if (error) console.error("[deleteAddress]", error.message);
+  return getAddresses();
 }
 
 // =====================================================================
@@ -2814,8 +2939,8 @@ export type CustomerWorkspaceData = {
   paymentStatus: PaymentStatus;
 };
 
-export function getCustomerWorkspace(customerId: string): CustomerWorkspaceData | null {
-  const customer = getCustomer(customerId);
+export async function getCustomerWorkspace(customerId: string): Promise<CustomerWorkspaceData | null> {
+  const customer = await getCustomer(customerId);
   if (!customer) return null;
 
   const orders = getOrdersForCustomer(customerId);
@@ -2833,7 +2958,7 @@ export function getCustomerWorkspace(customerId: string): CustomerWorkspaceData 
 
   const tasks = getTasksForCustomer(customerId);
   const activities = getActivitiesForCustomer(customerId);
-  const addresses = getCustomerAddresses(customerId);
+  const addresses = await getCustomerAddresses(customerId);
 
   const outstanding = orders.reduce((sum, o) => sum + getOutstanding(o.id), 0);
   const paymentStatus = orders.length > 0 ? getPaymentStatus(orders[0].id) : "belum-bayar";
@@ -3393,7 +3518,7 @@ export type DashboardWorkQueue = {
 };
 
 // Satu order hanya masuk SATU primary queue.
-export function getDashboardWorkQueue(): DashboardWorkQueue {
+export async function getDashboardWorkQueue(): Promise<DashboardWorkQueue> {
   const queue: DashboardWorkQueue = {
     perluTindakan: [],
     bisaDikerjakan: [],
@@ -3402,9 +3527,13 @@ export function getDashboardWorkQueue(): DashboardWorkQueue {
     ringkasan: [],
   };
 
+  // Customer sekarang Supabase (Tahap 5) — preload sekali jadi Map, bukan
+  // query per-order di dalam loop.
+  const customerById = new Map((await getAllCustomers()).map(c => [c.id, c]));
+
   for (const order of getOrders()) {
     const primary = getPrimaryCondition(order.id);
-    const customer = getCustomer(order.customerId);
+    const customer = customerById.get(order.customerId);
     const item: WorkQueueItem = {
       orderId: order.id,
       orderNumber: order.number,
@@ -4597,19 +4726,19 @@ export type LegacyCustomerAddressLike = {
 };
 
 // Backfill satu Customer + seluruh CustomerAddress-nya (lossless, idempotent).
-export function backfillStoreCustomer(customer: LegacyCustomerLike): {
+export async function backfillStoreCustomer(customer: LegacyCustomerLike): Promise<{
   created: boolean;
   skipped: boolean;
   reason?: string;
   addressesCreated: number;
   addressesSkipped: number;
-} {
+}> {
   // Skip rule: identity field absen.
   if (!customer.id) {
     return { created: false, skipped: true, reason: "Customer tanpa id (identity field absen).", addressesCreated: 0, addressesSkipped: 0 };
   }
   // Idempotent: jangan duplikasi Customer yang sudah ada di central.
-  if (getCustomer(customer.id)) {
+  if (await getCustomer(customer.id)) {
     return { created: false, skipped: true, reason: "Customer sudah ada di central.", addressesCreated: 0, addressesSkipped: 0 };
   }
 
@@ -4630,11 +4759,12 @@ export function backfillStoreCustomer(customer: LegacyCustomerLike): {
     initials: customer.initials,
     defaultAddressId: customer.defaultAddressId ?? null,
   };
-  addCustomer(centralCustomer);
+  await addCustomer(centralCustomer);
 
   // Backfill addresses (lossless, idempotent per id).
   let addressesCreated = 0;
   let addressesSkipped = 0;
+  const existingAddressIds = new Set((await getAddresses()).map(a => a.id));
   for (const addr of customer.addresses || []) {
     // Skip rule: linking/identity field absen → tidak bisa ditautkan.
     if (!addr.id || !addr.customerId) {
@@ -4642,7 +4772,7 @@ export function backfillStoreCustomer(customer: LegacyCustomerLike): {
       continue;
     }
     // Idempotent: jangan duplikasi Address yang sudah ada di central.
-    if (getById<Address>(KEYS.addresses, addr.id)) {
+    if (existingAddressIds.has(addr.id)) {
       addressesSkipped++;
       continue;
     }
@@ -4658,7 +4788,7 @@ export function backfillStoreCustomer(customer: LegacyCustomerLike): {
       note: addr.note,
       isDefault: addr.isDefault,
     };
-    addAddress(centralAddress);
+    await addAddress(centralAddress);
     addressesCreated++;
   }
 
@@ -4683,7 +4813,7 @@ export async function syncCustomersFromStore(): Promise<{ synced: number; skippe
     const customers = await import("./customers" + ".ts");
     const records: LegacyCustomerLike[] = customers.customersData ? customers.customersData : [];
     for (const record of records) {
-      const result = backfillStoreCustomer(record);
+      const result = await backfillStoreCustomer(record);
       if (result.skipped) skipped++;
       else synced++;
       addressesCreated += result.addressesCreated;
@@ -6466,8 +6596,9 @@ export type OperationalWorkQueueItem = {
   needsOwnerDecision: boolean;
 };
 
-export function getOperationalWorkQueue(): OperationalWorkQueueItem[] {
+export async function getOperationalWorkQueue(): Promise<OperationalWorkQueueItem[]> {
   const items: OperationalWorkQueueItem[] = [];
+  const customerById = new Map((await getAllCustomers()).map(c => [c.id, c]));
 
   for (const order of getOrders()) {
     const op = getOrderOperationalState(order.id);
@@ -6478,7 +6609,7 @@ export function getOperationalWorkQueue(): OperationalWorkQueueItem[] {
     const priority = getOperationalPriority(order.id);
     if (!priority) continue;
 
-    const customer = getCustomer(order.customerId);
+    const customer = customerById.get(order.customerId);
     items.push({
       orderId: order.id,
       orderNumber: order.number,

@@ -77,6 +77,24 @@ export default function CollectionDetailPage() {
     price: 0,
     note: "",
   });
+  // Customer sekarang Supabase (async) — matchCustomerId gak bisa dipanggil
+  // langsung di render lagi, dicocokkan lewat effect tiap nama/HP berubah.
+  const [matchedCustomer, setMatchedCustomer] = useState<{ id: string; name: string } | null>(null);
+
+  useEffect(() => {
+    const name = orderForm.customerName.trim();
+    const phone = orderForm.phone.trim();
+    if (!name && !phone) { setMatchedCustomer(null); return; }
+    let cancelled = false;
+    matchCustomerId(name, phone).then(async id => {
+      if (cancelled || !id) { if (!cancelled) setMatchedCustomer(null); return; }
+      const list = await getCustomers();
+      if (cancelled) return;
+      const found = list.find(c => c.id === id);
+      setMatchedCustomer(found ? { id: found.id, name: found.name } : null);
+    });
+    return () => { cancelled = true; };
+  }, [orderForm.customerName, orderForm.phone]);
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
@@ -310,11 +328,6 @@ export default function CollectionDetailPage() {
     await refresh();
     notify("Order dihapus dari collection");
   };
-
-  // ===== CHECK CUSTOMER MATCH LIVE =====
-  const matchedCustomer = orderForm.customerName.trim() || orderForm.phone.trim()
-    ? matchCustomerId(orderForm.customerName.trim(), orderForm.phone.trim())
-    : null;
 
   const orderTotal = orderForm.price * orderForm.qty;
 
@@ -633,7 +646,7 @@ export default function CollectionDetailPage() {
 
           {matchedCustomer && (
             <div className="customer-match-hint">
-              ✅ Customer <b>{getCustomers().find(c => c.id === matchedCustomer)?.name}</b> ditemukan — order akan terhubung otomatis.
+              ✅ Customer <b>{matchedCustomer.name}</b> ditemukan — order akan terhubung otomatis.
             </div>
           )}
           {!matchedCustomer && (orderForm.customerName.trim() || orderForm.phone.trim()) && (

@@ -28,8 +28,8 @@ import { getAllCollections, getCollectionOrders, getCollectionOrderItems } from 
 // sendiri, gak ada efek samping).
 export async function collectAllLocalData() {
   return {
-    customers: getAllCustomers(),
-    addresses: getAddresses(),
+    customers: await getAllCustomers(),
+    addresses: await getAddresses(),
     marketers: await getMarketers(),
     products: await getProducts(),
     warehouses: await getWarehouses(),

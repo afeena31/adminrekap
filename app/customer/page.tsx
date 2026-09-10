@@ -56,9 +56,9 @@ function buildMetrics(customer: Customer, orders: OrderRecord[]) {
   ];
 }
 
-function loadFirstCustomer(): Customer {
-  const first = getCustomers()[0];
-  return first ? toDisplayCustomer(first, getCentralCustomerAddresses(first.id)) : EMPTY_CUSTOMER;
+async function loadFirstCustomer(): Promise<Customer> {
+  const first = (await getCustomers())[0];
+  return first ? toDisplayCustomer(first, await getCentralCustomerAddresses(first.id)) : EMPTY_CUSTOMER;
 }
 
 export default function HomePage() {
@@ -96,25 +96,33 @@ function HomePageInner() {
   const [wipeDemoConfirmOpen, setWipeDemoConfirmOpen] = useState(false);
   const [ops, setOps] = useState<CustomerOperations>(() => getOperations("-"));
   const [customerOrders, setCustomerOrders] = useState<OrderRecord[]>([]);
-  // Collection sekarang Supabase (async) — dipreload di sini, dipakai Universal
-  // Search finder di bawah (gak bisa panggil getCollections() langsung di render lagi).
+  // Collection & Customer sekarang Supabase (async) — dipreload di sini,
+  // dipakai Universal Search finder di bawah (gak bisa panggil getCollections()/
+  // getCustomers() langsung di render lagi).
   const [searchCollections, setSearchCollections] = useState<Collection[]>([]);
+  const [searchDisplayCustomers, setSearchDisplayCustomers] = useState<Customer[]>([]);
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
   useEffect(() => {
     getCollections().then(setSearchCollections);
+    getCustomers().then(async list => {
+      const withAddresses = await Promise.all(list.map(async c => toDisplayCustomer(c, await getCentralCustomerAddresses(c.id))));
+      setSearchDisplayCustomers(withAddresses);
+    });
   }, []);
 
-  // ===== HYDRATION FIX: muat customer asli dari localStorage setelah mount =====
+  // ===== HYDRATION FIX: muat customer asli dari Supabase setelah mount =====
   useEffect(() => {
-    if (initialCustomerId) {
-      const found = getCustomer(initialCustomerId);
-      if (found) {
-        setCustomer(toDisplayCustomer(found, getCentralCustomerAddresses(found.id)));
-        return;
+    (async () => {
+      if (initialCustomerId) {
+        const found = await getCustomer(initialCustomerId);
+        if (found) {
+          setCustomer(toDisplayCustomer(found, await getCentralCustomerAddresses(found.id)));
+          return;
+        }
       }
-    }
-    setCustomer(loadFirstCustomer());
+      setCustomer(await loadFirstCustomer());
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -140,32 +148,32 @@ function HomePageInner() {
   }, [customer.id]);
 
   // ===== CUSTOMER BARU — beneran tersimpan lewat central.ts, bukan cuma di state React =====
-  const handleCreateCustomer = (name: string, city: string) => {
+  const handleCreateCustomer = async (name: string, city: string) => {
     const created = createNewCustomer(name, city);
-    addCustomer(created);
+    await addCustomer(created);
     setCustomer(toDisplayCustomer(created, []));
   };
 
   // ===== DATA DEMO — muat / sembunyikan lewat central.ts, aman & bisa dipulihkan =====
-  const loadDemoData = () => {
-    backupLocalStorage();
-    const existingIds = new Set(getCustomers().map(c => c.id));
+  const loadDemoData = async () => {
+    await backupLocalStorage();
+    const existingIds = new Set((await getCustomers()).map(c => c.id));
     let added = 0;
     for (const c of demoCustomers) {
-      if (!existingIds.has(c.id)) { addCustomer(c); added++; }
+      if (!existingIds.has(c.id)) { await addCustomer(c); added++; }
     }
-    const existingAddrIds = new Set(getAddresses().map(a => a.id));
+    const existingAddrIds = new Set((await getAddresses()).map(a => a.id));
     for (const a of demoAddresses) {
-      if (!existingAddrIds.has(a.id)) addAddress(a);
+      if (!existingAddrIds.has(a.id)) await addAddress(a);
     }
-    setCustomer(loadFirstCustomer());
+    setCustomer(await loadFirstCustomer());
     notify(added > 0 ? `Data demo dimuat (${added} customer)` : "Data demo sudah dimuat sebelumnya");
   };
 
-  const clearDemoData = () => {
-    backupLocalStorage();
-    for (const id of demoCustomerIds) softDeleteCustomer(id);
-    setCustomer(loadFirstCustomer());
+  const clearDemoData = async () => {
+    await backupLocalStorage();
+    for (const id of demoCustomerIds) await softDeleteCustomer(id);
+    setCustomer(await loadFirstCustomer());
     notify("Data demo disembunyikan");
   };
 
@@ -174,12 +182,12 @@ function HomePageInner() {
   // 3 customer. Ini benar-benar menghapus, termasuk katalog produk contoh &
   // daftar marketer contoh. Tetap dicadangkan dulu otomatis sebelum dihapus.
   const wipeAllDemoData = async () => {
-    backupLocalStorage();
+    await backupLocalStorage();
     for (const id of demoCustomerIds) {
-      const result = hardDeleteCustomer(id);
-      if (!result.ok) softDeleteCustomer(id);
+      const result = await hardDeleteCustomer(id);
+      if (!result.ok) await softDeleteCustomer(id);
     }
-    for (const a of demoAddresses) deleteCentralAddress(a.id);
+    for (const a of demoAddresses) await deleteCentralAddress(a.id);
     // Hanya hapus Collection BAWAAN (seed) — bukan semuanya, supaya Collection
     // "PO Batch" asli yang sudah dibuat user tidak ikut kehapus kalau tombol
     // ini dipakai lagi di kemudian hari.
@@ -217,27 +225,27 @@ function HomePageInner() {
     // pernah dipakai oleh fitur "Muat Data Demo" manapun) — jadi baris ini
     // gak ada gunanya selain merusak data asli. Sama persis kelasnya dengan
     // bug saveProducts([]) yang baru diperbaiki di atas.
-    setCustomer(loadFirstCustomer());
+    setCustomer(await loadFirstCustomer());
     notify("Semua data demo (customer, collection, produk, marketer) dihapus permanen");
   };
 
   // ===== EDIT PROFIL CUSTOMER =====
-  const handleUpdateCustomer = (data: EditableCustomerFields) => {
-    const central = getCustomer(customer.id);
+  const handleUpdateCustomer = async (data: EditableCustomerFields) => {
+    const central = await getCustomer(customer.id);
     if (!central) return;
     const updated = { ...central, ...data };
-    updateCentralCustomer(updated);
+    await updateCentralCustomer(updated);
     setCustomer(toDisplayCustomer(updated, customer.addresses));
     setEditCustomerOpen(false);
     notify("Profil customer diperbarui");
   };
 
   // ===== HAPUS CUSTOMER (soft delete — bisa dipulihkan dari backup) =====
-  const handleDeleteCustomer = () => {
-    backupLocalStorage();
-    softDeleteCustomer(customer.id);
+  const handleDeleteCustomer = async () => {
+    await backupLocalStorage();
+    await softDeleteCustomer(customer.id);
     setDeleteCustomerConfirmOpen(false);
-    setCustomer(loadFirstCustomer());
+    setCustomer(await loadFirstCustomer());
     notify("Customer dihapus");
   };
 
@@ -247,11 +255,11 @@ function HomePageInner() {
   };
 
   // ===== PULIHKAN CADANGAN =====
-  const handleRestoreBackup = (key: string) => {
-    const ok = restoreBackup(key);
+  const handleRestoreBackup = async (key: string) => {
+    const ok = await restoreBackup(key);
     setRestoreConfirmKey(null);
     setSettingsOpen(false);
-    setCustomer(loadFirstCustomer());
+    setCustomer(await loadFirstCustomer());
     notify(ok ? "Cadangan berhasil dipulihkan" : "Gagal memulihkan cadangan");
   };
 
@@ -269,12 +277,12 @@ function HomePageInner() {
   };
 
   // Simpan defaultAddressId ke central.ts juga, supaya tetap benar setelah refresh.
-  const persistDefaultAddressId = (defaultAddressId: string | null) => {
-    const centralCust = getCustomer(customer.id);
-    if (centralCust) updateCentralCustomer({ ...centralCust, defaultAddressId });
+  const persistDefaultAddressId = async (defaultAddressId: string | null) => {
+    const centralCust = await getCustomer(customer.id);
+    if (centralCust) await updateCentralCustomer({ ...centralCust, defaultAddressId });
   };
 
-  const saveAddress = () => {
+  const saveAddress = async () => {
     if (!addrForm.label.trim() || !addrForm.recipientName.trim() || !addrForm.address.trim()) { notify("Label, nama penerima, dan alamat wajib diisi"); return; }
     const updatedCustomer = { ...customer };
     let addresses = [...updatedCustomer.addresses];
@@ -295,14 +303,14 @@ function HomePageInner() {
     setCustomer(updatedCustomer);
 
     // Simpan ke central.ts supaya alamat beneran tersimpan, bukan cuma di state React.
-    for (const a of addresses) { if (a.id === newAddrId) addAddress(a); else updateCentralAddress(a); }
-    persistDefaultAddressId(updatedCustomer.defaultAddressId);
+    for (const a of addresses) { if (a.id === newAddrId) await addAddress(a); else await updateCentralAddress(a); }
+    await persistDefaultAddressId(updatedCustomer.defaultAddressId);
 
     setAddressFormOpen(false);
     notify(editingAddress ? "Alamat diperbarui" : "Alamat ditambahkan");
   };
 
-  const deleteAddress = (addrId: string) => {
+  const deleteAddress = async (addrId: string) => {
     const updatedCustomer = { ...customer };
     const remaining = updatedCustomer.addresses.filter(a => a.id !== addrId).map(a => ({ ...a }));
     if (remaining.length > 0 && !remaining.some(a => a.isDefault)) {
@@ -312,21 +320,21 @@ function HomePageInner() {
     updatedCustomer.defaultAddressId = remaining.find(a => a.isDefault)?.id || null;
     setCustomer(updatedCustomer);
 
-    deleteCentralAddress(addrId);
-    for (const a of remaining) updateCentralAddress(a);
-    persistDefaultAddressId(updatedCustomer.defaultAddressId);
+    await deleteCentralAddress(addrId);
+    for (const a of remaining) await updateCentralAddress(a);
+    await persistDefaultAddressId(updatedCustomer.defaultAddressId);
 
     notify("Alamat dihapus");
   };
 
-  const setDefaultAddress = (addrId: string) => {
+  const setDefaultAddress = async (addrId: string) => {
     const updatedCustomer = { ...customer };
     updatedCustomer.addresses = updatedCustomer.addresses.map(a => ({ ...a, isDefault: a.id === addrId }));
     updatedCustomer.defaultAddressId = addrId;
     setCustomer(updatedCustomer);
 
-    for (const a of updatedCustomer.addresses) updateCentralAddress(a);
-    persistDefaultAddressId(addrId);
+    for (const a of updatedCustomer.addresses) await updateCentralAddress(a);
+    await persistDefaultAddressId(addrId);
 
     notify("Alamat default diperbarui");
   };
@@ -521,8 +529,7 @@ function HomePageInner() {
     {finderOpen && <div className="overlay" onClick={() => setFinderOpen(false)}><section className="modal finder" onClick={event => event.stopPropagation()}><button className="close" onClick={() => setFinderOpen(false)}>×</button><h2>Universal Search</h2><div className="find-input"><Search size={18}/><input autoFocus placeholder="Cari customer atau collection..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}/></div><button className="new-customer" onClick={() => { setFinderOpen(false); setNewCustomerOpen(true); }}>+ Tambah Customer Baru</button>
       {(() => {
         const q = searchQuery.toLowerCase().trim();
-        const allCustomers = getCustomers().map(c => toDisplayCustomer(c, getCentralCustomerAddresses(c.id)));
-        const filteredCustomers = q ? allCustomers.filter(c => c.name.toLowerCase().includes(q) || c.city.toLowerCase().includes(q) || c.waName.toLowerCase().includes(q)) : allCustomers;
+        const filteredCustomers = q ? searchDisplayCustomers.filter(c => c.name.toLowerCase().includes(q) || c.city.toLowerCase().includes(q) || c.waName.toLowerCase().includes(q)) : searchDisplayCustomers;
         const filteredCollections = q ? searchCollections.filter(c => c.name.toLowerCase().includes(q) || c.tags.some(t => t.toLowerCase().includes(q)) || (c.description || "").toLowerCase().includes(q)) : searchCollections;
         return <>
           <p className="muted">Customer</p>

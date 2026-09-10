@@ -18,11 +18,14 @@ import { BottomNav } from "./components/BottomNav";
 import { QuickPaymentModal } from "./components/QuickPaymentModal";
 import { goBack } from "./lib/goBack";
 import { getOperations } from "./data/operations";
-import { getCustomers, getCustomerAddresses as getCentralCustomerAddresses, getDashboardWorkQueue, type WorkQueueItem, type PrimaryCondition } from "./data/central";
+import { getCustomers, getCustomerAddresses as getCentralCustomerAddresses, getDashboardWorkQueue, type WorkQueueItem, type PrimaryCondition, type DashboardWorkQueue } from "./data/central";
 import { useAuth } from "./data/authContext";
 
-function loadAllDisplayCustomers() {
-  return getCustomers().map(c => toDisplayCustomer(c, getCentralCustomerAddresses(c.id)));
+// Customer sekarang Supabase (Tahap 5 migrasi backend) — async.
+async function loadAllDisplayCustomers() {
+  const customers = await getCustomers();
+  return Promise.all(customers.map(async c => ({ customer: c, addresses: await getCentralCustomerAddresses(c.id) })))
+    .then(rows => rows.map(({ customer, addresses }) => toDisplayCustomer(customer, addresses)));
 }
 
 export default function DashboardPage() {
@@ -51,7 +54,7 @@ export default function DashboardPage() {
   const [marketers, setMarketers] = useState<Marketer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [allOps, setAllOps] = useState<{ customer: ReturnType<typeof toDisplayCustomer>; ops: ReturnType<typeof getOperations> }[]>([]);
-  const [workQueue, setWorkQueue] = useState<ReturnType<typeof getDashboardWorkQueue>>({ perluTindakan: [], bisaDikerjakan: [], segera: [], menunggu: [], ringkasan: [] });
+  const [workQueue, setWorkQueue] = useState<DashboardWorkQueue>({ perluTindakan: [], bisaDikerjakan: [], segera: [], menunggu: [], ringkasan: [] });
   const [totalCustomers, setTotalCustomers] = useState(0);
   // Halaman ini di-prerender statis (waktu build) — kalau jam/tanggal dihitung
   // langsung di badan render, HTML hasil build (jam build) akan beda dari hasil
@@ -66,9 +69,9 @@ export default function DashboardPage() {
     setFees(getFees());
     getMarketers().then(setMarketers);
     getProducts().then(setProducts);
-    setAllOps(loadAllDisplayCustomers().map(c => ({ customer: c, ops: getOperations(c.id) })));
-    setWorkQueue(getDashboardWorkQueue());
-    setTotalCustomers(getCustomers().length);
+    loadAllDisplayCustomers().then(list => setAllOps(list.map(c => ({ customer: c, ops: getOperations(c.id) }))));
+    getDashboardWorkQueue().then(setWorkQueue);
+    getCustomers().then(list => setTotalCustomers(list.length));
     const hour = new Date().getHours();
     setGreeting(hour < 11 ? "Selamat Pagi" : hour < 15 ? "Selamat Siang" : hour < 18 ? "Selamat Sore" : "Selamat Malam");
     setTodayLabel(new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" }));

@@ -1,6 +1,6 @@
 "use client";
 
-import { products as seedProducts, determineRekening, type Product } from "./products";
+import { determineRekening, type Product } from "./products";
 import { supabase } from "./supabaseClient";
 
 

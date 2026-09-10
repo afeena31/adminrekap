@@ -340,6 +340,69 @@ as $$
   from products p;
 $$;
 
+-- ===== RPC: tulis products — Admin BOLEH nulis produk baru (judul, kategori,
+-- harga jual, dll) TAPI kolom cost (modal_kotor/biaya_operasional/hpp/
+-- fee_marketer) SAMA SEKALI GAK PERNAH TERSENTUH kalau bukan Owner yang
+-- manggil — bukan cuma diabaikan di form, tapi di-skip total di SQL-nya
+-- sendiri (kalau bukan owner, statement INSERT/UPDATE bahkan gak nyebut
+-- kolom2 itu sama sekali). Dipakai buat kasus mis. Admin (Gina) input
+-- katalog buku baru (judul+harga jual), modal diisi belakangan oleh Owner.
+create or replace function create_product(
+  p_id text, p_name text, p_category text, p_price numeric,
+  p_original_price numeric, p_description text, p_emoji text, p_badge text,
+  p_variants text[], p_modal_kotor numeric, p_biaya_operasional numeric,
+  p_hpp numeric, p_fee_marketer numeric, p_discount_default numeric,
+  p_discount_type text, p_active boolean, p_default_collection_ids text[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if is_owner() then
+    insert into products (id, name, category, price, original_price, description, emoji, badge, variants, modal_kotor, biaya_operasional, hpp, fee_marketer, discount_default, discount_type, active, default_collection_ids)
+    values (p_id, p_name, p_category, p_price, p_original_price, p_description, p_emoji, p_badge, p_variants, p_modal_kotor, p_biaya_operasional, p_hpp, p_fee_marketer, p_discount_default, p_discount_type, p_active, p_default_collection_ids);
+  else
+    insert into products (id, name, category, price, original_price, description, emoji, badge, variants, active, default_collection_ids)
+    values (p_id, p_name, p_category, p_price, p_original_price, p_description, p_emoji, p_badge, p_variants, p_active, p_default_collection_ids);
+  end if;
+end;
+$$;
+
+create or replace function update_product(
+  p_id text, p_name text, p_category text, p_price numeric,
+  p_original_price numeric, p_description text, p_emoji text, p_badge text,
+  p_variants text[], p_modal_kotor numeric, p_biaya_operasional numeric,
+  p_hpp numeric, p_fee_marketer numeric, p_discount_default numeric,
+  p_discount_type text, p_active boolean, p_default_collection_ids text[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if is_owner() then
+    update products set
+      name = p_name, category = p_category, price = p_price, original_price = p_original_price,
+      description = p_description, emoji = p_emoji, badge = p_badge, variants = p_variants,
+      modal_kotor = p_modal_kotor, biaya_operasional = p_biaya_operasional, hpp = p_hpp,
+      fee_marketer = p_fee_marketer, discount_default = p_discount_default, discount_type = p_discount_type,
+      active = p_active, default_collection_ids = p_default_collection_ids
+    where id = p_id;
+  else
+    -- Kolom cost SAMA SEKALI GAK DISENTUH di sini (bukan ditulis NULL) —
+    -- tetap apapun nilainya yang sudah ada sebelumnya (biasanya diisi Owner).
+    update products set
+      name = p_name, category = p_category, price = p_price, original_price = p_original_price,
+      description = p_description, emoji = p_emoji, badge = p_badge, variants = p_variants,
+      active = p_active, default_collection_ids = p_default_collection_ids
+    where id = p_id;
+  end if;
+end;
+$$;
+
 -- ===== RPC: baca order_items 1 order dgn cost di-strip utk admin =====
 create or replace function get_order_items(p_order_id text)
 returns setof jsonb
@@ -373,6 +436,8 @@ $$;
 grant execute on function get_products() to authenticated;
 grant execute on function get_order_items(text) to authenticated;
 grant execute on function get_fees() to authenticated;
+grant execute on function create_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[]) to authenticated;
+grant execute on function update_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[]) to authenticated;
 grant execute on function is_owner() to authenticated;
 grant execute on function current_role_name() to authenticated;
 

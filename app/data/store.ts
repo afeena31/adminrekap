@@ -266,10 +266,12 @@ function save<T>(key: string, value: T) {
 // tabel langsung — RPC itu sendiri yg strip kolom modal/HPP/fee marketer
 // server-side kalau pemanggilnya role "admin" (dicek dari tabel profiles),
 // jadi data cost BENERAN gak pernah sampai ke browser Admin, bukan cuma
-// disembunyikan di UI (itu baru Tahap 7). Tulis (add/update/delete) ke
-// tabel langsung — RLS "products_write_owner_only" cuma izinin role Owner;
-// Admin yg nyoba nulis bakal ditolak Supabase sendiri (proteksi di
-// database, bukan nunggu UI-nya dikunci di Tahap 7).
+// disembunyikan di UI (itu baru Tahap 7). Tulis (add/update) juga lewat RPC
+// (create_product/update_product) — bukan INSERT/UPDATE tabel langsung —
+// karena Admin BOLEH nulis kolom aman (judul/kategori/harga/stok/dst) tapi
+// kolom cost harus sama sekali gak tersentuh kalau bukan Owner yg manggil;
+// RLS tabel `products` sendiri tetap Owner-only (fallback pertahanan kedua
+// kalau ada yg nyoba nulis tabel langsung, lewatin RPC ini).
 
 function mapProductRow(p: Record<string, unknown>): Product {
   return {
@@ -293,15 +295,19 @@ function mapProductRow(p: Record<string, unknown>): Product {
   };
 }
 
-function productToRow(product: Product) {
+// Nama parameter di sini HARUS persis sama dgn urutan/nama param RPC
+// create_product/update_product di supabase/schema.sql — kalau produk ini
+// ditulis Admin, function di sisi database yg akan mengabaikan kolom cost
+// (p_modal_kotor dst), bukan kode di sini.
+function productToRpcArgs(product: Product) {
   return {
-    name: product.name, category: product.category, price: product.price,
-    original_price: product.originalPrice ?? null, description: product.description ?? null,
-    emoji: product.emoji, badge: product.badge ?? null, variants: product.variants ?? null,
-    modal_kotor: product.modalKotor ?? null, biaya_operasional: product.biayaOperasional ?? null,
-    hpp: product.hpp ?? null, fee_marketer: product.feeMarketer ?? null,
-    discount_default: product.discountDefault ?? null, discount_type: product.discountType ?? null,
-    active: product.active !== false, default_collection_ids: product.defaultCollectionIds ?? null,
+    p_name: product.name, p_category: product.category, p_price: product.price,
+    p_original_price: product.originalPrice ?? null, p_description: product.description ?? null,
+    p_emoji: product.emoji, p_badge: product.badge ?? null, p_variants: product.variants ?? null,
+    p_modal_kotor: product.modalKotor ?? null, p_biaya_operasional: product.biayaOperasional ?? null,
+    p_hpp: product.hpp ?? null, p_fee_marketer: product.feeMarketer ?? null,
+    p_discount_default: product.discountDefault ?? null, p_discount_type: product.discountType ?? null,
+    p_active: product.active !== false, p_default_collection_ids: product.defaultCollectionIds ?? null,
   };
 }
 
@@ -312,13 +318,13 @@ export async function getProducts(): Promise<Product[]> {
 }
 
 export async function addProduct(product: Product): Promise<Product[]> {
-  const { error } = await supabase.from("products").insert({ id: product.id, ...productToRow(product) });
+  const { error } = await supabase.rpc("create_product", { p_id: product.id, ...productToRpcArgs(product) });
   if (error) console.error("[addProduct]", error.message);
   return getProducts();
 }
 
 export async function updateProduct(product: Product): Promise<Product[]> {
-  const { error } = await supabase.from("products").update(productToRow(product)).eq("id", product.id);
+  const { error } = await supabase.rpc("update_product", { p_id: product.id, ...productToRpcArgs(product) });
   if (error) console.error("[updateProduct]", error.message);
   return getProducts();
 }

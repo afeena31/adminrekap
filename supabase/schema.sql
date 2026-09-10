@@ -32,6 +32,7 @@ alter table profiles enable row level security;
 -- sendiri & tampilkan nama), tapi CUMA baris dirinya sendiri yang boleh
 -- diubah, dan bikin baris baru cuma lewat proses admin (lihat catatan
 -- di bawah, bukan self-signup bebas).
+drop policy if exists "profiles_select_all_authenticated" on profiles;
 create policy "profiles_select_all_authenticated" on profiles
   for select using (auth.role() = 'authenticated');
 
@@ -80,6 +81,7 @@ create table if not exists customers (
   default_address_id text
 );
 alter table customers enable row level security;
+drop policy if exists "customers_all_authenticated" on customers;
 create policy "customers_all_authenticated" on customers for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
@@ -97,6 +99,7 @@ create table if not exists addresses (
   is_default boolean not null default false
 );
 alter table addresses enable row level security;
+drop policy if exists "addresses_all_authenticated" on addresses;
 create policy "addresses_all_authenticated" on addresses for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
@@ -111,6 +114,7 @@ create table if not exists marketers (
   notes text
 );
 alter table marketers enable row level security;
+drop policy if exists "marketers_all_authenticated" on marketers;
 create policy "marketers_all_authenticated" on marketers for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
@@ -122,6 +126,7 @@ create table if not exists warehouses (
   active boolean not null default true
 );
 alter table warehouses enable row level security;
+drop policy if exists "warehouses_all_authenticated" on warehouses;
 create policy "warehouses_all_authenticated" on warehouses for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
@@ -138,6 +143,7 @@ create table if not exists inventory (
   unique (product_id, warehouse_id)
 );
 alter table inventory enable row level security;
+drop policy if exists "inventory_all_authenticated" on inventory;
 create policy "inventory_all_authenticated" on inventory for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
@@ -168,6 +174,7 @@ create table if not exists orders (
   created_at bigint not null
 );
 alter table orders enable row level security;
+drop policy if exists "orders_all_authenticated" on orders;
 create policy "orders_all_authenticated" on orders for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
@@ -187,6 +194,7 @@ create table if not exists payments (
   created_at bigint not null
 );
 alter table payments enable row level security;
+drop policy if exists "payments_all_authenticated" on payments;
 create policy "payments_all_authenticated" on payments for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
@@ -206,6 +214,7 @@ create table if not exists collections (
   deleted_at bigint
 );
 alter table collections enable row level security;
+drop policy if exists "collections_all_authenticated" on collections;
 create policy "collections_all_authenticated" on collections for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
@@ -216,6 +225,7 @@ create table if not exists collection_orders (
   added_at bigint not null
 );
 alter table collection_orders enable row level security;
+drop policy if exists "collection_orders_all_authenticated" on collection_orders;
 create policy "collection_orders_all_authenticated" on collection_orders for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
@@ -229,6 +239,7 @@ create table if not exists collection_order_items (
   added_at bigint not null
 );
 alter table collection_order_items enable row level security;
+drop policy if exists "collection_order_items_all_authenticated" on collection_order_items;
 create policy "collection_order_items_all_authenticated" on collection_order_items for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
@@ -237,6 +248,7 @@ create table if not exists batch_names (
   name text primary key
 );
 alter table batch_names enable row level security;
+drop policy if exists "batch_names_all_authenticated" on batch_names;
 create policy "batch_names_all_authenticated" on batch_names for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
@@ -274,6 +286,7 @@ alter table products enable row level security;
 -- Cuma Owner yang boleh tulis langsung (Admin nulis produk baru lewat RPC
 -- di Tahap 4 nanti, biar konsisten -- utk sekarang tabel ini masih kosong,
 -- belum dipakai app).
+drop policy if exists "products_write_owner_only" on products;
 create policy "products_write_owner_only" on products for all
   using (is_owner()) with check (is_owner());
 
@@ -300,9 +313,12 @@ create table if not exists order_items (
   amna_attrs jsonb
 );
 alter table order_items enable row level security;
+drop policy if exists "order_items_write_owner_only" on order_items;
 create policy "order_items_write_owner_only" on order_items for all
   using (is_owner()) with check (is_owner());
 
+alter table collection_order_items
+  drop constraint if exists collection_order_items_item_id_fkey;
 alter table collection_order_items
   add constraint collection_order_items_item_id_fkey
   foreign key (item_id) references order_items(id) on delete cascade;
@@ -323,6 +339,7 @@ create table if not exists fees (
   created_at bigint not null
 );
 alter table fees enable row level security;
+drop policy if exists "fees_write_owner_only" on fees;
 create policy "fees_write_owner_only" on fees for all
   using (is_owner()) with check (is_owner());
 

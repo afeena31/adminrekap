@@ -164,7 +164,7 @@ function OrderPageInner() {
 
 
   const [productList, setProductList] = useState<ReturnType<typeof getProducts>>([]);
-  const [marketers, setMarketers] = useState<ReturnType<typeof getMarketers>>([]);
+  const [marketers, setMarketers] = useState<Marketer[]>([]);
   const [customerAddresses, setCustomerAddresses] = useState<CustomerAddress[]>(() => getCustomerAddresses(customer.id));
   // Kosong dulu di render pertama (server tidak punya localStorage) — diisi di
   // HYDRATION FIX effect di bawah, sama seperti productList/marketers.
@@ -191,7 +191,7 @@ function OrderPageInner() {
   useEffect(() => {
     setExistingOrders(getOrders());
     setProductList(getProducts());
-    setMarketers(getMarketers());
+    getMarketers().then(setMarketers);
     setCustomerList(getCustomers());
     setBatchNames(getBatchNames());
     setCollectionsList(getCollections());
@@ -1229,10 +1229,10 @@ function OrderPageInner() {
             ? "Marketer akan tersimpan di master dan muncul di dropdown order berikutnya."
             : "Marketer hanya dipakai pada order ini dan tidak masuk ke database master."}
         </p>
-        <button className="primary" disabled={!mkName.trim()} onClick={() => {
+        <button className="primary" disabled={!mkName.trim()} onClick={async () => {
           const name = mkName.trim();
           if (!name) return;
-          const existing = getMarketers().find(m => m.name.toLowerCase() === name.toLowerCase());
+          const existing = marketers.find(m => m.name.toLowerCase() === name.toLowerCase());
           if (existing) {
             setMarketerId(existing.id);
             setShowMarketerModal(false);
@@ -1247,7 +1247,8 @@ function OrderPageInner() {
             status: "aktif",
             joinedAt: new Date().toISOString().slice(0, 10),
           };
-          addMarketer(newMk, mkSaveToMaster);
+          const updated = await addMarketer(newMk, mkSaveToMaster);
+          setMarketers(updated);
           setMarketerId(newMk.id);
           setShowMarketerModal(false);
           setMarketerSearch("");

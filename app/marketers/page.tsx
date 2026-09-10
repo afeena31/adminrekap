@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 
-import { getMarketers, saveMarketers, updateMarketer, deleteMarketer, getMarketerStats, getOrders, formatRupiah, type Marketer, type MarketerStatus } from "../data/store";
+import { getMarketers, addMarketer, updateMarketer, deleteMarketer, getMarketerStats, getOrders, formatRupiah, type Marketer, type MarketerStatus, type MarketerStats } from "../data/store";
 import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
 
@@ -42,12 +42,23 @@ export default function MarketersPage() {
     notes: "",
   });
 
+  const [statsMap, setStatsMap] = useState<Record<string, MarketerStats | null>>({});
+
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
-  // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
+  // ===== HYDRATION FIX: Muat data setelah hydration =====
+  // Marketer sudah pindah ke Supabase (Tahap 4 migrasi backend) — async.
   useEffect(() => {
-    setMarketerList(getMarketers());
+    getMarketers().then(setMarketerList);
   }, []);
+
+  // getMarketerStats juga async sekarang — gak bisa dipanggil langsung di
+  // dalam .map()/render (dulu bisa krn sync). Dihitung sekali di sini tiap
+  // marketerList berubah, disimpan ke state, render tinggal lookup.
+  useEffect(() => {
+    Promise.all(marketerList.map(async m => [m.id, await getMarketerStats(m.id)] as const))
+      .then(pairs => setStatsMap(Object.fromEntries(pairs)));
+  }, [marketerList]);
 
   const filtered = marketerList.filter(m => {
 
@@ -79,7 +90,7 @@ export default function MarketersPage() {
     setShowForm(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name.trim()) { notify("Nama marketer wajib diisi"); return; }
     const marketer: Marketer = {
       id: editingMarketer ? editingMarketer.id : "mk-" + Date.now(),
@@ -91,14 +102,12 @@ export default function MarketersPage() {
       notes: form.notes.trim() || undefined,
     };
     if (editingMarketer) {
-      const updated = updateMarketer(marketer);
+      const updated = await updateMarketer(marketer);
       setMarketerList(updated);
       setDetailMarketer(marketer);
       notify("Profil marketer diperbarui");
     } else {
-      const list = getMarketers();
-      const updated = [...list, marketer];
-      saveMarketers(updated);
+      const updated = await addMarketer(marketer, true);
       setMarketerList(updated);
       notify("Marketer baru ditambahkan ke master");
     }
@@ -106,7 +115,7 @@ export default function MarketersPage() {
     setShowForm(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!editingMarketer) return;
     const hasOrders = getOrders().some(o => o.marketerId === editingMarketer.id);
     if (hasOrders) {
@@ -115,7 +124,7 @@ export default function MarketersPage() {
       setShowForm(false);
       return;
     }
-    const updated = deleteMarketer(editingMarketer.id);
+    const updated = await deleteMarketer(editingMarketer.id);
     setMarketerList(updated);
     setShowDeleteConfirm(false);
     setShowForm(false);
@@ -123,8 +132,8 @@ export default function MarketersPage() {
     notify("Marketer dihapus dari master");
   };
 
-  const changeStatus = (m: Marketer, status: MarketerStatus) => {
-    const updated = updateMarketer({ ...m, status });
+  const changeStatus = async (m: Marketer, status: MarketerStatus) => {
+    const updated = await updateMarketer({ ...m, status });
     setMarketerList(updated);
     setDetailMarketer({ ...m, status });
     notify(`Status ${m.name} diubah menjadi ${statusLabels[status]}`);
@@ -185,7 +194,7 @@ export default function MarketersPage() {
       </div>}
 
       {filtered.map(m => {
-        const stats = getMarketerStats(m.id);
+        const stats = statsMap[m.id];
         return (
           <div className={`marketer-card ${m.status}`} key={m.id} onClick={() => setDetailMarketer(m)}>
             <div className="marketer-card-head">
@@ -208,7 +217,7 @@ export default function MarketersPage() {
 
     {/* ===== DETAIL / PROFILE MODAL ===== */}
     {detailMarketer && (() => {
-      const stats = getMarketerStats(detailMarketer.id);
+      const stats = statsMap[detailMarketer.id];
       const orders = getOrders().filter(o => o.marketerId === detailMarketer.id);
       return (
         <div className="overlay" onClick={() => setDetailMarketer(null)}>

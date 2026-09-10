@@ -308,48 +308,50 @@ async function deleteInventoryForProduct(productId: string): Promise<void> {
   if (error) console.error("[deleteInventoryForProduct]", error.message);
 }
 
-// ===== MARKETER STORE =====
+// ===== MARKETER STORE (Tahap 4 migrasi backend — Supabase) =====
+// SENGAJA fallback ke defaultMarketers kalau tabel Supabase kosong (bukan
+// [] kosong kayak entity lain) — nama marketer (Febia, Naqiya, dst) sudah
+// jadi keputusan eksplisit dipertahankan sbg daftar staf asli, BUKAN data
+// demo yg perlu dibersihkan (lihat catatan "Update 2026-09-06 x5" di plan).
 
-export function getMarketers(): Marketer[] {
-  return load<Marketer[]>(KEYS.marketers, defaultMarketers);
+function mapMarketerRow(m: { id: string; name: string; phone: string | null; default_fee: number; status: string; joined_at: string; notes: string | null }): Marketer {
+  return { id: m.id, name: m.name, phone: m.phone ?? undefined, defaultFee: m.default_fee, status: m.status as MarketerStatus, joinedAt: m.joined_at, notes: m.notes ?? undefined };
 }
 
-export function saveMarketers(list: Marketer[]) {
-  save(KEYS.marketers, list);
+export async function getMarketers(): Promise<Marketer[]> {
+  const { data, error } = await supabase.from("marketers").select("*");
+  if (error) { console.error("[getMarketers]", error.message); return defaultMarketers; }
+  return data.length > 0 ? data.map(mapMarketerRow) : defaultMarketers;
 }
 
 // Marketer aktif (muncul di dropdown order baru)
-export function getActiveMarketers(): Marketer[] {
-  return getMarketers().filter(m => m.status === "aktif");
+export async function getActiveMarketers(): Promise<Marketer[]> {
+  return (await getMarketers()).filter(m => m.status === "aktif");
 }
 
 // Tambah marketer baru. Jika saveToMaster=false, marketer hanya dipakai
 // pada order ini dan TIDAK disimpan ke database master.
-export function addMarketer(marketer: Marketer, saveToMaster: boolean): Marketer[] {
+export async function addMarketer(marketer: Marketer, saveToMaster: boolean): Promise<Marketer[]> {
   if (saveToMaster) {
-    const list = getMarketers();
-    const updated = [...list, marketer];
-    saveMarketers(updated);
-    return updated;
+    const { error } = await supabase.from("marketers").insert({ id: marketer.id, name: marketer.name, phone: marketer.phone ?? null, default_fee: marketer.defaultFee, status: marketer.status, joined_at: marketer.joinedAt, notes: marketer.notes ?? null });
+    if (error) console.error("[addMarketer]", error.message);
   }
   // Tidak disimpan ke master; hanya dikembalikan untuk dipakai pada order ini
   return getMarketers();
 }
 
 // Perbarui data marketer (profil, status, fee, dll)
-export function updateMarketer(marketer: Marketer): Marketer[] {
-  const list = getMarketers();
-  const updated = list.map(m => (m.id === marketer.id ? marketer : m));
-  saveMarketers(updated);
-  return updated;
+export async function updateMarketer(marketer: Marketer): Promise<Marketer[]> {
+  const { error } = await supabase.from("marketers").update({ name: marketer.name, phone: marketer.phone ?? null, default_fee: marketer.defaultFee, status: marketer.status, joined_at: marketer.joinedAt, notes: marketer.notes ?? null }).eq("id", marketer.id);
+  if (error) console.error("[updateMarketer]", error.message);
+  return getMarketers();
 }
 
 // Hapus marketer dari master (hanya jika tidak ada order terkait)
-export function deleteMarketer(id: string): Marketer[] {
-  const list = getMarketers();
-  const updated = list.filter(m => m.id !== id);
-  saveMarketers(updated);
-  return updated;
+export async function deleteMarketer(id: string): Promise<Marketer[]> {
+  const { error } = await supabase.from("marketers").delete().eq("id", id);
+  if (error) console.error("[deleteMarketer]", error.message);
+  return getMarketers();
 }
 
 
@@ -364,8 +366,8 @@ export type MarketerStats = {
   customers: string[];    // daftar customer yang pernah closing
 };
 
-export function getMarketerStats(marketerId: string): MarketerStats | null {
-  const marketer = getMarketers().find(m => m.id === marketerId);
+export async function getMarketerStats(marketerId: string): Promise<MarketerStats | null> {
+  const marketer = (await getMarketers()).find(m => m.id === marketerId);
   if (!marketer) return null;
   const orders = getOrders().filter(o => o.marketerId === marketerId);
   const closingCount = orders.length;

@@ -4,7 +4,7 @@ import { ArrowLeft, Bell, Check, ChevronRight, Search, Wallet, CheckCircle2, Clo
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { getFees, updateFeeStatus, updateFeeAmount, deleteFee, getMarketers, formatRupiah, type FeeRecord } from "../data/store";
+import { getFees, updateFeeStatus, updateFeeAmount, deleteFee, getMarketers, formatRupiah, type FeeRecord, type Marketer } from "../data/store";
 import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
 import { MoneyInput } from "../components/MoneyInput";
@@ -20,14 +20,14 @@ export default function FeesPage() {
   const [amountDraft, setAmountDraft] = useState(0);
   const [deleteConfirmFee, setDeleteConfirmFee] = useState<FeeRecord | null>(null);
 
-  const [marketers, setMarketers] = useState<ReturnType<typeof getMarketers>>([]);
+  const [marketers, setMarketers] = useState<Marketer[]>([]);
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
   // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
   useEffect(() => {
     setFeeList(getFees());
-    setMarketers(getMarketers());
+    getMarketers().then(setMarketers);
   }, []);
 
 

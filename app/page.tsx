@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { toDisplayCustomer } from "./data/customers";
-import { getOrders, getFees, getMarketers, getProducts, formatRupiah, getOrderById, getPelunasanWhatsAppUrl, productionStageInfo, shipmentStageInfo } from "./data/store";
+import { getOrders, getFees, getMarketers, getProducts, formatRupiah, getOrderById, getPelunasanWhatsAppUrl, productionStageInfo, shipmentStageInfo, type Marketer } from "./data/store";
 import { BottomNav } from "./components/BottomNav";
 import { QuickPaymentModal } from "./components/QuickPaymentModal";
 import { goBack } from "./lib/goBack";
@@ -47,7 +47,7 @@ export default function DashboardPage() {
   // lewat HYDRATION FIX useEffect setelah mount.
   const [orders, setOrders] = useState<ReturnType<typeof getOrders>>([]);
   const [fees, setFees] = useState<ReturnType<typeof getFees>>([]);
-  const [marketers, setMarketers] = useState<ReturnType<typeof getMarketers>>([]);
+  const [marketers, setMarketers] = useState<Marketer[]>([]);
   const [products, setProducts] = useState<ReturnType<typeof getProducts>>([]);
   const [allOps, setAllOps] = useState<{ customer: ReturnType<typeof toDisplayCustomer>; ops: ReturnType<typeof getOperations> }[]>([]);
   const [workQueue, setWorkQueue] = useState<ReturnType<typeof getDashboardWorkQueue>>({ perluTindakan: [], bisaDikerjakan: [], segera: [], menunggu: [], ringkasan: [] });
@@ -63,7 +63,7 @@ export default function DashboardPage() {
   useEffect(() => {
     setOrders(getOrders());
     setFees(getFees());
-    setMarketers(getMarketers());
+    getMarketers().then(setMarketers);
     setProducts(getProducts());
     setAllOps(loadAllDisplayCustomers().map(c => ({ customer: c, ops: getOperations(c.id) })));
     setWorkQueue(getDashboardWorkQueue());

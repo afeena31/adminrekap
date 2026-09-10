@@ -17,7 +17,7 @@ import { goBack } from "../lib/goBack";
 import { getCollections, getAllCollections, seedCollections, getCollectionStats, addCollection, saveCollections, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "../data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "../data/demoSeed";
 
-import { formatRupiah, getOrdersForCustomer, computePaymentTotals, getProducts, saveProducts, getMarketers, saveMarketers, defaultMarketers, type OrderRecord } from "../data/store";
+import { formatRupiah, getOrdersForCustomer, computePaymentTotals, getProducts, saveProducts, type OrderRecord } from "../data/store";
 import { products as seedCatalogProducts, nonBookMasterCatalog } from "../data/products";
 import { getOperations, type CustomerOperations } from "../data/operations";
 import { useAuth } from "../data/authContext";
@@ -173,13 +173,19 @@ function HomePageInner() {
       if (!result.ok) softDeleteCustomer(id);
     }
     for (const a of demoAddresses) deleteCentralAddress(a.id);
-    // Hanya hapus Collection & Marketer BAWAAN (seed) — bukan semuanya, supaya
-    // Collection "PO Batch" atau marketer asli yang sudah dibuat user tidak
-    // ikut kehapus kalau tombol ini dipakai lagi di kemudian hari.
+    // Hanya hapus Collection BAWAAN (seed) — bukan semuanya, supaya Collection
+    // "PO Batch" asli yang sudah dibuat user tidak ikut kehapus kalau tombol
+    // ini dipakai lagi di kemudian hari.
     const seedCollectionIds = new Set(seedCollections.map(c => c.id));
     saveCollections(getAllCollections().filter(c => !seedCollectionIds.has(c.id)));
-    const seedMarketerIds = new Set(defaultMarketers.map(m => m.id));
-    saveMarketers(getMarketers().filter(m => !seedMarketerIds.has(m.id)));
+    // Baris hapus marketer di sini SENGAJA DIHAPUS (ketemu saat migrasi ke
+    // Supabase) — defaultMarketers (Febia, Naqiya, dst) BUKAN data demo, itu
+    // daftar STAF ASLI yang sengaja dipertahankan (lihat catatan di
+    // getMarketers, store.ts). Sebelumnya baris ini justru MENGHAPUS ke-6
+    // marketer asli itu tiap "Hapus Semua Data Demo" diklik — kelas bug yang
+    // sama persis dgn saveFees([]) yang sudah dihapus sebelumnya (lihat
+    // catatan di bawah), gak pernah ketauan krn gak ada marketer non-default
+    // yang bisa dibandingkan.
     // Hanya hapus produk seed DEMO LAMA (Parenting A/B/C, Boardbook, dst) —
     // BUKAN seluruh katalog. nonBookMasterCatalog (dimuat lewat "Muat Katalog
     // Master Data") sengaja pakai beberapa id yang sama dengan seed lama

@@ -73,7 +73,7 @@ export default function ProductsPage() {
   // Produk sudah pindah ke Supabase (Tahap 4 migrasi backend) — async.
   useEffect(() => {
     getProducts().then(setProductList);
-    setCollectionList(getCollections());
+    getCollections().then(setCollectionList);
     // Gudang & Stok sudah pindah ke Supabase (Tahap 4 migrasi backend) — async.
     getWarehouses().then(setWarehouseList);
     getInventory().then(setInventoryList);

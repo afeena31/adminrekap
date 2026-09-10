@@ -17,7 +17,7 @@ import {
   getItemLinksForCollection,
   collectionTypeInfo, collectionStatusInfo,
   collectionColors, collectionIcons,
-  type Collection, type CollectionType, type CollectionStatus,
+  type Collection, type CollectionType, type CollectionStatus, type CollectionStats,
 } from "../../data/collections";
 import { formatRupiah, type OrderRecord, type OrderItemSnapshot } from "../../data/store";
 
@@ -50,6 +50,12 @@ export default function CollectionDetailPage() {
   // invoice campuran (mis. Amna + Kaos Kaki + Boardbook sekaligus) gak bikin
   // Collection lain ikut menghitung nilai penuh invoice-nya.
   const [itemLinks, setItemLinks] = useState<{ order: OrderRecord; item: OrderItemSnapshot }[]>([]);
+  // getCollectionStats sekarang async (Supabase) — gak bisa dipanggil
+  // langsung di render lagi, dipreload ke state ini tiap refresh().
+  const [stats, setStats] = useState<CollectionStats>({
+    totalOrders: 0, totalCustomers: 0, totalItems: 0, totalOutstanding: 0,
+    totalPayment: 0, totalShipment: 0, draftOrders: 0, unlinkedCustomers: 0, shipmentProgress: 0,
+  });
   const [editForm, setEditForm] = useState({
     name: "",
     type: "custom" as CollectionType,
@@ -74,11 +80,21 @@ export default function CollectionDetailPage() {
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
-  // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
+  // Reload semua data collection ini sekaligus — dipakai di HYDRATION FIX
+  // effect di bawah dan tiap kali ada perubahan (edit/hapus order, dst).
+  const refresh = async () => {
+    const [c, ord, links, s] = await Promise.all([
+      getCollection(id), getOrdersForCollection(id), getItemLinksForCollection(id), getCollectionStats(id),
+    ]);
+    setCollection(c);
+    setOrders(ord);
+    setItemLinks(links);
+    setStats(s);
+  };
+
+  // ===== HYDRATION FIX: Muat data dari Supabase setelah hydration =====
   useEffect(() => {
-    setCollection(getCollection(id));
-    setOrders(getOrdersForCollection(id));
-    setItemLinks(getItemLinksForCollection(id));
+    refresh();
   }, [id]);
 
   if (!collection) {
@@ -97,7 +113,6 @@ export default function CollectionDetailPage() {
     </main>;
   }
 
-  const stats = getCollectionStats(collection.id);
   const typeInfo = collectionTypeInfo[collection.type];
   const statusInfo = collectionStatusInfo[collection.status];
 
@@ -232,9 +247,9 @@ export default function CollectionDetailPage() {
     setShowEditForm(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editForm.name.trim()) { notify("Nama collection wajib diisi"); return; }
-    const updated = updateCollection({
+    await updateCollection({
       ...collection,
       name: editForm.name.trim(),
       type: editForm.type,
@@ -245,30 +260,30 @@ export default function CollectionDetailPage() {
       owner: editForm.owner.trim() || undefined,
       tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean),
     });
-    setCollection(getCollection(collection.id));
+    await refresh();
     setShowEditForm(false);
     notify("Collection diperbarui");
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (stats.totalOrders > 0) {
-      softDeleteCollection(collection.id);
+      await softDeleteCollection(collection.id);
       notify("Collection diarsipkan (memiliki transaksi)");
     } else {
-      hardDeleteCollection(collection.id);
+      await hardDeleteCollection(collection.id);
       notify("Collection dihapus");
     }
     setShowDeleteConfirm(false);
     window.location.href = "/collections";
   };
 
-  const handleAddOrder = () => {
+  const handleAddOrder = async () => {
     if (!orderForm.customerName.trim()) { notify("Nama customer wajib diisi"); return; }
     if (!orderForm.productName.trim()) { notify("Nama produk wajib diisi"); return; }
     if (orderForm.qty <= 0) { notify("Qty harus lebih dari 0"); return; }
     if (orderForm.price <= 0) { notify("Harga wajib diisi"); return; }
 
-    const newOrder = createOrderInCollection(collection.id, {
+    const newOrder = await createOrderInCollection(collection.id, {
       customerName: orderForm.customerName.trim(),
       phone: orderForm.phone.trim(),
       productName: orderForm.productName.trim(),
@@ -279,21 +294,20 @@ export default function CollectionDetailPage() {
     });
 
     if (newOrder) {
-      setOrders(getOrdersForCollection(collection.id));
+      await refresh();
       setShowAddOrder(false);
       setOrderForm({ customerName: "", phone: "", productName: "", productEmoji: "📦", qty: 1, price: 0, note: "" });
       notify(newOrder.customerId ? "Order ditambahkan & customer terhubung" : "Order ditambahkan (customer belum terhubung)");
     }
   };
 
-  const handleRemoveOrder = (orderId: string) => {
+  const handleRemoveOrder = async (orderId: string) => {
     // Order bisa tertaut ke collection ini lewat 2 jalur (order-level "Tambah
     // Order" manual/batch, ATAU item-level Kategori Produk) — lepas keduanya
     // sekaligus, gak peduli order ini masuk lewat jalur yang mana.
-    removeOrderFromCollection(collection.id, orderId);
-    removeOrderItemLinksFromCollection(collection.id, orderId);
-    setOrders(getOrdersForCollection(collection.id));
-    setItemLinks(getItemLinksForCollection(collection.id));
+    await removeOrderFromCollection(collection.id, orderId);
+    await removeOrderItemLinksFromCollection(collection.id, orderId);
+    await refresh();
     notify("Order dihapus dari collection");
   };
 

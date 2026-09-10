@@ -194,7 +194,7 @@ function OrderPageInner() {
     getMarketers().then(setMarketers);
     setCustomerList(getCustomers());
     setBatchNames(getBatchNames());
-    setCollectionsList(getCollections());
+    getCollections().then(setCollectionsList);
     // Gudang & Stok sudah pindah ke Supabase (Tahap 4 migrasi backend) —
     // async, dimuat terpisah dari getter localStorage lain di atas.
     getWarehouses().then(setWarehouseList);
@@ -663,18 +663,18 @@ function OrderPageInner() {
     // ===== KATEGORI PRODUK: simpan tautan per-item ke Collection =====
     // Dipanggil utk KEDUA mode (baru & edit) — key-nya orderId+itemId, jadi
     // aman idempotent baik order baru maupun order yang sudah ada sebelumnya.
-    snapshots.forEach(item => {
-      setCategoriesForItem(orderId, item.id, itemCategoryMap[item.id] || []);
-    });
+    for (const item of snapshots) {
+      await setCategoriesForItem(orderId, item.id, itemCategoryMap[item.id] || []);
+    }
     // Item yang ADA di order lama tapi sudah gak ada di snapshots sekarang
     // (dihapus admin selama sesi edit ini) — bersihkan tautan kategorinya
     // juga, supaya gak jadi sampah nyangkut selamanya di
     // umayasla_collection_order_items menunjuk item yang sudah gak ada.
     if (existingOrder) {
       const currentItemIds = new Set(snapshots.map(item => item.id));
-      existingOrder.items.forEach(oldItem => {
-        if (!currentItemIds.has(oldItem.id)) setCategoriesForItem(orderId, oldItem.id, []);
-      });
+      for (const oldItem of existingOrder.items) {
+        if (!currentItemIds.has(oldItem.id)) await setCategoriesForItem(orderId, oldItem.id, []);
+      }
     }
 
     if (editingOrderId) {
@@ -776,7 +776,7 @@ function OrderPageInner() {
     // ===== SINKRON COLLECTION "PO BATCH" =====
     // Non-fatal — kegagalan di sini tidak boleh menggagalkan order yang sudah tersimpan.
     try {
-      syncOrderBatchCollection(orderId, hasAmna ? batch : undefined, existingOrder?.batch);
+      await syncOrderBatchCollection(orderId, hasAmna ? batch : undefined, existingOrder?.batch);
     } catch {
       // ignore
     }
@@ -822,7 +822,7 @@ function OrderPageInner() {
   };
 
   // ===== LOAD ORDER KE FORM (EDIT MODE) =====
-  const loadOrderIntoForm = (order: OrderRecord) => {
+  const loadOrderIntoForm = async (order: OrderRecord) => {
     // Load customer
     const centralC = (order.customerId ? getCentralCustomer(order.customerId) : undefined) || getCustomers()[0];
     const c = centralC ? toDisplayCustomer(centralC, getCustomerAddresses(centralC.id)) : EMPTY_CUSTOMER;
@@ -863,7 +863,7 @@ function OrderPageInner() {
     }));
     setItems(loadedItems);
     const loadedCategoryMap: Record<string, string[]> = {};
-    loadedItems.forEach(item => { loadedCategoryMap[item.id] = getCollectionIdsForItem(order.id, item.id); });
+    for (const item of loadedItems) { loadedCategoryMap[item.id] = await getCollectionIdsForItem(order.id, item.id); }
     setItemCategoryMap(loadedCategoryMap);
 
     // Load settings
@@ -957,8 +957,8 @@ function OrderPageInner() {
     deleteOrder(deletedId);
     removeFeeForOrder(deletedId);
     removePaymentsForOrder(deletedId);
-    removeItemLinksForOrder(deletedId);
-    try { removeOrderFromAllCollections(deletedId); } catch { /* non-fatal */ }
+    await removeItemLinksForOrder(deletedId);
+    try { await removeOrderFromAllCollections(deletedId); } catch { /* non-fatal */ }
     setEditingOrderId(null);
     setItems([]);
     setItemCategoryMap({});
@@ -1414,14 +1414,14 @@ function OrderPageInner() {
           <button
             type="button"
             className="secondary"
-            onClick={() => {
+            onClick={async () => {
               const name = newBatchInput.trim();
               if (!name) return;
               const updated = addBatchName(name);
               setBatchNames(updated);
               setBatch(name);
               setNewBatchInput("");
-              getOrCreateBatchCollection(name);
+              await getOrCreateBatchCollection(name);
               notify(`Batch "${name}" ditambahkan`);
             }}
           >

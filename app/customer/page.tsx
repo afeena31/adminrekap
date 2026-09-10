@@ -14,7 +14,7 @@ import { NewCustomerForm, EditCustomerForm, type EditableCustomerFields } from "
 import { BottomNav } from "../components/BottomNav";
 import { QuickPaymentModal } from "../components/QuickPaymentModal";
 import { goBack } from "../lib/goBack";
-import { getCollections, getAllCollections, seedCollections, getCollectionStats, addCollection, saveCollections, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "../data/collections";
+import { getCollections, getAllCollections, seedCollections, getCollectionStats, addCollection, hardDeleteCollection, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus, type CollectionStats } from "../data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "../data/demoSeed";
 
 import { formatRupiah, getOrdersForCustomer, computePaymentTotals, getProducts, deleteProduct, type OrderRecord } from "../data/store";
@@ -96,7 +96,14 @@ function HomePageInner() {
   const [wipeDemoConfirmOpen, setWipeDemoConfirmOpen] = useState(false);
   const [ops, setOps] = useState<CustomerOperations>(() => getOperations("-"));
   const [customerOrders, setCustomerOrders] = useState<OrderRecord[]>([]);
+  // Collection sekarang Supabase (async) — dipreload di sini, dipakai Universal
+  // Search finder di bawah (gak bisa panggil getCollections() langsung di render lagi).
+  const [searchCollections, setSearchCollections] = useState<Collection[]>([]);
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
+
+  useEffect(() => {
+    getCollections().then(setSearchCollections);
+  }, []);
 
   // ===== HYDRATION FIX: muat customer asli dari localStorage setelah mount =====
   useEffect(() => {
@@ -177,7 +184,10 @@ function HomePageInner() {
     // "PO Batch" asli yang sudah dibuat user tidak ikut kehapus kalau tombol
     // ini dipakai lagi di kemudian hari.
     const seedCollectionIds = new Set(seedCollections.map(c => c.id));
-    saveCollections(getAllCollections().filter(c => !seedCollectionIds.has(c.id)));
+    const currentCollections = await getAllCollections();
+    for (const c of currentCollections) {
+      if (seedCollectionIds.has(c.id)) await hardDeleteCollection(c.id);
+    }
     // Baris hapus marketer di sini SENGAJA DIHAPUS (ketemu saat migrasi ke
     // Supabase) — defaultMarketers (Febia, Naqiya, dst) BUKAN data demo, itu
     // daftar STAF ASLI yang sengaja dipertahankan (lihat catatan di
@@ -513,7 +523,7 @@ function HomePageInner() {
         const q = searchQuery.toLowerCase().trim();
         const allCustomers = getCustomers().map(c => toDisplayCustomer(c, getCentralCustomerAddresses(c.id)));
         const filteredCustomers = q ? allCustomers.filter(c => c.name.toLowerCase().includes(q) || c.city.toLowerCase().includes(q) || c.waName.toLowerCase().includes(q)) : allCustomers;
-        const filteredCollections = q ? getCollections().filter(c => c.name.toLowerCase().includes(q) || c.tags.some(t => t.toLowerCase().includes(q)) || (c.description || "").toLowerCase().includes(q)) : getCollections();
+        const filteredCollections = q ? searchCollections.filter(c => c.name.toLowerCase().includes(q) || c.tags.some(t => t.toLowerCase().includes(q)) || (c.description || "").toLowerCase().includes(q)) : searchCollections;
         return <>
           <p className="muted">Customer</p>
           {filteredCustomers.map(item => <button className="customer-result" key={item.id} onClick={() => { setCustomer(item); setFinderOpen(false); setActiveTab("Ringkasan"); notify(`Profil ${item.name} dibuka`); }}><span className="mini-avatar">{item.initials}</span><span>{item.name} · {item.city} · {item.orders} order</span><ChevronRight size={18}/></button>)}
@@ -589,11 +599,19 @@ function HomePageInner() {
 
 function CollectionWorkspaceSection() {
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [statsMap, setStatsMap] = useState<Record<string, CollectionStats>>({});
   const [showForm, setShowForm] = useState(false);
 
-  // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
+  const refresh = async () => {
+    const list = await getCollections();
+    setCollections(list);
+    const entries = await Promise.all(list.map(async c => [c.id, await getCollectionStats(c.id)] as const));
+    setStatsMap(Object.fromEntries(entries));
+  };
+
+  // ===== HYDRATION FIX: Muat data dari Supabase setelah hydration =====
   useEffect(() => {
-    setCollections(getCollections());
+    refresh();
   }, []);
   const [form, setForm] = useState({
     name: "",
@@ -610,11 +628,11 @@ function CollectionWorkspaceSection() {
   const doneCount = collections.filter(c => c.status === "selesai").length;
   const draftCount = collections.filter(c => c.status === "draft").length;
   const followUpCount = collections.filter(c => {
-    const stats = getCollectionStats(c.id);
-    return stats.unlinkedCustomers > 0 || stats.draftOrders > 0;
+    const stats = statsMap[c.id];
+    return stats && (stats.unlinkedCustomers > 0 || stats.draftOrders > 0);
   }).length;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name.trim()) return;
     const now = Date.now();
     const collection: Collection = {
@@ -631,8 +649,8 @@ function CollectionWorkspaceSection() {
       updatedAt: now,
       deletedAt: null,
     };
-    const updated = addCollection(collection);
-    setCollections(updated);
+    await addCollection(collection);
+    await refresh();
     setShowForm(false);
   };
 
@@ -666,7 +684,7 @@ function CollectionWorkspaceSection() {
 
     <div className="collection-grid" style={{ marginTop: 14 }}>
       {collections.map(c => {
-        const stats = getCollectionStats(c.id);
+        const stats = statsMap[c.id] ?? { totalOrders: 0, totalCustomers: 0, totalItems: 0, totalOutstanding: 0, totalPayment: 0, totalShipment: 0, draftOrders: 0, unlinkedCustomers: 0, shipmentProgress: 0 };
         const typeInfo = collectionTypeInfo[c.type];
         const statusInfo = collectionStatusInfo[c.status];
         return (

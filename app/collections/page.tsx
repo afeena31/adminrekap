@@ -10,7 +10,7 @@ import {
   getCollections, addCollection, updateCollection, softDeleteCollection, hardDeleteCollection,
   getCollectionStats, collectionTypeInfo, collectionStatusInfo,
   collectionColors, collectionIcons, afeenaYaslaMasterCollections,
-  type Collection, type CollectionType, type CollectionStatus,
+  type Collection, type CollectionType, type CollectionStatus, type CollectionStats,
 } from "../data/collections";
 import { formatRupiah } from "../data/store";
 import { BottomNav } from "../components/BottomNav";
@@ -19,6 +19,7 @@ import { goBack } from "../lib/goBack";
 
 export default function CollectionsPage() {
   const [collectionList, setCollectionList] = useState<Collection[]>([]);
+  const [statsMap, setStatsMap] = useState<Record<string, CollectionStats>>({});
   const [notice, setNotice] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
@@ -36,21 +37,35 @@ export default function CollectionsPage() {
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
+  // Preload stats semua collection sekaligus — getCollectionStats sekarang
+  // async (Supabase), gak bisa dipanggil langsung di render/.map() lagi.
+  const loadStats = async (list: Collection[]) => {
+    const entries = await Promise.all(list.map(async c => [c.id, await getCollectionStats(c.id)] as const));
+    setStatsMap(Object.fromEntries(entries));
+  };
+
+  const refreshCollections = async () => {
+    const list = await getCollections();
+    setCollectionList(list);
+    await loadStats(list);
+    return list;
+  };
+
   // Idempotent (pola sama seperti "Muat Katalog Master Data" di halaman
   // Katalog) — aman diklik ulang, cuma nambah yang belum ada.
-  const loadMasterCollections = () => {
-    const existingIds = new Set(getCollections().map(c => c.id));
+  const loadMasterCollections = async () => {
+    const existingIds = new Set((await getCollections()).map(c => c.id));
     let added = 0;
     for (const c of afeenaYaslaMasterCollections) {
-      if (!existingIds.has(c.id)) { addCollection(c); added++; }
+      if (!existingIds.has(c.id)) { await addCollection(c); added++; }
     }
-    setCollectionList(getCollections());
+    await refreshCollections();
     notify(added > 0 ? `${added} Collection dari Master Data dimuat` : "Kategori Master Data sudah lengkap");
   };
 
   // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
   useEffect(() => {
-    setCollectionList(getCollections());
+    refreshCollections();
   }, []);
 
   // ===== WIDGET COUNTS =====
@@ -59,8 +74,8 @@ export default function CollectionsPage() {
   const doneCount = collectionList.filter(c => c.status === "selesai").length;
   const draftCount = collectionList.filter(c => c.status === "draft").length;
   const followUpCount = collectionList.filter(c => {
-    const stats = getCollectionStats(c.id);
-    return stats.unlinkedCustomers > 0 || stats.draftOrders > 0;
+    const stats = statsMap[c.id];
+    return stats && (stats.unlinkedCustomers > 0 || stats.draftOrders > 0);
   }).length;
 
   // ===== FORM HANDLERS =====
@@ -94,7 +109,7 @@ export default function CollectionsPage() {
     setShowForm(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name.trim()) { notify("Nama collection wajib diisi"); return; }
     const now = Date.now();
     const collection: Collection = {
@@ -112,38 +127,38 @@ export default function CollectionsPage() {
       deletedAt: null,
     };
     if (editingCollection) {
-      const updated = updateCollection(collection);
-      setCollectionList(updated);
+      await updateCollection(collection);
+      await refreshCollections();
       notify("Collection diperbarui");
     } else {
-      const updated = addCollection(collection);
-      setCollectionList(updated);
+      await addCollection(collection);
+      await refreshCollections();
       notify("Collection baru dibuat");
     }
     setShowForm(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!editingCollection) return;
-    const stats = getCollectionStats(editingCollection.id);
-    if (stats.totalOrders > 0) {
+    const stats = statsMap[editingCollection.id];
+    if (stats && stats.totalOrders > 0) {
       // Soft delete - collection dengan transaksi
-      const updated = softDeleteCollection(editingCollection.id);
-      setCollectionList(updated);
+      await softDeleteCollection(editingCollection.id);
+      await refreshCollections();
       notify("Collection diarsipkan (memiliki transaksi)");
     } else {
       // Hard delete - collection kosong
-      const updated = hardDeleteCollection(editingCollection.id);
-      setCollectionList(updated);
+      await hardDeleteCollection(editingCollection.id);
+      await refreshCollections();
       notify("Collection dihapus");
     }
     setShowDeleteConfirm(false);
     setShowForm(false);
   };
 
-  const changeStatus = (c: Collection, status: CollectionStatus) => {
-    const updated = updateCollection({ ...c, status });
-    setCollectionList(updated);
+  const changeStatus = async (c: Collection, status: CollectionStatus) => {
+    await updateCollection({ ...c, status });
+    await refreshCollections();
     notify(`Status ${c.name} → ${collectionStatusInfo[status].name}`);
   };
 
@@ -199,7 +214,7 @@ export default function CollectionsPage() {
       </div>}
 
       {collectionList.map(c => {
-        const stats = getCollectionStats(c.id);
+        const stats = statsMap[c.id] ?? { totalOrders: 0, totalCustomers: 0, totalItems: 0, totalOutstanding: 0, totalPayment: 0, totalShipment: 0, draftOrders: 0, unlinkedCustomers: 0, shipmentProgress: 0 };
         const typeInfo = collectionTypeInfo[c.type];
         const statusInfo = collectionStatusInfo[c.status];
         return (
@@ -326,7 +341,7 @@ export default function CollectionsPage() {
           <h2>Hapus Collection?</h2>
           <p>Collection <b>{editingCollection?.name}</b> akan dihapus.</p>
           <p className="muted">
-            {editingCollection && getCollectionStats(editingCollection.id).totalOrders > 0
+            {editingCollection && (statsMap[editingCollection.id]?.totalOrders ?? 0) > 0
               ? "Collection ini memiliki transaksi, sehingga akan diarsipkan (soft delete). Data order tetap tersimpan."
               : "Collection ini kosong dan akan dihapus permanen."}
           </p>

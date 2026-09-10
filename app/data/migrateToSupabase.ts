@@ -37,9 +37,9 @@ export async function collectAllLocalData() {
     orders: getOrders(),
     payments: getPayments(),
     fees: getFees(),
-    collections: getAllCollections(),
-    collectionOrders: getCollectionOrders(),
-    collectionOrderItems: getCollectionOrderItems(),
+    collections: await getAllCollections(),
+    collectionOrders: await getCollectionOrders(),
+    collectionOrderItems: await getCollectionOrderItems(),
     batchNames: getBatchNames(),
   };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { supabase } from "./supabaseClient";
 import { getOrders, saveOrder, type OrderRecord, type OrderItemSnapshot } from "./store";
 import { getCustomers } from "./central";
 
@@ -72,36 +73,6 @@ export const collectionColors = [
 ];
 
 export const collectionIcons = ["📦", "🛍️", "📣", "✅", "🎓", "✨", "📚", "🧕", "🖤", "🧤", "🧦", "🌸", "🚚", "💰", "🎈", "📖", "🐝", "🕌", "🌍", "🔤"];
-
-// ===== STORAGE KEYS =====
-
-const KEYS = {
-  collections: "umayasla_collections",
-  collectionOrders: "umayasla_collection_orders",
-  collectionOrderItems: "umayasla_collection_order_items",
-};
-
-// ===== LOCAL STORAGE HELPERS =====
-
-function load<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function save<T>(key: string, value: T) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
-}
 
 // ===== SEED COLLECTIONS =====
 
@@ -252,62 +223,84 @@ export const afeenaYaslaMasterCollections: Collection[] = [
   { id: "col-master-workbook-juz-amma", name: "WorkBook Juz Amma", type: "produk", status: "aktif", icon: "📓", color: collectionColors[7], description: "Kategori produk brand Etalase YasLa.", tags: ["etalase-yasla", "workbook"], createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null },
 ];
 
-// ===== COLLECTION STORE =====
+// ===== COLLECTION STORE (Tahap 4 migrasi backend — Supabase) =====
+// collections/collection_orders/collection_order_items BUKAN data cost-
+// sensitive (gak ada modal/HPP di sini) — RLS-nya "all_authenticated" biasa
+// (supabase/schema.sql), jadi query tabel langsung, gak perlu RPC seperti
+// Product. Data collection kamu SUDAH ada di Supabase sejak migrasi awal
+// (Tahap 3) — ini cuma nyambungin app baca/tulis ke situ, bukan migrasi baru.
+
+function mapCollectionRow(c: Record<string, unknown>): Collection {
+  return {
+    id: c.id as string,
+    name: c.name as string,
+    type: c.type as CollectionType,
+    status: c.status as CollectionStatus,
+    icon: c.icon as string,
+    color: c.color as string,
+    description: (c.description as string) ?? undefined,
+    owner: (c.owner as string) ?? undefined,
+    tags: (c.tags as string[]) ?? [],
+    createdAt: Number(c.created_at),
+    updatedAt: Number(c.updated_at),
+    deletedAt: c.deleted_at == null ? null : Number(c.deleted_at),
+  };
+}
+
+function collectionToRow(collection: Collection) {
+  return {
+    id: collection.id, name: collection.name, type: collection.type, status: collection.status,
+    icon: collection.icon, color: collection.color, description: collection.description ?? null,
+    owner: collection.owner ?? null, tags: collection.tags || [],
+    created_at: collection.createdAt, updated_at: collection.updatedAt, deleted_at: collection.deletedAt,
+  };
+}
+
+export async function getAllCollections(): Promise<Collection[]> {
+  const { data, error } = await supabase.from("collections").select("*").order("created_at", { ascending: false });
+  if (error) { console.error("[getAllCollections]", error.message); return []; }
+  return ((data || []) as Record<string, unknown>[]).map(mapCollectionRow);
+}
 
 // seedCollections (mis. "PO Batch 7", "Linen Spray") TIDAK dipakai sebagai
-// default lagi — itu contoh, bukan Collection asli. Tanpa ini, device baru
-// atau localStorage yang baru dikosongkan akan diam-diam terisi Collection
-// contoh lagi, padahal user sudah minta app benar-benar bersih dari data demo.
-export function getCollections(): Collection[] {
-  const list = load<Collection[]>(KEYS.collections, []);
-  return list.filter(c => c.deletedAt === null);
+// default lagi — itu contoh, bukan Collection asli.
+export async function getCollections(): Promise<Collection[]> {
+  return (await getAllCollections()).filter(c => c.deletedAt === null);
 }
 
-export function getAllCollections(): Collection[] {
-  return load<Collection[]>(KEYS.collections, []);
+export async function getCollection(id: string): Promise<Collection | null> {
+  const { data, error } = await supabase.from("collections").select("*").eq("id", id).maybeSingle();
+  if (error) { console.error("[getCollection]", error.message); return null; }
+  return data ? mapCollectionRow(data as Record<string, unknown>) : null;
 }
 
-export function saveCollections(list: Collection[]) {
-  save(KEYS.collections, list);
+export async function addCollection(collection: Collection): Promise<Collection[]> {
+  const { error } = await supabase.from("collections").upsert(collectionToRow(collection));
+  if (error) { console.error("[addCollection]", error.message); throw new Error(error.message); }
+  return getAllCollections();
 }
 
-export function getCollection(id: string): Collection | null {
-  return getCollections().find(c => c.id === id) || null;
-}
-
-export function addCollection(collection: Collection): Collection[] {
-  const list = getAllCollections();
-  const updated = [...list, collection];
-  saveCollections(updated);
-  return updated;
-}
-
-export function updateCollection(collection: Collection): Collection[] {
-  const list = getAllCollections();
-  const updated = list.map(c => c.id === collection.id ? { ...collection, updatedAt: Date.now() } : c);
-  saveCollections(updated);
-  return updated;
+export async function updateCollection(collection: Collection): Promise<Collection[]> {
+  const updated = { ...collection, updatedAt: Date.now() };
+  const { error } = await supabase.from("collections").update(collectionToRow(updated)).eq("id", collection.id);
+  if (error) { console.error("[updateCollection]", error.message); throw new Error(error.message); }
+  return getAllCollections();
 }
 
 // Soft delete: hanya menandai deletedAt, tidak menghapus data
-export function softDeleteCollection(id: string): Collection[] {
-  const list = getAllCollections();
-  const updated = list.map(c => c.id === id ? { ...c, deletedAt: Date.now() } : c);
-  saveCollections(updated);
-  return updated;
+export async function softDeleteCollection(id: string): Promise<Collection[]> {
+  const { error } = await supabase.from("collections").update({ deleted_at: Date.now() }).eq("id", id);
+  if (error) console.error("[softDeleteCollection]", error.message);
+  return getAllCollections();
 }
 
-// Hard delete: hanya untuk collection kosong (tanpa order)
-export function hardDeleteCollection(id: string): Collection[] {
-  const list = getAllCollections();
-  const updated = list.filter(c => c.id !== id);
-  saveCollections(updated);
-  // Hapus juga relasi CollectionOrder & CollectionOrderItem
-  const rels = getCollectionOrders().filter(r => r.collectionId !== id);
-  save(KEYS.collectionOrders, rels);
-  const itemRels = getCollectionOrderItems().filter(r => r.collectionId !== id);
-  save(KEYS.collectionOrderItems, itemRels);
-  return updated;
+// Hard delete: hanya untuk collection kosong (tanpa order). Relasi
+// CollectionOrder/CollectionOrderItem ikut kehapus otomatis lewat FK
+// "on delete cascade" (supabase/schema.sql) — gak perlu bersihkan manual.
+export async function hardDeleteCollection(id: string): Promise<Collection[]> {
+  const { error } = await supabase.from("collections").delete().eq("id", id);
+  if (error) console.error("[hardDeleteCollection]", error.message);
+  return getAllCollections();
 }
 
 // ===== JEMBATAN BATCH PRODUKSI → COLLECTION "PO BATCH" =====
@@ -327,14 +320,13 @@ function slugifyBatchName(name: string): string {
 // ID deterministik dari nama batch (mis. "Batch 7" -> "col-po-batch-7") supaya
 // selalu cocok dengan Collection "PO Batch 7"/"PO Batch 8" yang sudah ada di
 // seed data, bukan bikin duplikat.
-export function getOrCreateBatchCollection(batchName: string): Collection {
+export async function getOrCreateBatchCollection(batchName: string): Promise<Collection> {
   const id = "col-po-" + slugifyBatchName(batchName);
-  const all = getAllCollections();
-  const existing = all.find(c => c.id === id);
+  const existing = await getCollection(id);
   if (existing) {
     if (existing.deletedAt !== null) {
       const revived: Collection = { ...existing, deletedAt: null, updatedAt: Date.now() };
-      updateCollection(revived);
+      await updateCollection(revived);
       return revived;
     }
     return existing;
@@ -353,7 +345,7 @@ export function getOrCreateBatchCollection(batchName: string): Collection {
     updatedAt: now,
     deletedAt: null,
   };
-  addCollection(collection);
+  await addCollection(collection);
   return collection;
 }
 
@@ -361,51 +353,50 @@ export function getOrCreateBatchCollection(batchName: string): Collection {
 // order disimpan/diedit dari halaman Order. Kalau batch berubah (atau item
 // Amna Jilbab dihapus saat edit, batchName jadi undefined), order dilepas
 // dulu dari Collection batch lama sebelum ditautkan ke yang baru.
-export function syncOrderBatchCollection(orderId: string, batchName: string | undefined, previousBatchName?: string) {
+export async function syncOrderBatchCollection(orderId: string, batchName: string | undefined, previousBatchName?: string): Promise<void> {
   if (previousBatchName && previousBatchName !== batchName) {
-    removeOrderFromCollection("col-po-" + slugifyBatchName(previousBatchName), orderId);
+    await removeOrderFromCollection("col-po-" + slugifyBatchName(previousBatchName), orderId);
   }
   if (!batchName) return;
-  const collection = getOrCreateBatchCollection(batchName);
-  addOrderToCollection(collection.id, orderId);
+  const collection = await getOrCreateBatchCollection(batchName);
+  await addOrderToCollection(collection.id, orderId);
 }
 
 // ===== COLLECTION ORDER STORE =====
 
-export function getCollectionOrders(): CollectionOrder[] {
-  return load<CollectionOrder[]>(KEYS.collectionOrders, []);
+function mapCollectionOrderRow(r: Record<string, unknown>): CollectionOrder {
+  return { id: r.id as string, collectionId: r.collection_id as string, orderId: r.order_id as string, addedAt: Number(r.added_at) };
 }
 
-export function saveCollectionOrders(list: CollectionOrder[]) {
-  save(KEYS.collectionOrders, list);
+export async function getCollectionOrders(): Promise<CollectionOrder[]> {
+  const { data, error } = await supabase.from("collection_orders").select("*");
+  if (error) { console.error("[getCollectionOrders]", error.message); return []; }
+  return ((data || []) as Record<string, unknown>[]).map(mapCollectionOrderRow);
 }
 
 // Order yang terhubung ke sebuah collection
-export function getOrdersForCollection(collectionId: string): OrderRecord[] {
-  const rels = getCollectionOrders().filter(r => r.collectionId === collectionId);
-  const orders = getOrders();
-  return rels
-    .map(r => orders.find(o => o.id === r.orderId))
-    .filter((o): o is OrderRecord => Boolean(o));
+export async function getOrdersForCollection(collectionId: string): Promise<OrderRecord[]> {
+  const { data, error } = await supabase.from("collection_orders").select("order_id").eq("collection_id", collectionId);
+  if (error) { console.error("[getOrdersForCollection]", error.message); return []; }
+  const orderIds = new Set((data || []).map(r => r.order_id as string));
+  return getOrders().filter(o => orderIds.has(o.id));
 }
 
 // Tambah order ke collection (tanpa duplikasi)
-export function addOrderToCollection(collectionId: string, orderId: string): CollectionOrder[] {
-  const rels = getCollectionOrders();
-  if (rels.some(r => r.collectionId === collectionId && r.orderId === orderId)) {
-    return rels;
+export async function addOrderToCollection(collectionId: string, orderId: string): Promise<CollectionOrder[]> {
+  const { data: existing } = await supabase.from("collection_orders").select("id").eq("collection_id", collectionId).eq("order_id", orderId).maybeSingle();
+  if (!existing) {
+    const { error } = await supabase.from("collection_orders").insert({ id: "colord-" + Date.now(), collection_id: collectionId, order_id: orderId, added_at: Date.now() });
+    if (error) console.error("[addOrderToCollection]", error.message);
   }
-  const updated = [...rels, { id: "colord-" + Date.now(), collectionId, orderId, addedAt: Date.now() }];
-  saveCollectionOrders(updated);
-  return updated;
+  return getCollectionOrders();
 }
 
 // Hapus order dari collection
-export function removeOrderFromCollection(collectionId: string, orderId: string): CollectionOrder[] {
-  const rels = getCollectionOrders();
-  const updated = rels.filter(r => !(r.collectionId === collectionId && r.orderId === orderId));
-  saveCollectionOrders(updated);
-  return updated;
+export async function removeOrderFromCollection(collectionId: string, orderId: string): Promise<CollectionOrder[]> {
+  const { error } = await supabase.from("collection_orders").delete().eq("collection_id", collectionId).eq("order_id", orderId);
+  if (error) console.error("[removeOrderFromCollection]", error.message);
+  return getCollectionOrders();
 }
 
 // Lepaskan SEMUA tautan per-item order ini dari SATU collection tertentu
@@ -414,64 +405,70 @@ export function removeOrderFromCollection(collectionId: string, orderId: string)
 // "Hapus dari collection" di tab Order, supaya order yang cuma tertaut lewat
 // Kategori Produk (per-item, bukan lewat "Tambah Order" manual) juga beneran
 // lepas, bukan cuma order-level yang gak pernah ada tautannya sejak awal.
-export function removeOrderItemLinksFromCollection(collectionId: string, orderId: string): CollectionOrderItem[] {
-  const updated = getCollectionOrderItems().filter(l => !(l.collectionId === collectionId && l.orderId === orderId));
-  saveCollectionOrderItems(updated);
-  return updated;
+export async function removeOrderItemLinksFromCollection(collectionId: string, orderId: string): Promise<CollectionOrderItem[]> {
+  const { error } = await supabase.from("collection_order_items").delete().eq("collection_id", collectionId).eq("order_id", orderId);
+  if (error) console.error("[removeOrderItemLinksFromCollection]", error.message);
+  return getCollectionOrderItems();
 }
 
 // Lepaskan order dari SEMUA Collection sekaligus — dipakai saat order itu
 // sendiri dihapus permanen, supaya tidak ada Collection yang masih menghitung
 // order yang sudah tidak ada.
-export function removeOrderFromAllCollections(orderId: string): CollectionOrder[] {
-  const updated = getCollectionOrders().filter(r => r.orderId !== orderId);
-  saveCollectionOrders(updated);
-  return updated;
+export async function removeOrderFromAllCollections(orderId: string): Promise<CollectionOrder[]> {
+  const { error } = await supabase.from("collection_orders").delete().eq("order_id", orderId);
+  if (error) console.error("[removeOrderFromAllCollections]", error.message);
+  return getCollectionOrders();
 }
 
 // ===== COLLECTION ORDER ITEM STORE (tautan per-item, "Kategori Produk") =====
 
-export function getCollectionOrderItems(): CollectionOrderItem[] {
-  return load<CollectionOrderItem[]>(KEYS.collectionOrderItems, []);
+function mapCollectionOrderItemRow(r: Record<string, unknown>): CollectionOrderItem {
+  return { id: r.id as string, collectionId: r.collection_id as string, orderId: r.order_id as string, itemId: r.item_id as string, addedAt: Number(r.added_at) };
 }
 
-export function saveCollectionOrderItems(list: CollectionOrderItem[]) {
-  save(KEYS.collectionOrderItems, list);
+export async function getCollectionOrderItems(): Promise<CollectionOrderItem[]> {
+  const { data, error } = await supabase.from("collection_order_items").select("*");
+  if (error) { console.error("[getCollectionOrderItems]", error.message); return []; }
+  return ((data || []) as Record<string, unknown>[]).map(mapCollectionOrderItemRow);
 }
 
 // Collection mana saja yang sudah ditandai untuk satu item tertentu — dipakai
 // buat prefill checkbox saat order dibuka lagi utk diedit.
-export function getCollectionIdsForItem(orderId: string, itemId: string): string[] {
-  return getCollectionOrderItems()
-    .filter(l => l.orderId === orderId && l.itemId === itemId)
-    .map(l => l.collectionId);
+export async function getCollectionIdsForItem(orderId: string, itemId: string): Promise<string[]> {
+  const { data, error } = await supabase.from("collection_order_items").select("collection_id").eq("order_id", orderId).eq("item_id", itemId);
+  if (error) { console.error("[getCollectionIdsForItem]", error.message); return []; }
+  return (data || []).map(r => r.collection_id as string);
 }
 
 // Ganti SELURUH tautan kategori satu item sekaligus (idempotent) — dipanggil
 // tiap order disimpan, supaya centang/uncek admin langsung sinkron tanpa perlu
 // tambah/hapus manual satu-satu.
-export function setCategoriesForItem(orderId: string, itemId: string, collectionIds: string[]) {
-  const rest = getCollectionOrderItems().filter(l => !(l.orderId === orderId && l.itemId === itemId));
+export async function setCategoriesForItem(orderId: string, itemId: string, collectionIds: string[]): Promise<void> {
+  const { error: delError } = await supabase.from("collection_order_items").delete().eq("order_id", orderId).eq("item_id", itemId);
+  if (delError) console.error("[setCategoriesForItem:delete]", delError.message);
+  if (collectionIds.length === 0) return;
   const now = Date.now();
-  const added: CollectionOrderItem[] = collectionIds.map(collectionId => ({
+  const rows = collectionIds.map(collectionId => ({
     id: "colordit-" + orderId + "-" + itemId + "-" + collectionId,
-    collectionId,
-    orderId,
-    itemId,
-    addedAt: now,
+    collection_id: collectionId,
+    order_id: orderId,
+    item_id: itemId,
+    added_at: now,
   }));
-  saveCollectionOrderItems([...rest, ...added]);
+  const { error } = await supabase.from("collection_order_items").insert(rows);
+  if (error) console.error("[setCategoriesForItem:insert]", error.message);
 }
 
 // Semua item (dari order manapun) yang tertaut ke satu Collection — dipakai
 // utk breakdown detail ("kaos kaki closing berapa, siapa saja yang pesan").
-export function getItemLinksForCollection(collectionId: string): { order: OrderRecord; item: OrderItemSnapshot }[] {
-  const links = getCollectionOrderItems().filter(l => l.collectionId === collectionId);
+export async function getItemLinksForCollection(collectionId: string): Promise<{ order: OrderRecord; item: OrderItemSnapshot }[]> {
+  const { data, error } = await supabase.from("collection_order_items").select("order_id, item_id").eq("collection_id", collectionId);
+  if (error) { console.error("[getItemLinksForCollection]", error.message); return []; }
   const orders = getOrders();
   const result: { order: OrderRecord; item: OrderItemSnapshot }[] = [];
-  for (const link of links) {
-    const order = orders.find(o => o.id === link.orderId);
-    const item = order?.items.find(i => i.id === link.itemId);
+  for (const link of (data || [])) {
+    const order = orders.find(o => o.id === link.order_id);
+    const item = order?.items.find(i => i.id === link.item_id);
     if (order && item) result.push({ order, item });
   }
   return result;
@@ -479,10 +476,10 @@ export function getItemLinksForCollection(collectionId: string): { order: OrderR
 
 // Dipanggil saat order dihapus permanen — sama seperti removeOrderFromAllCollections
 // tapi utk tautan per-item.
-export function removeItemLinksForOrder(orderId: string): CollectionOrderItem[] {
-  const updated = getCollectionOrderItems().filter(l => l.orderId !== orderId);
-  saveCollectionOrderItems(updated);
-  return updated;
+export async function removeItemLinksForOrder(orderId: string): Promise<CollectionOrderItem[]> {
+  const { error } = await supabase.from("collection_order_items").delete().eq("order_id", orderId);
+  if (error) console.error("[removeItemLinksForOrder]", error.message);
+  return getCollectionOrderItems();
 }
 
 function itemSubtotal(item: OrderItemSnapshot): number {
@@ -510,13 +507,13 @@ export type CollectionStats = {
   shipmentProgress: number; // persen
 };
 
-export function getCollectionStats(collectionId: string): CollectionStats {
-  const orders = getOrdersForCollection(collectionId); // legacy: whole-order (batch bridge, tambah order manual)
+export async function getCollectionStats(collectionId: string): Promise<CollectionStats> {
+  const orders = await getOrdersForCollection(collectionId); // legacy: whole-order (batch bridge, tambah order manual)
   const legacyOrderIds = new Set(orders.map(o => o.id));
   // Item-level ("Kategori Produk") — kalau order yang sama KEBETULAN juga
   // sudah tertaut order-level ke Collection ini, item-nya gak ikut dihitung
   // lagi di sini supaya gak dobel.
-  const itemLinks = getItemLinksForCollection(collectionId).filter(l => !legacyOrderIds.has(l.order.id));
+  const itemLinks = (await getItemLinksForCollection(collectionId)).filter(l => !legacyOrderIds.has(l.order.id));
 
   const totalOrders = legacyOrderIds.size + new Set(itemLinks.map(l => l.order.id)).size;
   const totalItems = orders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.qty, 0), 0)
@@ -603,7 +600,7 @@ export function matchCustomerId(name: string, phone: string): string | null {
 // Membuat order baru dan langsung menghubungkannya ke collection.
 // Customer boleh belum ada (customerId = null, customer_name = input manual).
 
-export function createOrderInCollection(
+export async function createOrderInCollection(
   collectionId: string,
   data: {
     customerName: string;
@@ -614,7 +611,7 @@ export function createOrderInCollection(
     price: number;
     note?: string;
   }
-): OrderRecord | null {
+): Promise<OrderRecord | null> {
   const now = new Date();
   const orderId = "ORD-" + Date.now();
   const orderNumber = "ORD/" + now.getFullYear() + "/" + String(now.getMonth() + 1).padStart(2, "0") + "/" + String(now.getDate()).padStart(2, "0") + "-" + String(Math.floor(1000 + Math.random() * 9000));
@@ -658,6 +655,6 @@ export function createOrderInCollection(
   };
 
   saveOrder(order);
-  addOrderToCollection(collectionId, orderId);
+  await addOrderToCollection(collectionId, orderId);
   return order;
 }

@@ -34,13 +34,13 @@ export async function collectAllLocalData() {
     products: await getProducts(),
     warehouses: await getWarehouses(),
     inventory: await getInventory(),
-    orders: getOrders(),
-    payments: getPayments(),
-    fees: getFees(),
+    orders: await getOrders(),
+    payments: await getPayments(),
+    fees: await getFees(),
     collections: await getAllCollections(),
     collectionOrders: await getCollectionOrders(),
     collectionOrderItems: await getCollectionOrderItems(),
-    batchNames: getBatchNames(),
+    batchNames: await getBatchNames(),
   };
 }
 

@@ -379,7 +379,7 @@ export async function getOrdersForCollection(collectionId: string): Promise<Orde
   const { data, error } = await supabase.from("collection_orders").select("order_id").eq("collection_id", collectionId);
   if (error) { console.error("[getOrdersForCollection]", error.message); return []; }
   const orderIds = new Set((data || []).map(r => r.order_id as string));
-  return getOrders().filter(o => orderIds.has(o.id));
+  return (await getOrders()).filter(o => orderIds.has(o.id));
 }
 
 // Tambah order ke collection (tanpa duplikasi)
@@ -464,7 +464,7 @@ export async function setCategoriesForItem(orderId: string, itemId: string, coll
 export async function getItemLinksForCollection(collectionId: string): Promise<{ order: OrderRecord; item: OrderItemSnapshot }[]> {
   const { data, error } = await supabase.from("collection_order_items").select("order_id, item_id").eq("collection_id", collectionId);
   if (error) { console.error("[getItemLinksForCollection]", error.message); return []; }
-  const orders = getOrders();
+  const orders = await getOrders();
   const result: { order: OrderRecord; item: OrderItemSnapshot }[] = [];
   for (const link of (data || [])) {
     const order = orders.find(o => o.id === link.order_id);

@@ -1,6 +1,10 @@
 "use client";
 
 import { supabase } from "./supabaseClient";
+// Dipakai HANYA oleh hardDeleteCustomer() di bawah, buat cek transaksi asli
+// (bukan shadow-projection central.ts sendiri yang sejak Tahap 6 udah gak
+// lagi ke-update — lihat catatan panjang di getOrders() central.ts di bawah).
+import { getOrders as getStoreOrders, getPayments as getStorePayments } from "./store";
 
 // =====================================================================
 // CENTRAL DATA LAYER — UmayasLa
@@ -1083,26 +1087,16 @@ export async function softDeleteCustomer(id: string): Promise<Customer[]> {
   return getAllCustomers();
 }
 
-// Hard delete: hanya untuk customer TANPA transaksi (order/payment/shipment).
-// hasOrder/hasPayment/hasShipment tetap dicek dari shadow-projection central.ts
-// (getOrders/getPayments/getShipments) — TIDAK disentuh Tahap 5 ini, itu
-// entity Tahap 6.
+// Hard delete: hanya untuk customer TANPA transaksi (order/payment). Dicek
+// dari data ASLI (store.ts, Supabase — Tahap 6), BUKAN lagi shadow-projection
+// central.ts sendiri (yang sejak Tahap 6 udah gak ke-update, lihat catatan
+// di getOrders() central.ts di bawah — kalau masih pakai itu, guard ini bisa
+// salah bilang "aman dihapus" padahal customer punya order asli).
 export async function hardDeleteCustomer(id: string): Promise<{ ok: boolean; reason?: string }> {
-  const hasOrder = getOrders().some(o => o.customerId === id);
-  const hasPayment = getPayments().some(p => {
-    const order = getOrder(p.orderId);
-    return order?.customerId === id;
-  });
-  const hasShipment = getShipments().some(s => {
-    const items = getShipmentItemsForShipment(s.id);
-
-    return items.some(si => {
-      const oi = getOrderItem(si.orderItemId);
-      const order = oi ? getOrder(oi.orderId) : undefined;
-      return order?.customerId === id;
-    });
-  });
-  if (hasOrder || hasPayment || hasShipment) {
+  const [orders, payments] = await Promise.all([getStoreOrders(), getStorePayments()]);
+  const hasOrder = orders.some(o => o.customerId === id);
+  const hasPayment = payments.some(p => p.customerId === id);
+  if (hasOrder || hasPayment) {
     return { ok: false, reason: "Customer memiliki transaksi. Gunakan soft delete (arsip)." };
   }
   const { error } = await supabase.from("customers").delete().eq("id", id);
@@ -1144,9 +1138,19 @@ export async function deleteAddress(id: string): Promise<Address[]> {
 // ORDER
 // =====================================================================
 
+// PENTING (Tahap 6, 2026-09-11): "Operational State Engine" (central.ts's
+// Order/OrderItem shadow, getOrderCondition/getPrimaryCondition/
+// getDashboardWorkQueue/dst) SUDAH DIPENSIUNKAN — dikonfirmasi lewat grep
+// app/*.tsx, 0% dipanggil dari UI manapun lagi (Dashboard Work Queue sudah
+// dihitung langsung dari order asli, lihat app/page.tsx). Fungsi ini &
+// seluruh rantainya (syncOrdersFromStore, materializeStoreOrder) SENGAJA
+// DIBIARKAN ADA (bukan dihapus, resiko lebih rendah) tapi TIDAK LAGI AMAN
+// DIPANGGIL — syncOrdersFromStore() di bawah manggil store.ts's getOrders()
+// via require() yg SEKARANG ASYNC (Tahap 6), jadi bakal dapat Promise, bukan
+// array, dan crash saat di-iterate. Kalau nanti mau disambungkan lagi,
+// jembatan ini perlu ditulis ulang total (bukan sekadar tambah await, krn
+// require() sync gak bisa await) — kerjaan Tahap 8 kalau memang dibutuhkan.
 export function getOrders(): Order[] {
-  // PHASE 2: pastikan order dari sistem transaksi (store.ts) tersedia di central.
-  // Idempotent & non-destruktif — hanya mematerialisasi yang belum ada.
   syncOrdersFromStore();
   return getAll<Order>(KEYS.orders);
 }

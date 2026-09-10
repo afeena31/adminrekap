@@ -138,7 +138,8 @@ function HomePageInner() {
   // Order asli customer ini (dibuat lewat halaman /order) — dimuat ulang tiap
   // ganti customer, supaya Total Order/tab Order gak nyangkut punya customer lain.
   useEffect(() => {
-    setCustomerOrders(customer.id ? getOrdersForCustomer(customer.id) : []);
+    if (customer.id) getOrdersForCustomer(customer.id).then(setCustomerOrders);
+    else setCustomerOrders([]);
   }, [customer.id]);
 
   // Setiap kali customer yang aktif berganti (pindah profil / bikin customer baru),
@@ -541,7 +542,7 @@ function HomePageInner() {
     </section></div>}
 
     {newCustomerOpen && <NewCustomerForm onClose={() => setNewCustomerOpen(false)} onSave={(name, city) => { handleCreateCustomer(name, city); setNewCustomerOpen(false); setActiveTab("Ringkasan"); notify(`Profil ${name} berhasil dibuat`); }}/>}
-    {quickPaymentOpen && <QuickPaymentModal onClose={() => setQuickPaymentOpen(false)} onRecorded={() => setCustomerOrders(getOrdersForCustomer(customer.id))} />}
+    {quickPaymentOpen && <QuickPaymentModal onClose={() => setQuickPaymentOpen(false)} onRecorded={() => getOrdersForCustomer(customer.id).then(setCustomerOrders)} />}
     {settingsAndBackupModals}
     {editCustomerOpen && <EditCustomerForm customer={customer} onClose={() => setEditCustomerOpen(false)} onSave={handleUpdateCustomer} />}
     {deleteCustomerConfirmOpen && (

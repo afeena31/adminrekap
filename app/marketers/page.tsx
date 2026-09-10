@@ -43,6 +43,9 @@ export default function MarketersPage() {
   });
 
   const [statsMap, setStatsMap] = useState<Record<string, MarketerStats | null>>({});
+  // Order sekarang Supabase (Tahap 6) — gak bisa dipanggil langsung di
+  // render/.map() lagi, dipreload di sini.
+  const [allOrders, setAllOrders] = useState<Awaited<ReturnType<typeof getOrders>>>([]);
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
@@ -50,6 +53,7 @@ export default function MarketersPage() {
   // Marketer sudah pindah ke Supabase (Tahap 4 migrasi backend) — async.
   useEffect(() => {
     getMarketers().then(setMarketerList);
+    getOrders().then(setAllOrders);
   }, []);
 
   // getMarketerStats juga async sekarang — gak bisa dipanggil langsung di
@@ -117,7 +121,9 @@ export default function MarketersPage() {
 
   const handleDelete = async () => {
     if (!editingMarketer) return;
-    const hasOrders = getOrders().some(o => o.marketerId === editingMarketer.id);
+    // Cek fresh (bukan state allOrders yg mungkin sudah basi) — ini guard
+    // keamanan data, jangan sampai lolos gara-gara order baru belum ke-refresh.
+    const hasOrders = (await getOrders()).some(o => o.marketerId === editingMarketer.id);
     if (hasOrders) {
       notify("Tidak bisa dihapus: marketer memiliki riwayat order. Ubah status menjadi Arsip.");
       setShowDeleteConfirm(false);
@@ -218,7 +224,7 @@ export default function MarketersPage() {
     {/* ===== DETAIL / PROFILE MODAL ===== */}
     {detailMarketer && (() => {
       const stats = statsMap[detailMarketer.id];
-      const orders = getOrders().filter(o => o.marketerId === detailMarketer.id);
+      const orders = allOrders.filter(o => o.marketerId === detailMarketer.id);
       return (
         <div className="overlay" onClick={() => setDetailMarketer(null)}>
           <section className="modal marketer-detail" onClick={e => e.stopPropagation()}>

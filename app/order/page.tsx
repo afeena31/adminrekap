@@ -12,7 +12,7 @@ import { goBack } from "../lib/goBack";
 import { products, formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, determineRekening, SPLIT_BILL_PRODUK, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
 import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, recordPaymentForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, getWarehouses, getTotalAvailable, adjustStock, getInventory, inventoryAvailable, type OrderItemSnapshot, type Inventory, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus, type Warehouse } from "../data/store";
-import { getCustomers, getCustomer as getCentralCustomer, addCustomer, getCustomerAddresses, addAddress, syncOrdersFromStore, refreshCentralOrderFromStore } from "../data/central";
+import { getCustomers, getCustomer as getCentralCustomer, addCustomer, getCustomerAddresses, addAddress } from "../data/central";
 import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections, getCollections, getCollectionIdsForItem, setCategoriesForItem, removeItemLinksForOrder, type Collection } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
 import { MoneyInput } from "../components/MoneyInput";
@@ -189,12 +189,14 @@ function OrderPageInner() {
   // ini 1 effect gabung, jadi marketer/produk/dll ikut kosong selamanya di
   // kondisi 0 customer.
   useEffect(() => {
-    setExistingOrders(getOrders());
+    // Order/Fee/Payment/Batch Nama sudah pindah ke Supabase (Tahap 6 migrasi
+    // backend) — async.
+    getOrders().then(setExistingOrders);
     getProducts().then(setProductList);
     getMarketers().then(setMarketers);
     // Customer sekarang Supabase (Tahap 5 migrasi backend) — async.
     getCustomers().then(setCustomerList);
-    setBatchNames(getBatchNames());
+    getBatchNames().then(setBatchNames);
     getCollections().then(setCollectionsList);
     // Gudang & Stok sudah pindah ke Supabase (Tahap 4 migrasi backend) —
     // async, dimuat terpisah dari getter localStorage lain di atas.
@@ -552,7 +554,7 @@ function OrderPageInner() {
   const generateInvoice = async () => {
     if (items.length === 0) { notify("Tambahkan produk dulu"); return; }
     const now = new Date();
-    const number = getNextInvoiceNumber();
+    const number = await getNextInvoiceNumber();
     const type = determineType();
     const ongkirLabel = ongkirId === "custom" ? (customOngkirLabel.trim() || "Ongkir lainnya") : (ongkirOptions.find(o => o.id === ongkirId)?.name || "");
     const marketer = marketers.find(m => m.id === marketerId);
@@ -584,7 +586,7 @@ function OrderPageInner() {
 
     // ===== SAVE ORDER RECORD (snapshot) =====
     // Jika sedang edit, gunakan ID & nomor order yang sudah ada
-    const existingOrder = editingOrderId ? getOrderById(editingOrderId) : undefined;
+    const existingOrder = editingOrderId ? await getOrderById(editingOrderId) : undefined;
     const orderId = existingOrder?.id || "ORD-" + Date.now();
     const orderNumber = existingOrder?.number || "ORD/" + now.getFullYear() + "/" + String(now.getMonth() + 1).padStart(2, "0") + "/" + String(now.getDate()).padStart(2, "0") + "-" + String(Math.floor(1000 + Math.random() * 9000));
 
@@ -686,14 +688,7 @@ function OrderPageInner() {
     }
 
     if (editingOrderId) {
-      updateOrder(orderRecord);
-      // PHASE 11C: Re-project edited order into central (idempotent by order ID).
-      // Non-authoritative — if projection fails, legacy edit is preserved.
-      try {
-        refreshCentralOrderFromStore(orderId);
-      } catch {
-        // Projection failure is non-authoritative; legacy edit already saved.
-      }
+      await updateOrder(orderRecord);
       // ===== SINKRON RIWAYAT PEMBAYARAN — SPLIT BILL SHOPEE =====
       // dp di atas sudah dihitung ulang pakai splitShopeeCredit dari ongkir yang
       // dipilih SEKARANG di form, tapi baris PaymentRecord "Split Bill Shopee"
@@ -703,9 +698,9 @@ function OrderPageInner() {
       // baris baru, atau baris lama masih ada padahal dp sudah dikurangi lagi).
       // Disamakan di sini: tambah/hapus baris ledger biar order.dp & Riwayat
       // Pembayaran tetap 1:1, sama seperti alur order baru.
-      const shopeePayment = getPaymentsForOrder(orderId).find(p => p.note === "Split Bill Shopee (checkout otomatis)");
+      const shopeePayment = (await getPaymentsForOrder(orderId)).find(p => p.note === "Split Bill Shopee (checkout otomatis)");
       if (splitShopeeCredit > 0 && !shopeePayment) {
-        addPayment({
+        await addPayment({
           id: "pay-" + Date.now() + "-shopee",
           orderId,
           orderNumber,
@@ -720,18 +715,11 @@ function OrderPageInner() {
           createdAt: Date.now(),
         });
       } else if (splitShopeeCredit === 0 && shopeePayment) {
-        deletePayment(shopeePayment.id);
+        await deletePayment(shopeePayment.id);
       }
-      setOrderPayments(getPaymentsForOrder(orderId));
+      setOrderPayments(await getPaymentsForOrder(orderId));
     } else {
-      saveOrder(orderRecord);
-      // PHASE 11C: Project new order into central (idempotent by order ID).
-      // Non-authoritative — if projection fails, legacy order is preserved.
-      try {
-        syncOrdersFromStore();
-      } catch {
-        // Projection failure is non-authoritative; legacy order already saved.
-      }
+      await saveOrder(orderRecord);
       // ===== RIWAYAT PEMBAYARAN: catat top up awal (kalau ada) =====
       // Order baru (bukan edit) — dpAmount manual & kredit Split Bill Shopee
       // dicatat sebagai baris riwayat TERPISAH sejak awal, bukan cuma angka
@@ -770,8 +758,8 @@ function OrderPageInner() {
           createdAt: Date.now(),
         });
       }
-      newPayments.forEach(p => addPayment(p));
-      setOrderPayments(getPaymentsForOrder(orderId));
+      for (const p of newPayments) await addPayment(p);
+      setOrderPayments(await getPaymentsForOrder(orderId));
       // Order baru langsung masuk mode edit (bukan cuma tampil invoice lalu
       // form di baliknya balik ke "Buat Order Baru" kosong) — supaya "Riwayat
       // Pembayaran"/"Catat Pembayaran" untuk order yang BARU SAJA dibuat ini
@@ -818,15 +806,15 @@ function OrderPageInner() {
         note: "",
         createdAt: Date.now(),
       };
-      saveFee(feeRecord);
+      await saveFee(feeRecord);
     } else if (editingOrderId) {
       // Marketer/fee dihapus saat edit — bersihkan FeeRecord lama order ini
       // supaya gak nyangkut selamanya di halaman Fee.
-      removeFeeForOrder(orderId);
+      await removeFeeForOrder(orderId);
     }
 
     // Refresh daftar order agar order yang baru dibuat/diedit langsung terlihat.
-    setExistingOrders(getOrders());
+    setExistingOrders(await getOrders());
   };
 
   // ===== LOAD ORDER KE FORM (EDIT MODE) =====
@@ -886,13 +874,13 @@ function OrderPageInner() {
     // angka yang benar-benar diketik admin, bukan dobel dengan kredit otomatis.
     const loadedSplitShopee = matchedOngkir?.id === "shopee";
     setDpAmount(order.dp - (loadedSplitShopee ? SPLIT_BILL_PRODUK : 0));
-    setOrderPayments(getPaymentsForOrder(order.id));
+    setOrderPayments(await getPaymentsForOrder(order.id));
     setTopUpAmount(0);
     setNote(order.note);
     setInternalNote(order.internalNote || "");
     setMarketerId(order.marketerId || "");
     setFeeOverride(order.marketerId ? order.totalFee : null);
-    if (order.batch) setBatchNames(addBatchName(order.batch));
+    if (order.batch) setBatchNames(await addBatchName(order.batch));
     setBatch(order.batch || "Batch 7");
 
     // Set editing mode
@@ -907,11 +895,11 @@ function OrderPageInner() {
   // dari field DP lama yang minta angka kumulatif dan gampang salah hitung.
   // Langsung tersimpan (gak perlu tunggu klik "Generate Invoice" lagi) supaya
   // dpAmount di form tetap sinkron kalau admin lanjut edit hal lain.
-  const handleAddPayment = () => {
+  const handleAddPayment = async () => {
     if (!editingOrderId || topUpAmount <= 0) return;
-    const existingOrder = getOrderById(editingOrderId);
+    const existingOrder = await getOrderById(editingOrderId);
     if (!existingOrder) return;
-    const { updatedOrder } = recordPaymentForOrder(existingOrder, topUpAmount);
+    const { updatedOrder } = await recordPaymentForOrder(existingOrder, topUpAmount);
     // Dasar kredit Split Bill Shopee dari ongkir yang BENERAN tersimpan di
     // order (existingOrder.ongkirLabel), BUKAN dari pilihan ongkir di form
     // (ongkirId/splitShopeeCredit) — kalau admin sempat ganti ongkir di form
@@ -919,31 +907,31 @@ function OrderPageInner() {
     // salah hitung (bahkan bisa negatif). Math.max(0, ...) jaga-jaga tambahan.
     const persistedSplitShopee = ongkirOptions.find(o => o.name === existingOrder.ongkirLabel)?.id === "shopee";
     setDpAmount(Math.max(0, updatedOrder.dp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0)));
-    setOrderPayments(getPaymentsForOrder(editingOrderId));
-    setExistingOrders(getOrders());
+    setOrderPayments(await getPaymentsForOrder(editingOrderId));
+    setExistingOrders(await getOrders());
     setTopUpAmount(0);
     notify(`Pembayaran ${formatRupiah(topUpAmount)} dicatat`);
   };
 
-  const handleDeletePayment = (payment: PaymentRecord) => {
+  const handleDeletePayment = async (payment: PaymentRecord) => {
     if (!editingOrderId) return;
-    const existingOrder = getOrderById(editingOrderId);
+    const existingOrder = await getOrderById(editingOrderId);
     if (!existingOrder) return;
     const newDp = Math.max(0, existingOrder.dp - payment.amount);
-    updateOrder({ ...existingOrder, dp: newDp });
-    deletePayment(payment.id);
+    await updateOrder({ ...existingOrder, dp: newDp });
+    await deletePayment(payment.id);
     const persistedSplitShopee = ongkirOptions.find(o => o.name === existingOrder.ongkirLabel)?.id === "shopee";
     setDpAmount(Math.max(0, newDp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0)));
-    setOrderPayments(getPaymentsForOrder(editingOrderId));
-    setExistingOrders(getOrders());
+    setOrderPayments(await getPaymentsForOrder(editingOrderId));
+    setExistingOrders(await getOrders());
     notify(`Pembayaran ${formatRupiah(payment.amount)} dihapus`);
   };
 
-  const handleTogglePaymentWithdrawn = (payment: PaymentRecord) => {
+  const handleTogglePaymentWithdrawn = async (payment: PaymentRecord) => {
     const nextStatus = payment.status === "sudah-ditarik" ? "belum-ditarik" : "sudah-ditarik";
     const dateWithdrawn = nextStatus === "sudah-ditarik" ? new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : null;
-    markPaymentWithdrawn(payment.id, nextStatus, dateWithdrawn);
-    if (editingOrderId) setOrderPayments(getPaymentsForOrder(editingOrderId));
+    await markPaymentWithdrawn(payment.id, nextStatus, dateWithdrawn);
+    if (editingOrderId) setOrderPayments(await getPaymentsForOrder(editingOrderId));
   };
 
   // ===== HAPUS ORDER =====
@@ -956,15 +944,15 @@ function OrderPageInner() {
     // Order yang mau dihapus mungkin punya item "Ready Stock" yang udah
     // motong Inventory — kembalikan dulu sebelum order-nya beneran hilang,
     // supaya stok gudang gak nyangkut "hilang" nunjuk order yang udah gak ada.
-    const orderBeingDeleted = getOrderById(deletedId);
+    const orderBeingDeleted = await getOrderById(deletedId);
     for (const item of orderBeingDeleted?.items || []) {
       if (item.stockSource === "ready" && item.productId && item.warehouseId) {
         await adjustStock(item.productId, item.warehouseId, item.qty);
       }
     }
-    deleteOrder(deletedId);
-    removeFeeForOrder(deletedId);
-    removePaymentsForOrder(deletedId);
+    await deleteOrder(deletedId);
+    await removeFeeForOrder(deletedId);
+    await removePaymentsForOrder(deletedId);
     await removeItemLinksForOrder(deletedId);
     try { await removeOrderFromAllCollections(deletedId); } catch { /* non-fatal */ }
     setEditingOrderId(null);
@@ -979,7 +967,7 @@ function OrderPageInner() {
     setMarketerId("");
     setBatch("Batch 7");
     setDeleteOrderConfirmOpen(false);
-    setExistingOrders(getOrders());
+    setExistingOrders(await getOrders());
     notify(`Order ${deletedNumber} dihapus permanen`);
   };
 
@@ -987,8 +975,7 @@ function OrderPageInner() {
   // order itu dalam mode edit, sekali saja.
   useEffect(() => {
     if (orderIdLoaded || !initialOrderId) return;
-    const order = getOrderById(initialOrderId);
-    if (order) loadOrderIntoForm(order);
+    getOrderById(initialOrderId).then(order => { if (order) loadOrderIntoForm(order); });
     setOrderIdLoaded(true);
   }, [initialOrderId, orderIdLoaded]);
 
@@ -1425,7 +1412,7 @@ function OrderPageInner() {
             onClick={async () => {
               const name = newBatchInput.trim();
               if (!name) return;
-              const updated = addBatchName(name);
+              const updated = await addBatchName(name);
               setBatchNames(updated);
               setBatch(name);
               setNewBatchInput("");

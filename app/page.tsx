@@ -12,14 +12,68 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { toDisplayCustomer } from "./data/customers";
-import { getOrders, getFees, getMarketers, getProducts, formatRupiah, getOrderById, getPelunasanWhatsAppUrl, productionStageInfo, shipmentStageInfo, type Marketer } from "./data/store";
+import { getOrders, getMarketers, getProducts, formatRupiah, getOrderById, getPelunasanWhatsAppUrl, productionStageInfo, shipmentStageInfo, type OrderRecord, type ProductionStage, type ShipmentStage, type Marketer } from "./data/store";
 import type { Product } from "./data/products";
 import { BottomNav } from "./components/BottomNav";
 import { QuickPaymentModal } from "./components/QuickPaymentModal";
 import { goBack } from "./lib/goBack";
 import { getOperations } from "./data/operations";
-import { getCustomers, getCustomerAddresses as getCentralCustomerAddresses, getDashboardWorkQueue, type WorkQueueItem, type PrimaryCondition, type DashboardWorkQueue } from "./data/central";
+import { getCustomers, getCustomerAddresses as getCentralCustomerAddresses } from "./data/central";
 import { useAuth } from "./data/authContext";
+
+// ===== WORK QUEUE — dihitung LANGSUNG dari order asli (Tahap 6 migrasi
+// backend), bukan lagi dari "Operational State Engine" central.ts. Riset
+// sebelum Tahap 6 menemukan sistem itu ternyata jalan di atas data
+// default/kosong utk order asli (productionStatus selalu hardcode
+// "belum-ready", Payment central gak pernah diisi UI manapun) — jadi
+// klasifikasi 10-state-nya kelihatan detail tapi gak akurat. 4 section yang
+// sama (Perlu Tindakan/Bisa Dikerjakan/Segera/Menunggu) dipertahankan,
+// isinya sekarang dihitung jujur dari status bayar + productionStage/
+// shipmentStage asli tiap item (store.ts).
+type QueueSection = "perluTindakan" | "bisaDikerjakan" | "segera" | "menunggu";
+type QueueItem = {
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  label: string;
+  tone: string;
+  nextAction: string;
+  hasOutstanding: boolean;
+  activeProdStage?: ProductionStage;
+  activeShipStage?: ShipmentStage;
+};
+
+function classifyOrderForQueue(order: OrderRecord): { section: QueueSection; item: QueueItem } | null {
+  const outstanding = order.status === "paid" ? 0 : Math.max(0, order.total - order.dp);
+  const items = order.items;
+  const activeProdItem = items.find(i => i.productionStage && i.productionStage !== "po" && i.productionStage !== "siap-kirim");
+  const activeShipItem = items.find(i => i.shipmentStage && i.shipmentStage !== "selesai");
+  const allShipped = items.length > 0 && items.every(i => i.shipmentStage === "selesai");
+  if (allShipped && outstanding <= 0) return null; // beres total, gak perlu muncul di Work Queue.
+
+  const base = {
+    orderId: order.id, orderNumber: order.number, customerName: order.customer,
+    hasOutstanding: outstanding > 0,
+    activeProdStage: activeProdItem?.productionStage, activeShipStage: activeShipItem?.shipmentStage,
+  };
+
+  if (outstanding > 0) {
+    return { section: "perluTindakan", item: { ...base, label: "Perlu Ditagih", tone: "red", nextAction: "Tagih pelunasan" } };
+  }
+  const anyHold = items.some(i => i.shipmentStage === "ditunda" || i.shipmentStage === "retur" || i.shipmentStage === "refund");
+  if (anyHold) {
+    return { section: "perluTindakan", item: { ...base, label: "Bermasalah", tone: "red", nextAction: "Cek status pengiriman" } };
+  }
+  const anyShipActive = items.some(i => i.shipmentStage === "sudah-dipacking" || i.shipmentStage === "proses-resi" || i.shipmentStage === "dalam-pengiriman");
+  if (anyShipActive) {
+    return { section: "segera", item: { ...base, label: "Segera Dikirim", tone: "blue", nextAction: "Input resi / kirim" } };
+  }
+  const anyProdActive = items.some(i => i.productionStage && i.productionStage !== "po");
+  if (anyProdActive) {
+    return { section: "bisaDikerjakan", item: { ...base, label: "Dalam Proses", tone: "amber", nextAction: "Lanjutkan produksi/packing" } };
+  }
+  return { section: "menunggu", item: { ...base, label: "Menunggu Diproses", tone: "sand", nextAction: "Mulai produksi" } };
+}
 
 // Customer sekarang Supabase (Tahap 5 migrasi backend) — async.
 async function loadAllDisplayCustomers() {
@@ -38,8 +92,8 @@ export default function DashboardPage() {
   // Item "PERLU DITAGIH" langsung buka WhatsApp dgn pesan pelunasan siap
   // kirim (bukan cuma pindah ke halaman Edit Order) — item lain di Work
   // Queue tetap link biasa ke halaman order.
-  const handleTagihPelunasan = (orderId: string) => {
-    const order = getOrderById(orderId);
+  const handleTagihPelunasan = async (orderId: string) => {
+    const order = await getOrderById(orderId);
     if (!order) return;
     const url = getPelunasanWhatsAppUrl(order);
     if (!url) { notify("Nomor WA customer belum ada — lengkapi dulu di halaman Customer"); return; }
@@ -49,12 +103,10 @@ export default function DashboardPage() {
   // Semua state di bawah ini dimulai kosong (bukan langsung baca localStorage)
   // supaya render pertama di server & di client sama, lalu diisi data asli
   // lewat HYDRATION FIX useEffect setelah mount.
-  const [orders, setOrders] = useState<ReturnType<typeof getOrders>>([]);
-  const [fees, setFees] = useState<ReturnType<typeof getFees>>([]);
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [marketers, setMarketers] = useState<Marketer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [allOps, setAllOps] = useState<{ customer: ReturnType<typeof toDisplayCustomer>; ops: ReturnType<typeof getOperations> }[]>([]);
-  const [workQueue, setWorkQueue] = useState<DashboardWorkQueue>({ perluTindakan: [], bisaDikerjakan: [], segera: [], menunggu: [], ringkasan: [] });
   const [totalCustomers, setTotalCustomers] = useState(0);
   // Halaman ini di-prerender statis (waktu build) — kalau jam/tanggal dihitung
   // langsung di badan render, HTML hasil build (jam build) akan beda dari hasil
@@ -63,14 +115,12 @@ export default function DashboardPage() {
   const [greeting, setGreeting] = useState("Selamat Datang");
   const [todayLabel, setTodayLabel] = useState("");
 
-  // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
+  // ===== HYDRATION FIX: Muat data dari Supabase setelah hydration =====
   useEffect(() => {
-    setOrders(getOrders());
-    setFees(getFees());
+    getOrders().then(setOrders);
     getMarketers().then(setMarketers);
     getProducts().then(setProducts);
     loadAllDisplayCustomers().then(list => setAllOps(list.map(c => ({ customer: c, ops: getOperations(c.id) }))));
-    getDashboardWorkQueue().then(setWorkQueue);
     getCustomers().then(list => setTotalCustomers(list.length));
     const hour = new Date().getHours();
     setGreeting(hour < 11 ? "Selamat Pagi" : hour < 15 ? "Selamat Siang" : hour < 18 ? "Selamat Sore" : "Selamat Malam");
@@ -176,35 +226,21 @@ export default function DashboardPage() {
     { label: "Marketers", value: String(totalMarketers), icon: UserRound, tone: "olive" },
   ];
 
-  // Work Queue (central.ts) belum tahu soal productionStage/shipmentStage
-  // (field asli baru, tersimpan di store.ts) — daripada ubah logic
-  // primaryCondition central.ts yang sudah jalan (berisiko), tiap item Work
-  // Queue di-lookup ke order ASLI di sini utk nampilin badge tahap sbg info
-  // tambahan, gak ganti kondisi utama yang sudah benar.
-  const orderMap = new Map(orders.map(o => [o.id, o]));
-
   // ===== WORK QUEUE (satu tempat utama untuk kondisi operasional) =====
-  // Setiap order muncul SATU KALI dengan PRIMARY CONDITION + NEXT ACTION.
-  // Kondisi non-primary menjadi secondary signal (konteks), bukan duplikasi.
-  const queueSections: { key: string; label: string; tone: string; icon: any; items: WorkQueueItem[]; empty: string }[] = [
-    { key: "perluTindakan", label: "Perlu Tindakan", tone: "red", icon: AlertCircle, items: workQueue.perluTindakan, empty: "Tidak ada yang perlu tindakan" },
-    { key: "bisaDikerjakan", label: "Bisa Dikerjakan", tone: "amber", icon: PackageOpen, items: workQueue.bisaDikerjakan, empty: "Tidak ada yang bisa dikerjakan" },
-    { key: "segera", label: "Segera", tone: "blue", icon: Clock, items: workQueue.segera, empty: "Tidak ada yang segera" },
-    { key: "menunggu", label: "Menunggu", tone: "sand", icon: CircleDot, items: workQueue.menunggu, empty: "Tidak ada yang menunggu" },
-  ];
+  // Setiap order muncul SATU KALI, dikelompokkan lewat classifyOrderForQueue
+  // (dihitung langsung dari order asli — lihat catatan di atas fungsi itu).
+  const workQueueGroups: Record<QueueSection, QueueItem[]> = { perluTindakan: [], bisaDikerjakan: [], segera: [], menunggu: [] };
+  for (const order of orders) {
+    const result = classifyOrderForQueue(order);
+    if (result) workQueueGroups[result.section].push(result.item);
+  }
 
-  const primaryTone: Record<PrimaryCondition, string> = {
-    "BERMASALAH": "red",
-    "PERLU DITAGIH": "red",
-    "KEPUTUSAN PENGIRIMAN DIPERLUKAN": "amber",
-    "MENUNGGU PRODUK LENGKAP": "sand",
-    "SIAP DIBUAT SHIPMENT": "green",
-    "BISA DIKIRIM SEBAGIAN": "green",
-    "SIAP PACKING": "amber",
-    "MENUNGGU QC / PRODUKSI / PEMBAYARAN": "sand",
-    "DALAM PENGIRIMAN / MENUNGGU RESI": "blue",
-    "SELESAI": "olive",
-  };
+  const queueSections: { key: QueueSection; label: string; tone: string; icon: any; items: QueueItem[]; empty: string }[] = [
+    { key: "perluTindakan", label: "Perlu Tindakan", tone: "red", icon: AlertCircle, items: workQueueGroups.perluTindakan, empty: "Tidak ada yang perlu tindakan" },
+    { key: "bisaDikerjakan", label: "Bisa Dikerjakan", tone: "amber", icon: PackageOpen, items: workQueueGroups.bisaDikerjakan, empty: "Tidak ada yang bisa dikerjakan" },
+    { key: "segera", label: "Segera", tone: "blue", icon: Clock, items: workQueueGroups.segera, empty: "Tidak ada yang segera" },
+    { key: "menunggu", label: "Menunggu", tone: "sand", icon: CircleDot, items: workQueueGroups.menunggu, empty: "Tidak ada yang menunggu" },
+  ];
 
   return <main className="app-shell dashboard-page">
     <header className="topbar">
@@ -266,10 +302,6 @@ export default function DashboardPage() {
             </div>
             {group.items.length === 0 && <p className="dash-queue-empty">{group.empty}</p>}
             {group.items.map(item => {
-              const isTagihan = item.primaryCondition === "PERLU DITAGIH";
-              const realOrder = orderMap.get(item.orderId);
-              const activeProdItem = realOrder?.items.find(i => i.productionStage && i.productionStage !== "po" && i.productionStage !== "siap-kirim");
-              const activeShipItem = realOrder?.items.find(i => i.shipmentStage && i.shipmentStage !== "selesai");
               const body = <>
                 <span className="mini-avatar">{item.customerName.slice(0, 2).toUpperCase()}</span>
                 <div className="dash-queue-body">
@@ -278,18 +310,15 @@ export default function DashboardPage() {
                     <span className="dash-queue-order">{item.orderNumber}</span>
                   </div>
                   <div className="dash-queue-conditions">
-                    <span className={`dash-queue-primary ${primaryTone[item.primaryCondition]}`}>{item.primaryCondition}</span>
-                    {item.secondarySignals.map((s, i) => (
-                      <span key={i} className="dash-queue-secondary">{s.count} {s.label}</span>
-                    ))}
-                    {activeProdItem && <span className="dash-queue-secondary">🏭 {productionStageInfo[activeProdItem.productionStage!].name}</span>}
-                    {activeShipItem && <span className="dash-queue-secondary">🚚 {shipmentStageInfo[activeShipItem.shipmentStage!].name}</span>}
+                    <span className={`dash-queue-primary ${item.tone}`}>{item.label}</span>
+                    {item.activeProdStage && <span className="dash-queue-secondary">🏭 {productionStageInfo[item.activeProdStage].name}</span>}
+                    {item.activeShipStage && <span className="dash-queue-secondary">🚚 {shipmentStageInfo[item.activeShipStage].name}</span>}
                   </div>
                   <span className="dash-queue-action">→ {item.nextAction}</span>
                 </div>
-                {isTagihan ? <MessageCircle size={16} className="dash-queue-chevron" /> : <ChevronRight size={16} className="dash-queue-chevron" />}
+                {item.hasOutstanding ? <MessageCircle size={16} className="dash-queue-chevron" /> : <ChevronRight size={16} className="dash-queue-chevron" />}
               </>;
-              return isTagihan ? (
+              return item.hasOutstanding ? (
                 <button key={item.orderId} type="button" className="dash-queue-item" onClick={() => handleTagihPelunasan(item.orderId)}>{body}</button>
               ) : (
                 <Link key={item.orderId} href={`/order?orderId=${item.orderId}`} className="dash-queue-item">{body}</Link>
@@ -428,7 +457,7 @@ export default function DashboardPage() {
     {/* ===== BOTTOM NAV ===== */}
     <BottomNav />
 
-    {quickPaymentOpen && <QuickPaymentModal onClose={() => setQuickPaymentOpen(false)} onRecorded={() => setOrders(getOrders())} />}
+    {quickPaymentOpen && <QuickPaymentModal onClose={() => setQuickPaymentOpen(false)} onRecorded={() => getOrders().then(setOrders)} />}
     {notice && <div className="toast"><Check size={17} />{notice}</div>}
   </main>;
 }

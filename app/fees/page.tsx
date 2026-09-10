@@ -24,9 +24,9 @@ export default function FeesPage() {
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
-  // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
+  // ===== HYDRATION FIX: Muat data dari Supabase setelah hydration =====
   useEffect(() => {
-    setFeeList(getFees());
+    getFees().then(setFeeList);
     getMarketers().then(setMarketers);
   }, []);
 
@@ -50,16 +50,16 @@ export default function FeesPage() {
     return { ...m, count: fees.length, outstanding, paid };
   }).filter(m => m.count > 0);
 
-  const markFeeAsPaid = (fee: FeeRecord) => {
+  const markFeeAsPaid = async (fee: FeeRecord) => {
     const today = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-    const updated = updateFeeStatus(fee.id, "sudah-diambil", today);
+    const updated = await updateFeeStatus(fee.id, "sudah-diambil", today);
     setFeeList(updated);
     setDetailFee(null);
     notify(`Fee ${fee.marketerName} ditandai sudah diambil`);
   };
 
-  const markFeeAsUnpaid = (fee: FeeRecord) => {
-    const updated = updateFeeStatus(fee.id, "belum-diambil", null);
+  const markFeeAsUnpaid = async (fee: FeeRecord) => {
+    const updated = await updateFeeStatus(fee.id, "belum-diambil", null);
     setFeeList(updated);
     setDetailFee(null);
     notify(`Fee ${fee.marketerName} dikembalikan ke belum diambil`);
@@ -70,17 +70,17 @@ export default function FeesPage() {
     setEditingAmount(true);
   };
 
-  const saveEditedAmount = () => {
+  const saveEditedAmount = async () => {
     if (!detailFee) return;
-    const updated = updateFeeAmount(detailFee.id, amountDraft);
+    const updated = await updateFeeAmount(detailFee.id, amountDraft);
     setFeeList(updated);
     setDetailFee(updated.find(f => f.id === detailFee.id) || null);
     setEditingAmount(false);
     notify(`Nominal fee ${detailFee.marketerName} diperbarui`);
   };
 
-  const handleDeleteFee = (fee: FeeRecord) => {
-    const updated = deleteFee(fee.id);
+  const handleDeleteFee = async (fee: FeeRecord) => {
+    const updated = await deleteFee(fee.id);
     setFeeList(updated);
     setDetailFee(null);
     setDeleteConfirmFee(null);

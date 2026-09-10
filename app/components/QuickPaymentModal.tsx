@@ -29,12 +29,11 @@ export function QuickPaymentModal({ onClose, onRecorded }: { onClose: () => void
   const [customersWithOutstanding, setCustomersWithOutstanding] = useState<{ customer: CentralCustomer; outstanding: number }[]>([]);
 
   useEffect(() => {
-    getCustomers().then(list => {
-      const withOutstanding = list
-        .map(c => {
-          const outstanding = getOrdersForCustomer(c.id).reduce((sum, o) => sum + Math.max(0, o.total - o.dp), 0);
-          return { customer: c, outstanding };
-        })
+    getCustomers().then(async list => {
+      const withOutstanding = (await Promise.all(list.map(async c => {
+        const outstanding = (await getOrdersForCustomer(c.id)).reduce((sum, o) => sum + Math.max(0, o.total - o.dp), 0);
+        return { customer: c, outstanding };
+      })))
         .filter(x => x.outstanding > 0)
         .sort((a, b) => b.outstanding - a.outstanding);
       setCustomersWithOutstanding(withOutstanding);
@@ -46,9 +45,9 @@ export function QuickPaymentModal({ onClose, onRecorded }: { onClose: () => void
     ? customersWithOutstanding.filter(x => x.customer.name.toLowerCase().includes(q) || x.customer.waName.toLowerCase().includes(q))
     : customersWithOutstanding;
 
-  const pickCustomer = (c: CentralCustomer) => {
+  const pickCustomer = async (c: CentralCustomer) => {
     setSelectedCustomer(c);
-    const orders = getOrdersForCustomer(c.id).filter(o => o.total - o.dp > 0);
+    const orders = (await getOrdersForCustomer(c.id)).filter(o => o.total - o.dp > 0);
     setUnpaidOrders(orders);
     setSelectedOrderId(orders.length === 1 ? orders[0].id : "");
     setAmount(0);
@@ -64,9 +63,9 @@ export function QuickPaymentModal({ onClose, onRecorded }: { onClose: () => void
 
   const selectedOrder = unpaidOrders.find(o => o.id === selectedOrderId) || null;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedOrder || amount <= 0) return;
-    const { updatedOrder } = recordPaymentForOrder(selectedOrder, amount);
+    const { updatedOrder } = await recordPaymentForOrder(selectedOrder, amount);
     setDone({ orderNumber: updatedOrder.number, sisa: Math.max(0, updatedOrder.total - updatedOrder.dp) });
     onRecorded?.();
   };

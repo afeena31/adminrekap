@@ -313,6 +313,10 @@ create table if not exists order_items (
   amna_attrs jsonb
 );
 alter table order_items enable row level security;
+-- Tulis langsung ke tabel ini TETAP owner-only (sama pola dgn products) —
+-- Admin nulis item order lewat RPC create_order_item/update_order_item/
+-- delete_order_item di bawah, yang SECURITY DEFINER-nya sendiri yg
+-- memutuskan kolom hpp/fee_marketer boleh disentuh atau tidak.
 drop policy if exists "order_items_write_owner_only" on order_items;
 create policy "order_items_write_owner_only" on order_items for all
   using (is_owner()) with check (is_owner());
@@ -339,9 +343,14 @@ create table if not exists fees (
   created_at bigint not null
 );
 alter table fees enable row level security;
+-- Admin TETAP boleh bikin/edit/hapus fee (keputusan user, Tahap 6) — sama
+-- seperti sekarang (order dgn marketer otomatis bikin catatan fee). Yang
+-- tersembunyi dari Admin cuma NOMINAL total_fee/items saat dibaca balik,
+-- lewat get_fees() RPC di bawah (strip utk non-owner) — bukan aksinya.
 drop policy if exists "fees_write_owner_only" on fees;
-create policy "fees_write_owner_only" on fees for all
-  using (is_owner()) with check (is_owner());
+drop policy if exists "fees_all_authenticated" on fees;
+create policy "fees_all_authenticated" on fees for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 -- ===== RPC: baca products dgn cost di-strip utk role admin =====
 create or replace function get_products()
@@ -420,8 +429,10 @@ begin
 end;
 $$;
 
--- ===== RPC: baca order_items 1 order dgn cost di-strip utk admin =====
-create or replace function get_order_items(p_order_id text)
+-- ===== RPC: baca order_items dgn cost di-strip utk admin =====
+-- p_order_id null -> semua order (Dashboard/Papan Produksi/dll yg butuh
+-- lintas-order), diisi -> 1 order saja (form Edit Order).
+create or replace function get_order_items(p_order_id text default null)
 returns setof jsonb
 language sql
 security definer
@@ -432,7 +443,78 @@ as $$
     else to_jsonb(oi) - 'hpp' - 'fee_marketer'
   end
   from order_items oi
-  where oi.order_id = p_order_id;
+  where p_order_id is null or oi.order_id = p_order_id;
+$$;
+
+-- ===== RPC: tulis order_items — Admin BOLEH tulis kolom aman (qty/price/
+-- detail/category/stage/stok/amna_attrs) TAPI hpp/fee_marketer (snapshot
+-- cost per-item, sesensitif modal produk) gak pernah tersentuh kalau bukan
+-- Owner — pola PERSIS create_product/update_product. Admin hari ini emang
+-- gak punya angka hpp/fee_marketer asli utk disnapshot (get_products()
+-- sudah strip sejak Tahap 4), jadi dipaksa 0 saat create, gak disentuh saat
+-- update (biar nilai lama dari Owner gak ketimpa).
+create or replace function create_order_item(
+  p_id text, p_order_id text, p_product_id text, p_name text, p_emoji text,
+  p_qty numeric, p_price numeric, p_hpp numeric, p_fee_marketer numeric,
+  p_discount numeric, p_detail text, p_category text, p_production_stage text,
+  p_shipment_stage text, p_stock_source text, p_warehouse_id text, p_amna_attrs jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if is_owner() then
+    insert into order_items (id, order_id, product_id, name, emoji, qty, price, hpp, fee_marketer, discount, detail, category, production_stage, shipment_stage, stock_source, warehouse_id, amna_attrs)
+    values (p_id, p_order_id, p_product_id, p_name, p_emoji, p_qty, p_price, p_hpp, p_fee_marketer, p_discount, p_detail, p_category, p_production_stage, p_shipment_stage, p_stock_source, p_warehouse_id, p_amna_attrs);
+  else
+    insert into order_items (id, order_id, product_id, name, emoji, qty, price, hpp, fee_marketer, discount, detail, category, production_stage, shipment_stage, stock_source, warehouse_id, amna_attrs)
+    values (p_id, p_order_id, p_product_id, p_name, p_emoji, p_qty, p_price, 0, 0, p_discount, p_detail, p_category, p_production_stage, p_shipment_stage, p_stock_source, p_warehouse_id, p_amna_attrs);
+  end if;
+end;
+$$;
+
+create or replace function update_order_item(
+  p_id text, p_product_id text, p_name text, p_emoji text,
+  p_qty numeric, p_price numeric, p_hpp numeric, p_fee_marketer numeric,
+  p_discount numeric, p_detail text, p_category text, p_production_stage text,
+  p_shipment_stage text, p_stock_source text, p_warehouse_id text, p_amna_attrs jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if is_owner() then
+    update order_items set
+      product_id = p_product_id, name = p_name, emoji = p_emoji, qty = p_qty, price = p_price,
+      hpp = p_hpp, fee_marketer = p_fee_marketer, discount = p_discount, detail = p_detail,
+      category = p_category, production_stage = p_production_stage, shipment_stage = p_shipment_stage,
+      stock_source = p_stock_source, warehouse_id = p_warehouse_id, amna_attrs = p_amna_attrs
+    where id = p_id;
+  else
+    -- hpp/fee_marketer SAMA SEKALI GAK DISENTUH (bukan ditulis 0) — tetap
+    -- apapun nilai lamanya.
+    update order_items set
+      product_id = p_product_id, name = p_name, emoji = p_emoji, qty = p_qty, price = p_price,
+      discount = p_discount, detail = p_detail,
+      category = p_category, production_stage = p_production_stage, shipment_stage = p_shipment_stage,
+      stock_source = p_stock_source, warehouse_id = p_warehouse_id, amna_attrs = p_amna_attrs
+    where id = p_id;
+  end if;
+end;
+$$;
+
+-- Hapus item order — gak expose/butuh cost apapun, terbuka utk semua yg login.
+create or replace function delete_order_item(p_id text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from order_items where id = p_id;
 $$;
 
 -- ===== RPC: baca semua fees dgn total_fee & rincian item di-strip utk admin =====
@@ -450,21 +532,55 @@ as $$
   from fees f;
 $$;
 
+-- ===== NOMOR INVOICE — counter BERSAMA (Tahap 6) =====
+-- Sebelumnya per-device (localStorage) -- begitu Owner & Admin kerja dari
+-- device masing-masing, 2 counter lokal terpisah bisa menghasilkan nomor
+-- invoice ("INV/...") yang sama. Baris tunggal + RPC atomic (update...
+-- returning, dikunci Postgres sendiri) supaya aman dipanggil 2 device
+-- nyaris bersamaan. CATATAN: ini cuma label kosmetik di preview invoice &
+-- FeeRecord.invoiceNumber -- BUKAN OrderRecord.number (itu dari dulu pakai
+-- angka random lokal, sudah aman, tidak diubah).
+create table if not exists invoice_counter (
+  id text primary key default 'main',
+  value integer not null default 1000
+);
+insert into invoice_counter (id, value) values ('main', 1000) on conflict (id) do nothing;
+alter table invoice_counter enable row level security;
+-- Sengaja TANPA policy select/write langsung -- cuma bisa lewat RPC di
+-- bawah (SECURITY DEFINER), supaya incrementnya gak bisa dilewati/di-skip.
+
+create or replace function next_invoice_number()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  next_val integer;
+begin
+  update invoice_counter set value = value + 1 where id = 'main' returning value into next_val;
+  return next_val;
+end;
+$$;
+
+-- ===== SPLIT BILL SHOPEE — cegah duplikasi baris saat 2 device edit order
+-- yang sama nyaris bersamaan (bukan unique(order_id, note) blanket -- itu
+-- salah, karena top-up manual TANPA catatan/note kosong dari QuickPaymentModal
+-- valid terjadi berkali-kali per order). Partial index: cuma baris dgn note
+-- SPESIFIK ini yang dibatasi maksimal 1 per order.
+drop index if exists payments_split_bill_shopee_unique;
+create unique index payments_split_bill_shopee_unique
+  on payments (order_id)
+  where note = 'Split Bill Shopee (checkout otomatis)';
+
 grant execute on function get_products() to authenticated;
 grant execute on function get_order_items(text) to authenticated;
 grant execute on function get_fees() to authenticated;
 grant execute on function create_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[]) to authenticated;
 grant execute on function update_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[]) to authenticated;
+grant execute on function create_order_item(text, text, text, text, text, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, jsonb) to authenticated;
+grant execute on function update_order_item(text, text, text, text, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, jsonb) to authenticated;
+grant execute on function delete_order_item(text) to authenticated;
+grant execute on function next_invoice_number() to authenticated;
 grant execute on function is_owner() to authenticated;
 grant execute on function current_role_name() to authenticated;
-
--- =====================================================================
--- CATATAN UTK SESI SELANJUTNYA (Tahap 4 & 6):
--- RPC di atas baru menutup jalur BACA (SELECT). Jalur TULIS (bikin/edit
--- produk baru, nambah item ke order) utk role Admin juga harus lewat RPC
--- (SECURITY DEFINER function yang nerima input TANPA field cost, ngambil
--- hpp/fee dari Product internal server-side, nulis ke tabel, TANPA balikin
--- nilai cost-nya ke client) -- BELUM dibuat di sini krn bentuk parameter
--- persisnya baru jelas begitu store.ts benar-benar disambungkan ke tabel
--- ini (Tahap 4/6), bukan ditebak sekarang.
--- =====================================================================

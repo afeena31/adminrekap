@@ -221,44 +221,9 @@ export const defaultMarketers: Marketer[] = [
 
 
 
-// ===== STORAGE KEYS =====
-
-const KEYS = {
-  products: "umayasla_products",
-  orders: "umayasla_orders",
-  fees: "umayasla_fees",
-  marketers: "umayasla_marketers",
-  warehouses: "umayasla_warehouses",
-  inventory: "umayasla_inventory",
-  invoiceCounter: "umayasla_invoice_counter",
-  addresses: "umayasla_addresses",
-  batchNames: "umayasla_batch_names",
-  payments: "umayasla_payments",
-};
-
-
-
-// ===== LOCAL STORAGE HELPERS =====
-
-function load<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function save<T>(key: string, value: T) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
-}
+// Semua entitas di file ini sudah pindah ke Supabase (Tahap 4-6 migrasi
+// backend) — key localStorage & helper load/save lokal yang dulu ada di
+// sini sudah gak dipakai lagi sama sekali, dihapus.
 
 // ===== PRODUCT STORE (Tahap 4 migrasi backend — Supabase) =====
 // Baca lewat RPC get_products() (Tahap 1, supabase/schema.sql), BUKAN query
@@ -406,7 +371,7 @@ export type MarketerStats = {
 export async function getMarketerStats(marketerId: string): Promise<MarketerStats | null> {
   const marketer = (await getMarketers()).find(m => m.id === marketerId);
   if (!marketer) return null;
-  const orders = getOrders().filter(o => o.marketerId === marketerId);
+  const orders = (await getOrders()).filter(o => o.marketerId === marketerId);
   const closingCount = orders.length;
   const orderCount = orders.length;
   const omzet = orders.reduce((sum, o) => sum + o.total, 0);
@@ -425,28 +390,137 @@ export async function getMarketerStats(marketerId: string): Promise<MarketerStat
 // sekelas hack), sekarang dihapus supaya cuma ada SATU sumber kebenaran.
 // Konsumen (order/page.tsx) pakai central.ts's getCustomerAddresses/addAddress.
 
-// ===== ORDER STORE =====
+// ===== ORDER STORE (Tahap 6 migrasi backend — Supabase) =====
+// `orders` (header, bukan cost-sensitive) dibaca lewat tabel langsung.
+// `order_items` (ada hpp/feeMarketer per-item, sesensitif modal produk)
+// dibaca lewat RPC get_order_items() — strip hpp/feeMarketer utk admin,
+// sama pola dgn get_products() (Tahap 4). Tulis order_items lewat RPC
+// create_order_item/update_order_item/delete_order_item (Admin boleh tulis
+// kolom aman, hpp/feeMarketer gak pernah tersentuh kalau bukan Owner).
 
-export function getOrders(): OrderRecord[] {
-  return load<OrderRecord[]>(KEYS.orders, []);
+function orderItemAmnaAttrs(item: OrderItemSnapshot) {
+  if (!item.size && !item.pad && !item.fabric && !item.color && !item.modifications && !item.customRequests) return null;
+  return {
+    size: item.size, pad: item.pad, fabric: item.fabric, color: item.color,
+    modifications: item.modifications, customRequests: item.customRequests,
+    additionalPrice: item.additionalPrice, finalPrice: item.finalPrice,
+  };
 }
 
+function orderItemFields(item: OrderItemSnapshot) {
+  return {
+    p_product_id: item.productId ?? null, p_name: item.name, p_emoji: item.emoji, p_qty: item.qty,
+    p_price: item.price, p_hpp: item.hpp, p_fee_marketer: item.feeMarketer, p_discount: item.discount,
+    p_detail: item.detail ?? null, p_category: item.category ?? null,
+    p_production_stage: item.productionStage ?? null, p_shipment_stage: item.shipmentStage ?? null,
+    p_stock_source: item.stockSource ?? null, p_warehouse_id: item.warehouseId ?? null,
+    p_amna_attrs: orderItemAmnaAttrs(item),
+  };
+}
 
-export function saveOrder(order: OrderRecord): OrderRecord[] {
-  const list = getOrders();
-  const updated = [order, ...list];
-  save(KEYS.orders, updated);
-  return updated;
+function mapOrderItemRow(r: Record<string, unknown>): OrderItemSnapshot {
+  const attrs = (r.amna_attrs as Record<string, unknown> | null) || {};
+  return {
+    id: r.id as string,
+    productId: (r.product_id as string) ?? undefined,
+    name: r.name as string,
+    emoji: r.emoji as string,
+    qty: r.qty as number,
+    price: r.price as number,
+    hpp: (r.hpp as number) ?? 0,
+    feeMarketer: (r.fee_marketer as number) ?? 0,
+    discount: r.discount as number,
+    detail: (r.detail as string) ?? undefined,
+    category: (r.category as string) ?? undefined,
+    size: attrs.size as string | undefined,
+    pad: attrs.pad as string | undefined,
+    fabric: attrs.fabric as string | undefined,
+    color: attrs.color as string | undefined,
+    modifications: attrs.modifications as string[] | undefined,
+    customRequests: attrs.customRequests as CustomRequest[] | undefined,
+    additionalPrice: attrs.additionalPrice as number | undefined,
+    finalPrice: attrs.finalPrice as number | undefined,
+    productionStage: (r.production_stage as ProductionStage) ?? undefined,
+    shipmentStage: (r.shipment_stage as ShipmentStage) ?? undefined,
+    stockSource: (r.stock_source as "ready" | "po") ?? undefined,
+    warehouseId: (r.warehouse_id as string) ?? undefined,
+  };
+}
+
+// Semua item order, dikelompokkan per order_id — dipakai getOrders()/getOrderById()
+// supaya cuma 1 panggilan RPC utk berapapun order yang lagi dimuat.
+async function fetchOrderItemsGrouped(orderId?: string): Promise<Map<string, OrderItemSnapshot[]>> {
+  const { data, error } = await supabase.rpc("get_order_items", { p_order_id: orderId ?? null });
+  const map = new Map<string, OrderItemSnapshot[]>();
+  if (error) { console.error("[getOrderItems]", error.message); return map; }
+  for (const row of (data || []) as Record<string, unknown>[]) {
+    const key = row.order_id as string;
+    const list = map.get(key) || [];
+    list.push(mapOrderItemRow(row));
+    map.set(key, list);
+  }
+  return map;
+}
+
+function mapOrderRow(r: Record<string, unknown>, items: OrderItemSnapshot[]): OrderRecord {
+  return {
+    id: r.id as string, number: r.number as string, date: r.date as string, customer: r.customer as string,
+    customerId: (r.customer_id as string) ?? null, phone: r.phone as string, address: r.address as string,
+    items,
+    discountType: r.discount_type as DiscountType, discountValue: r.discount_value as number,
+    discountAmount: r.discount_amount as number, ongkir: r.ongkir as number, ongkirLabel: r.ongkir_label as string,
+    dp: r.dp as number, note: r.note as string, internalNote: (r.internal_note as string) ?? undefined,
+    marketerId: (r.marketer_id as string) ?? null, marketerName: (r.marketer_name as string) ?? null,
+    totalFee: r.total_fee as number, subtotal: r.subtotal as number, total: r.total as number,
+    status: r.status as OrderRecord["status"], batch: (r.batch as string) ?? undefined,
+    createdAt: Number(r.created_at),
+  };
+}
+
+function orderToRow(order: OrderRecord) {
+  return {
+    id: order.id, number: order.number, date: order.date, customer: order.customer,
+    customer_id: order.customerId, phone: order.phone, address: order.address,
+    discount_type: order.discountType, discount_value: order.discountValue, discount_amount: order.discountAmount,
+    ongkir: order.ongkir, ongkir_label: order.ongkirLabel, dp: order.dp, note: order.note,
+    internal_note: order.internalNote ?? null, marketer_id: order.marketerId, marketer_name: order.marketerName,
+    total_fee: order.totalFee, subtotal: order.subtotal, total: order.total, status: order.status,
+    batch: order.batch ?? null, created_at: order.createdAt,
+  };
+}
+
+export async function getOrders(): Promise<OrderRecord[]> {
+  const [{ data: orderRows, error }, itemsByOrder] = await Promise.all([
+    supabase.from("orders").select("*").order("created_at", { ascending: false }),
+    fetchOrderItemsGrouped(),
+  ]);
+  if (error) { console.error("[getOrders]", error.message); return []; }
+  return ((orderRows || []) as Record<string, unknown>[]).map(r => mapOrderRow(r, itemsByOrder.get(r.id as string) || []));
+}
+
+export async function saveOrder(order: OrderRecord): Promise<OrderRecord[]> {
+  const { error } = await supabase.from("orders").insert(orderToRow(order));
+  if (error) { console.error("[saveOrder]", error.message); throw new Error(error.message); }
+  for (const item of order.items) {
+    const { error: itemError } = await supabase.rpc("create_order_item", { p_id: item.id, p_order_id: order.id, ...orderItemFields(item) });
+    if (itemError) console.error("[saveOrder:item]", itemError.message);
+  }
+  return getOrders();
 }
 
 // Ambil satu order berdasarkan ID
-export function getOrderById(id: string): OrderRecord | undefined {
-  return getOrders().find(o => o.id === id);
+export async function getOrderById(id: string): Promise<OrderRecord | undefined> {
+  const [{ data: row, error }, itemsByOrder] = await Promise.all([
+    supabase.from("orders").select("*").eq("id", id).maybeSingle(),
+    fetchOrderItemsGrouped(id),
+  ]);
+  if (error) { console.error("[getOrderById]", error.message); return undefined; }
+  return row ? mapOrderRow(row as Record<string, unknown>, itemsByOrder.get(id) || []) : undefined;
 }
 
 // Semua order milik satu customer — dipakai profil customer (tab Order, dsb.)
-export function getOrdersForCustomer(customerId: string): OrderRecord[] {
-  return getOrders().filter(o => o.customerId === customerId);
+export async function getOrdersForCustomer(customerId: string): Promise<OrderRecord[]> {
+  return (await getOrders()).filter(o => o.customerId === customerId);
 }
 
 // Total dibayar & outstanding dari order ASLI seorang customer — dipakai di
@@ -508,35 +582,57 @@ export function getPelunasanWhatsAppUrl(order: OrderRecord): string | null {
   return `https://wa.me/${waPhone}?text=${encodeURIComponent(buildPelunasanMessage(order))}`;
 }
 
-// Perbarui order yang sudah ada (misal saat edit order)
-export function updateOrder(order: OrderRecord): OrderRecord[] {
-  const list = getOrders();
-  const updated = list.map(o => (o.id === order.id ? order : o));
-  save(KEYS.orders, updated);
-  return updated;
+// Perbarui order yang sudah ada (misal saat edit order) — order.items adalah
+// daftar item FINAL yang diinginkan (sama seperti kontrak lama), jadi di sini
+// direkonsiliasi ke order_items: item lama yg gak ada lagi di-hapus, sisanya
+// di-upsert (update kalau id-nya udah ada, create kalau baru).
+export async function updateOrder(order: OrderRecord): Promise<OrderRecord[]> {
+  const { error } = await supabase.from("orders").update(orderToRow(order)).eq("id", order.id);
+  if (error) { console.error("[updateOrder]", error.message); throw new Error(error.message); }
+  const existingItems = (await fetchOrderItemsGrouped(order.id)).get(order.id) || [];
+  const existingIds = new Set(existingItems.map(i => i.id));
+  const newIds = new Set(order.items.map(i => i.id));
+  for (const id of existingIds) {
+    if (!newIds.has(id)) {
+      const { error: delErr } = await supabase.rpc("delete_order_item", { p_id: id });
+      if (delErr) console.error("[updateOrder:deleteItem]", delErr.message);
+    }
+  }
+  for (const item of order.items) {
+    if (existingIds.has(item.id)) {
+      const { error: updErr } = await supabase.rpc("update_order_item", { p_id: item.id, ...orderItemFields(item) });
+      if (updErr) console.error("[updateOrder:updateItem]", updErr.message);
+    } else {
+      const { error: insErr } = await supabase.rpc("create_order_item", { p_id: item.id, p_order_id: order.id, ...orderItemFields(item) });
+      if (insErr) console.error("[updateOrder:createItem]", insErr.message);
+    }
+  }
+  return getOrders();
 }
 
 // Ubah tahap produksi/pengiriman SATU item, tanpa harus buka form Order
 // lengkap dulu — dipakai dari kartu produk di profil customer (RealProductCard,
 // panels.tsx) supaya admin bisa klik-ubah langsung dari situ.
-export function updateItemStage(orderId: string, itemId: string, patch: { productionStage?: ProductionStage; shipmentStage?: ShipmentStage }): OrderRecord | null {
-  const order = getOrderById(orderId);
+export async function updateItemStage(orderId: string, itemId: string, patch: { productionStage?: ProductionStage; shipmentStage?: ShipmentStage }): Promise<OrderRecord | null> {
+  const order = await getOrderById(orderId);
   if (!order) return null;
-  const updated: OrderRecord = {
-    ...order,
-    items: order.items.map(it => (it.id === itemId ? { ...it, ...patch } : it)),
-  };
-  updateOrder(updated);
-  return updated;
+  const item = order.items.find(it => it.id === itemId);
+  if (!item) return null;
+  const updatedItem = { ...item, ...patch };
+  const { error } = await supabase.rpc("update_order_item", { p_id: itemId, ...orderItemFields(updatedItem) });
+  if (error) { console.error("[updateItemStage]", error.message); return null; }
+  return (await getOrderById(orderId)) ?? null;
 }
 
-// Hapus order permanen. Pemanggil (order/page.tsx) bertanggung jawab juga
-// membersihkan data terkait (removeFeeForOrder, removeOrderFromAllCollections)
-// supaya tidak ada fee/collection yang nyangkut menunjuk ke order yang sudah hilang.
-export function deleteOrder(id: string): OrderRecord[] {
-  const updated = getOrders().filter(o => o.id !== id);
-  save(KEYS.orders, updated);
-  return updated;
+// Hapus order permanen. order_items ikut kehapus otomatis (FK "on delete
+// cascade", supabase/schema.sql). Pemanggil (order/page.tsx) bertanggung
+// jawab juga membersihkan data terkait (removeFeeForOrder,
+// removeOrderFromAllCollections) supaya tidak ada fee/collection yang
+// nyangkut menunjuk ke order yang sudah hilang.
+export async function deleteOrder(id: string): Promise<OrderRecord[]> {
+  const { error } = await supabase.from("orders").delete().eq("id", id);
+  if (error) console.error("[deleteOrder]", error.message);
+  return getOrders();
 }
 
 // ===== FEE STORE =====
@@ -617,109 +713,152 @@ export const seedFees: FeeRecord[] = [
   },
 ];
 
-// Sama seperti getProducts() — seedFees (fee dari order contoh, mis. "Order
-// Siti Aisyah") TIDAK dipakai sebagai default. Tanpa ini, halaman Fee bisa
-// menampilkan angka fiktif ("Belum Diambil Rp 35.000") di device manapun
-// yang belum pernah menulis ke localStorage sama sekali, padahal customer &
-// marketer contoh sudah lama dihapus.
-export function getFees(): FeeRecord[] {
-  return load<FeeRecord[]>(KEYS.fees, []);
+// ===== FEE STORE (Tahap 6 migrasi backend — Supabase) =====
+// `fees` RLS-nya "all_authenticated" (bukan owner-only) — keputusan user
+// (2026-09-11): Admin tetap boleh bikin/edit/hapus fee sama seperti
+// sekarang, cuma NOMINAL total_fee/items yang tersembunyi saat dibaca
+// balik lewat get_fees() RPC (strip utk non-owner, sudah ada sejak Tahap 1).
+
+function mapFeeRow(r: Record<string, unknown>): FeeRecord {
+  return {
+    id: r.id as string, orderId: r.order_id as string, orderNumber: r.order_number as string,
+    invoiceNumber: r.invoice_number as string, marketerId: r.marketer_id as string, marketerName: r.marketer_name as string,
+    date: r.date as string, items: (r.items as FeeRecord["items"]) ?? [], totalFee: (r.total_fee as number) ?? 0,
+    status: r.status as FeeRecord["status"], paidDate: (r.paid_date as string) ?? null, note: r.note as string,
+    createdAt: Number(r.created_at),
+  };
 }
 
+function feeToRow(f: FeeRecord) {
+  return {
+    id: f.id, order_id: f.orderId, order_number: f.orderNumber, invoice_number: f.invoiceNumber,
+    marketer_id: f.marketerId, marketer_name: f.marketerName, date: f.date, items: f.items,
+    total_fee: f.totalFee, status: f.status, paid_date: f.paidDate, note: f.note, created_at: f.createdAt,
+  };
+}
 
-// Satu order = maksimal satu FeeRecord. Sebelumnya tiap kali order (dengan
-// marketer+fee) disimpan — termasuk tiap kali diEDIT — fungsi ini menambah
-// entri BARU tanpa pernah mengecek entri lama punya order yang sama, jadi
-// fee marketer dobel/tripel/dst di halaman Fee tiap order-nya diedit ulang.
-// Sekarang: kalau order itu sudah pernah punya FeeRecord, perbarui entri yang
-// sama (pakai id lama) — status "sudah-diambil"/paidDate yang sudah tercatat
-// TIDAK ikut ter-reset, cuma nominal/item fee-nya yang disegarkan.
-export function saveFee(fee: FeeRecord): FeeRecord[] {
-  const list = getFees();
-  const existing = list.find(f => f.orderId === fee.orderId);
-  const merged: FeeRecord = existing
-    ? { ...fee, id: existing.id, status: existing.status, paidDate: existing.paidDate, createdAt: existing.createdAt }
-    : fee;
-  const filtered = list.filter(f => f.orderId !== fee.orderId);
-  const updated = [merged, ...filtered];
-  save(KEYS.fees, updated);
-  return updated;
+export async function getFees(): Promise<FeeRecord[]> {
+  const { data, error } = await supabase.rpc("get_fees");
+  if (error) { console.error("[getFees]", error.message); return []; }
+  return ((data || []) as Record<string, unknown>[]).map(mapFeeRow);
+}
+
+// Satu order = maksimal satu FeeRecord. Kalau order ini sudah pernah punya
+// FeeRecord, perbarui entri yang sama (id/status/paidDate/createdAt lama
+// dipertahankan) — cuma nominal/item fee-nya yang disegarkan.
+export async function saveFee(fee: FeeRecord): Promise<FeeRecord[]> {
+  const { data: existing } = await supabase.from("fees").select("id").eq("order_id", fee.orderId).maybeSingle();
+  if (existing) {
+    const { error } = await supabase.from("fees").update({
+      order_number: fee.orderNumber, invoice_number: fee.invoiceNumber, marketer_id: fee.marketerId,
+      marketer_name: fee.marketerName, date: fee.date, items: fee.items, total_fee: fee.totalFee,
+    }).eq("id", existing.id);
+    if (error) console.error("[saveFee:update]", error.message);
+  } else {
+    const { error } = await supabase.from("fees").insert(feeToRow(fee));
+    if (error) console.error("[saveFee:insert]", error.message);
+  }
+  return getFees();
 }
 
 // Dipakai saat order diedit sampai marketer/fee-nya dihapus — supaya fee lama
 // dari kondisi sebelumnya gak nyangkut selamanya di halaman Fee.
-export function removeFeeForOrder(orderId: string): FeeRecord[] {
-  const updated = getFees().filter(f => f.orderId !== orderId);
-  save(KEYS.fees, updated);
-  return updated;
+export async function removeFeeForOrder(orderId: string): Promise<FeeRecord[]> {
+  const { error } = await supabase.from("fees").delete().eq("order_id", orderId);
+  if (error) console.error("[removeFeeForOrder]", error.message);
+  return getFees();
 }
 
-export function saveFees(list: FeeRecord[]) {
-  save(KEYS.fees, list);
-}
-
-export function updateFeeStatus(id: string, status: "belum-diambil" | "sudah-diambil", paidDate: string | null, note?: string): FeeRecord[] {
-  const list = getFees();
-  const updated = list.map(f => f.id === id ? { ...f, status, paidDate, note: note ?? f.note } : f);
-  save(KEYS.fees, updated);
-  return updated;
+export async function updateFeeStatus(id: string, status: "belum-diambil" | "sudah-diambil", paidDate: string | null, note?: string): Promise<FeeRecord[]> {
+  const patch: Record<string, unknown> = { status, paid_date: paidDate };
+  if (note !== undefined) patch.note = note;
+  const { error } = await supabase.from("fees").update(patch).eq("id", id);
+  if (error) console.error("[updateFeeStatus]", error.message);
+  return getFees();
 }
 
 // Koreksi manual nominal fee (mis. kesepakatan berubah setelah tercatat) —
 // mengganti rincian item dengan satu baris "Penyesuaian manual" supaya
 // breakdown-nya gak menyesatkan (nggak nyisa angka lama yang beda dari total).
-export function updateFeeAmount(id: string, totalFee: number, note?: string): FeeRecord[] {
-  const list = getFees();
-  const updated = list.map(f => f.id === id ? {
-    ...f,
-    totalFee,
+export async function updateFeeAmount(id: string, totalFee: number, note?: string): Promise<FeeRecord[]> {
+  const patch: Record<string, unknown> = {
+    total_fee: totalFee,
     items: [{ productName: "Penyesuaian manual", qty: 1, feePerUnit: totalFee, feeTotal: totalFee }],
-    note: note ?? f.note,
-  } : f);
-  save(KEYS.fees, updated);
-  return updated;
+  };
+  if (note !== undefined) patch.note = note;
+  const { error } = await supabase.from("fees").update(patch).eq("id", id);
+  if (error) console.error("[updateFeeAmount]", error.message);
+  return getFees();
 }
 
-export function deleteFee(id: string): FeeRecord[] {
-  const updated = getFees().filter(f => f.id !== id);
-  save(KEYS.fees, updated);
-  return updated;
+export async function deleteFee(id: string): Promise<FeeRecord[]> {
+  const { error } = await supabase.from("fees").delete().eq("id", id);
+  if (error) console.error("[deleteFee]", error.message);
+  return getFees();
 }
 
-// ===== PAYMENT STORE (riwayat transfer masuk, per top up) =====
+// ===== PAYMENT STORE (Tahap 6 migrasi backend — Supabase; riwayat transfer masuk, per top up) =====
 
-export function getPayments(): PaymentRecord[] {
-  return load<PaymentRecord[]>(KEYS.payments, []);
+function mapPaymentRow(r: Record<string, unknown>): PaymentRecord {
+  return {
+    id: r.id as string, orderId: r.order_id as string, orderNumber: r.order_number as string,
+    customerId: (r.customer_id as string) ?? null, customerName: r.customer_name as string,
+    productSummary: r.product_summary as string, amount: r.amount as number,
+    dateReceived: r.date_received as string, status: r.status as PaymentRecord["status"],
+    dateWithdrawn: (r.date_withdrawn as string) ?? null, note: r.note as string,
+    createdAt: Number(r.created_at),
+  };
 }
 
-export function getPaymentsForOrder(orderId: string): PaymentRecord[] {
-  return getPayments().filter(p => p.orderId === orderId);
+function paymentToRow(p: PaymentRecord) {
+  return {
+    id: p.id, order_id: p.orderId, order_number: p.orderNumber, customer_id: p.customerId,
+    customer_name: p.customerName, product_summary: p.productSummary, amount: p.amount,
+    date_received: p.dateReceived, status: p.status, date_withdrawn: p.dateWithdrawn, note: p.note,
+    created_at: p.createdAt,
+  };
 }
 
-export function addPayment(payment: PaymentRecord): PaymentRecord[] {
-  const updated = [payment, ...getPayments()];
-  save(KEYS.payments, updated);
-  return updated;
+export async function getPayments(): Promise<PaymentRecord[]> {
+  const { data, error } = await supabase.from("payments").select("*").order("created_at", { ascending: false });
+  if (error) { console.error("[getPayments]", error.message); return []; }
+  return ((data || []) as Record<string, unknown>[]).map(mapPaymentRow);
 }
 
-export function deletePayment(id: string): PaymentRecord[] {
-  const updated = getPayments().filter(p => p.id !== id);
-  save(KEYS.payments, updated);
-  return updated;
+export async function getPaymentsForOrder(orderId: string): Promise<PaymentRecord[]> {
+  const { data, error } = await supabase.from("payments").select("*").eq("order_id", orderId);
+  if (error) { console.error("[getPaymentsForOrder]", error.message); return []; }
+  return ((data || []) as Record<string, unknown>[]).map(mapPaymentRow);
 }
 
-export function markPaymentWithdrawn(id: string, status: "belum-ditarik" | "sudah-ditarik", dateWithdrawn: string | null): PaymentRecord[] {
-  const updated = getPayments().map(p => p.id === id ? { ...p, status, dateWithdrawn } : p);
-  save(KEYS.payments, updated);
-  return updated;
+// code "23505" = unique_violation (Postgres) — cuma bisa kena di sini dari
+// index partial Split Bill Shopee (supabase/schema.sql): 2 device nyaris
+// bersamaan nyoba nambah baris "Split Bill Shopee" utk order yang sama.
+// Bukan error fatal — anggap baris itu udah ada (device lain menang duluan).
+export async function addPayment(payment: PaymentRecord): Promise<PaymentRecord[]> {
+  const { error } = await supabase.from("payments").insert(paymentToRow(payment));
+  if (error && error.code !== "23505") console.error("[addPayment]", error.message);
+  return getPayments();
+}
+
+export async function deletePayment(id: string): Promise<PaymentRecord[]> {
+  const { error } = await supabase.from("payments").delete().eq("id", id);
+  if (error) console.error("[deletePayment]", error.message);
+  return getPayments();
+}
+
+export async function markPaymentWithdrawn(id: string, status: "belum-ditarik" | "sudah-ditarik", dateWithdrawn: string | null): Promise<PaymentRecord[]> {
+  const { error } = await supabase.from("payments").update({ status, date_withdrawn: dateWithdrawn }).eq("id", id);
+  if (error) console.error("[markPaymentWithdrawn]", error.message);
+  return getPayments();
 }
 
 // Dipanggil saat order dihapus permanen — supaya riwayat pembayaran gak
 // nyangkut menunjuk order yang sudah tidak ada (pola sama dgn removeFeeForOrder).
-export function removePaymentsForOrder(orderId: string): PaymentRecord[] {
-  const updated = getPayments().filter(p => p.orderId !== orderId);
-  save(KEYS.payments, updated);
-  return updated;
+export async function removePaymentsForOrder(orderId: string): Promise<PaymentRecord[]> {
+  const { error } = await supabase.from("payments").delete().eq("order_id", orderId);
+  if (error) console.error("[removePaymentsForOrder]", error.message);
+  return getPayments();
 }
 
 // Satu fungsi INTI utk "catat top up masuk" — dipakai bareng oleh form Edit
@@ -727,9 +866,9 @@ export function removePaymentsForOrder(orderId: string): PaymentRecord[] {
 // Dashboard/profil customer, supaya keduanya benar-benar satu sistem yang
 // sama (bukan 2 jalur terpisah yang bisa nyimpang kayak bug yang pernah
 // ditemukan sebelumnya). order.dp bertambah + satu baris PaymentRecord baru.
-export function recordPaymentForOrder(order: OrderRecord, amount: number, note?: string): { updatedOrder: OrderRecord; payment: PaymentRecord } {
+export async function recordPaymentForOrder(order: OrderRecord, amount: number, note?: string): Promise<{ updatedOrder: OrderRecord; payment: PaymentRecord }> {
   const updatedOrder: OrderRecord = { ...order, dp: order.dp + amount };
-  updateOrder(updatedOrder);
+  await updateOrder(updatedOrder);
   const payment: PaymentRecord = {
     id: "pay-" + Date.now(),
     orderId: order.id,
@@ -744,7 +883,7 @@ export function recordPaymentForOrder(order: OrderRecord, amount: number, note?:
     note: note || "",
     createdAt: Date.now(),
   };
-  addPayment(payment);
+  await addPayment(payment);
   return { updatedOrder, payment };
 }
 
@@ -885,29 +1024,32 @@ export async function reserveStock(productId: string, warehouseId: string, qty: 
   }
 }
 
-// ===== INVOICE NUMBER =====
-
-
-// ===== BATCH PRODUKSI (nama batch saja — dipilih saat bikin order Amna) =====
-
-export function getBatchNames(): string[] {
-  return load<string[]>(KEYS.batchNames, ["Batch 7", "Batch 8"]);
-}
-
-export function addBatchName(name: string): string[] {
-  const list = getBatchNames();
-  if (list.includes(name)) return list;
-  const updated = [...list, name];
-  save(KEYS.batchNames, updated);
-  return updated;
-}
-
-export function getNextInvoiceNumber(): string {
-  const counter = load<number>(KEYS.invoiceCounter, 1000);
-  const next = counter + 1;
-  save(KEYS.invoiceCounter, next);
+// ===== INVOICE NUMBER (Tahap 6 migrasi backend — Supabase) =====
+// Counter BERSAMA (bukan lagi per-device) lewat RPC atomic next_invoice_number()
+// — cegah Owner & Admin dari 2 device dapat nomor "INV/..." yang sama.
+// Ini cuma label kosmetik (preview invoice & FeeRecord.invoiceNumber),
+// BUKAN OrderRecord.number (itu tetap angka random lokal, tidak diubah).
+export async function getNextInvoiceNumber(): Promise<string> {
+  const { data, error } = await supabase.rpc("next_invoice_number");
+  if (error) console.error("[getNextInvoiceNumber]", error.message);
+  const next = typeof data === "number" ? data : Date.now() % 100000;
   const now = new Date();
   return `INV/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}-${next}`;
+}
+
+// ===== BATCH PRODUKSI (Tahap 6 migrasi backend — Supabase; nama batch
+// saja — dipilih saat bikin order Amna) =====
+
+export async function getBatchNames(): Promise<string[]> {
+  const { data, error } = await supabase.from("batch_names").select("name").order("name");
+  if (error) { console.error("[getBatchNames]", error.message); return ["Batch 7", "Batch 8"]; }
+  return data.length > 0 ? data.map(r => r.name as string) : ["Batch 7", "Batch 8"];
+}
+
+export async function addBatchName(name: string): Promise<string[]> {
+  const { error } = await supabase.from("batch_names").upsert({ name });
+  if (error) console.error("[addBatchName]", error.message);
+  return getBatchNames();
 }
 
 // ===== CALCULATION HELPERS =====

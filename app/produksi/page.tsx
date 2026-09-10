@@ -35,7 +35,7 @@ export default function ProduksiPage() {
 
   // HYDRATION FIX: kosong dulu di render pertama, diisi setelah mount.
   useEffect(() => {
-    setOrders(getOrders());
+    getOrders().then(setOrders);
   }, []);
 
   const allItems = orders.flatMap(order => order.items.map(item => ({ order, item })));

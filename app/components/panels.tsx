@@ -40,7 +40,7 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
   // punya customer sebelumnya.
   useEffect(() => {
     setOps(getOperations(customer.id));
-    setRealOrders(getOrdersForCustomer(customer.id));
+    getOrdersForCustomer(customer.id).then(setRealOrders);
   }, [customer.id]);
 
   // Action Center di atas (ops.actionCenter) baca dari operations.ts — state
@@ -103,7 +103,7 @@ export function Overview({ customer, onTab }: { customer: Customer; onTab: (tab:
         <button onClick={() => onTab("Order")}>Lihat semua</button>
       </div>
       {realProductItems.map(({ order, item }) => (
-        <RealProductCard key={item.id} order={order} item={item} onChange={() => setRealOrders(getOrdersForCustomer(customer.id))} />
+        <RealProductCard key={item.id} order={order} item={item} onChange={() => getOrdersForCustomer(customer.id).then(setRealOrders)} />
       ))}
       {ops.productCards.map(card => (
         <ProductCard key={card.id} card={card} onAction={handleAction} />
@@ -383,10 +383,10 @@ const orderStatusLabel: Record<string, string> = { draft: "Draft", confirmed: "C
 const orderStatusTone: Record<string, string> = { draft: "sand", confirmed: "sand", paid: "olive" };
 
 function OrderPanel({ customer }: { customer: Customer }) {
-  const [orders, setOrders] = useState<OrderRecord[]>(() => getOrdersForCustomer(customer.id));
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
 
   useEffect(() => {
-    setOrders(getOrdersForCustomer(customer.id));
+    getOrdersForCustomer(customer.id).then(setOrders);
   }, [customer.id]);
 
   const sorted = [...orders].sort((a, b) => b.createdAt - a.createdAt);
@@ -502,7 +502,7 @@ function PaymentPanel({ customer }: { customer: Customer }) {
   const [payments, setPayments] = useState<PaymentData[]>(customer.payments);
   // ===== HYDRATION FIX + data asli: customer.paid/outstanding statis "Rp 0" =====
   const [orders, setOrders] = useState<OrderRecord[]>([]);
-  useEffect(() => { setOrders(getOrdersForCustomer(customer.id)); }, [customer.id]);
+  useEffect(() => { getOrdersForCustomer(customer.id).then(setOrders); }, [customer.id]);
   const { totalPaid, totalOutstanding } = computePaymentTotals(orders);
   const act = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2500); };
 

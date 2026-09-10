@@ -148,6 +148,15 @@ create policy "inventory_all_authenticated" on inventory for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 -- ===== ORDERS (header order — TIDAK ada field cost di sini) =====
+-- Catatan (Tahap 7): orders.total_fee NILAINYA sama dgn fees.total_fee, TAPI
+-- SENGAJA TETAP dibiarkan kebaca langsung (bukan di-strip lewat RPC seperti
+-- fees) — order.totalFee dipakai buat prefill field "Nominal Fee Marketer"
+-- saat Admin BUKA ULANG order yang sudah ada utk diedit (order/page.tsx).
+-- Kalau di-strip, field itu keliatan 0 saat Admin edit order lain (misal cuma
+-- ganti alamat), dan nyimpan ulang bakal MENGHAPUS fee record asli krn
+-- effectiveFee kebaca 0. Kebocoran agregat (mis. total fee marketer
+-- sepanjang waktu) TETAP dicegah di marketers/page.tsx — dihitung dari
+-- get_fees() (yang beneran di-strip), bukan dari sini.
 create table if not exists orders (
   id text primary key,
   number text not null,

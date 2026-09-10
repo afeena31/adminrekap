@@ -16,6 +16,7 @@ import { getCustomers, getCustomer as getCentralCustomer, addCustomer, getCustom
 import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections, getCollections, getCollectionIdsForItem, setCategoriesForItem, removeItemLinksForOrder, type Collection } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
 import { MoneyInput } from "../components/MoneyInput";
+import { useAuth } from "../data/authContext";
 
 const NEW_CUSTOMER_OPTION = "__new_customer__";
 
@@ -87,6 +88,13 @@ export default function OrderPage() {
 }
 
 function OrderPageInner() {
+  // Tahap 7 — dipakai HANYA di addJilbab (di bawah) buat cegah bug
+  // fallback-cost: baseProduct?.hpp gak ketemu bisa berarti "produknya
+  // emang belum ada" (Owner, wajar dikasih taksiran) ATAU "produknya ada
+  // tapi cost-nya udah di-strip krn Admin" (Tahap 4) — dua hal beda yang
+  // gak bisa dibedain cuma dari nilai `undefined`-nya aja.
+  const { role: authRole } = useAuth();
+  const isOwner = authRole === "owner";
   const searchParams = useSearchParams();
   const initialCustomerId = searchParams.get("customerId");
   const initialOrderId = searchParams.get("orderId");
@@ -365,10 +373,16 @@ function OrderPageInner() {
     const modNames = mods.map(m => m.name);
     const detail = `Size ${size.name} · ${pad.name} · ${AMNA_DEFAULT_FABRIC} · ${AMNA_DEFAULT_COLOR}${modNames.length ? " · " + modNames.join(", ") : ""}${customRequests.length ? " · Request: " + customRequests[0].name : ""}`;
 
-    // Find matching product for fee/hpp snapshot
+    // Find matching product for fee/hpp snapshot. Taksiran default
+    // (180000/15000) HANYA layak dipakai kalau baseProduct memang gak
+    // ketemu di katalog — bukan saat baseProduct ADA tapi cost-nya cuma
+    // gak kekirim krn Admin yang login (get_products() strip HPP/fee utk
+    // Admin sejak Tahap 4). Tanpa pembeda ini, tiap Admin nambah Amna
+    // Jilbab bakal nyimpen HPP/fee TAKSIRAN sbg kalau itu data ASLI —
+    // salah & bisa nyasarin laporan laba Owner nanti.
     const baseProduct = productList.find(p => p.category === "amna-jilbab" && p.name.includes(size.name));
-    const hpp = baseProduct?.hpp || 180000;
-    const fee = baseProduct?.feeMarketer || 15000;
+    const hpp = isOwner ? (baseProduct?.hpp || 180000) : (baseProduct?.hpp || 0);
+    const fee = isOwner ? (baseProduct?.feeMarketer || 15000) : (baseProduct?.feeMarketer || 0);
 
     const newItemId = "jilbab-" + Date.now();
     setItems(prev => [...prev, {

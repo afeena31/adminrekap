@@ -11,6 +11,7 @@ import { getCollections, type Collection } from "../data/collections";
 import { MoneyInput } from "../components/MoneyInput";
 import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
+import { useAuth } from "../data/authContext";
 
 type ProductFormState = {
   id: string;
@@ -49,6 +50,13 @@ const emptyForm: ProductFormState = {
 const emojiOptions = ["📚", "📖", "🐝", "🧕", "🖤", "🧤", "🧦", "🌸", "🚚", "💰", "✨", "📦", "🎈", "🔤", "🔢", "🕌", "🌍", "✂️", "🧵", "🎀"];
 
 export default function ProductsPage() {
+  // Tahap 7 — role-gating UI. Data cost (HPP/Modal/Fee Marketer) sudah
+  // gak pernah dikirim ke Admin sejak Tahap 4 (get_products() RPC strip
+  // di server), jadi ini murni polesan tampilan (jangan nampilin field
+  // kosong/nol yang membingungkan) — bukan proteksi keamanan (itu udah
+  // beres di database).
+  const { role: authRole } = useAuth();
+  const isOwner = authRole === "owner";
   const [productList, setProductList] = useState<Product[]>([]);
   const [activeCategory, setActiveCategory] = useState("semua");
   const [search, setSearch] = useState("");
@@ -318,7 +326,7 @@ export default function ProductsPage() {
                 </div>
                 {metrics.discountAmount > 0 && <div className="product-metrics">
                   <span className="metric-chip discount">-{formatRupiah(metrics.discountAmount)}</span>
-                  <span className="metric-chip profit">Laba {formatRupiah(metrics.grossProfit)}</span>
+                  {isOwner && <span className="metric-chip profit">Laba {formatRupiah(metrics.grossProfit)}</span>}
                 </div>}
                 {warehouseList.length > 0 && (() => {
                   const stok = inventoryList.filter(i => i.productId === product.id).reduce((sum, i) => sum + inventoryAvailable(i), 0);
@@ -461,11 +469,11 @@ export default function ProductsPage() {
               const m = calculateProductMetrics(detailProduct);
               return (
                 <div className="detail-metrics">
-                  <div className="detail-metric-row"><span>HPP / Modal</span><b>{formatRupiah(m.hpp)}</b></div>
+                  {isOwner && <div className="detail-metric-row"><span>HPP / Modal</span><b>{formatRupiah(m.hpp)}</b></div>}
                   <div className="detail-metric-row"><span>Diskon</span><b>{m.discountAmount > 0 ? `-${formatRupiah(m.discountAmount)}` : "—"}</b></div>
                   <div className="detail-metric-row"><span>Harga setelah diskon</span><b>{formatRupiah(m.priceAfterDiscount)}</b></div>
-                  <div className="detail-metric-row highlight"><span>Laba kotor / pcs</span><b>{formatRupiah(m.grossProfit)}</b></div>
-                  {detailProduct.feeMarketer ? <div className="detail-metric-row"><span>Fee marketer / pcs</span><b>{formatRupiah(detailProduct.feeMarketer)}</b></div> : null}
+                  {isOwner && <div className="detail-metric-row highlight"><span>Laba kotor / pcs</span><b>{formatRupiah(m.grossProfit)}</b></div>}
+                  {isOwner && detailProduct.feeMarketer ? <div className="detail-metric-row"><span>Fee marketer / pcs</span><b>{formatRupiah(detailProduct.feeMarketer)}</b></div> : null}
                 </div>
               );
             })()}
@@ -505,19 +513,21 @@ export default function ProductsPage() {
             </label>
           </div>
 
-          <div className="form-grid-2">
-            <label>Modal Kotor (Rp)
-              <MoneyInput value={Number(form.modalKotor) || 0} onChange={n => setForm({ ...form, modalKotor: n ? String(n) : "" })} placeholder="150.000" />
-            </label>
-            <label>Biaya Operasional (Rp)
-              <MoneyInput value={Number(form.biayaOperasional) || 0} onChange={n => setForm({ ...form, biayaOperasional: n ? String(n) : "" })} placeholder="30.000" />
-            </label>
-          </div>
-          <div className="hpp-total-preview">Total HPP: <b>{formatRupiah((Number(form.modalKotor) || 0) + (Number(form.biayaOperasional) || 0))}</b></div>
+          {isOwner && <>
+            <div className="form-grid-2">
+              <label>Modal Kotor (Rp)
+                <MoneyInput value={Number(form.modalKotor) || 0} onChange={n => setForm({ ...form, modalKotor: n ? String(n) : "" })} placeholder="150.000" />
+              </label>
+              <label>Biaya Operasional (Rp)
+                <MoneyInput value={Number(form.biayaOperasional) || 0} onChange={n => setForm({ ...form, biayaOperasional: n ? String(n) : "" })} placeholder="30.000" />
+              </label>
+            </div>
+            <div className="hpp-total-preview">Total HPP: <b>{formatRupiah((Number(form.modalKotor) || 0) + (Number(form.biayaOperasional) || 0))}</b></div>
 
-          <label>Fee Marketer (Rp/pcs)
-            <MoneyInput value={Number(form.feeMarketer) || 0} onChange={n => setForm({ ...form, feeMarketer: n ? String(n) : "" })} placeholder="Kosongkan / 0 kalau produk ini tidak pakai fee marketer" />
-          </label>
+            <label>Fee Marketer (Rp/pcs)
+              <MoneyInput value={Number(form.feeMarketer) || 0} onChange={n => setForm({ ...form, feeMarketer: n ? String(n) : "" })} placeholder="Kosongkan / 0 kalau produk ini tidak pakai fee marketer" />
+            </label>
+          </>}
 
           <label>Diskon Default
             <div className="discount-input-row">
@@ -584,8 +594,8 @@ export default function ProductsPage() {
                 <div><span>Harga jual</span><b>{formatRupiah(price)}</b></div>
                 <div><span>Diskon</span><b>{discAmt > 0 ? `-${formatRupiah(discAmt)}` : "—"}</b></div>
                 <div><span>Harga setelah diskon</span><b>{formatRupiah(afterDisc)}</b></div>
-                <div><span>HPP</span><b>{formatRupiah(hpp)}</b></div>
-                <div className="highlight"><span>Laba kotor / pcs</span><b>{formatRupiah(profit)}</b></div>
+                {isOwner && <div><span>HPP</span><b>{formatRupiah(hpp)}</b></div>}
+                {isOwner && <div className="highlight"><span>Laba kotor / pcs</span><b>{formatRupiah(profit)}</b></div>}
               </div>
             );
           })()}

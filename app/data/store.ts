@@ -375,7 +375,13 @@ export async function getMarketerStats(marketerId: string): Promise<MarketerStat
   const closingCount = orders.length;
   const orderCount = orders.length;
   const omzet = orders.reduce((sum, o) => sum + o.total, 0);
-  const fee = orders.reduce((sum, o) => sum + (o.totalFee || 0), 0);
+  // Tahap 7: dihitung dari getFees() (get_fees() RPC, sudah strip total_fee
+  // utk Admin sejak Tahap 6), BUKAN dari order.totalFee langsung — order
+  // header sengaja TETAP nunjukin total_fee apa adanya (dipakai prefill form
+  // Edit Order, lihat catatan di supabase/schema.sql), jadi kalau agregat
+  // fee marketer dihitung dari situ, jumlahnya ikut bocor ke Admin walau
+  // /fees sendiri sudah disembunyikan.
+  const fee = (await getFees()).filter(f => f.marketerId === marketerId).reduce((sum, f) => sum + f.totalFee, 0);
   const outstanding = orders
     .filter(o => o.status !== "paid")
     .reduce((sum, o) => sum + (o.total - o.dp), 0);
@@ -471,7 +477,7 @@ function mapOrderRow(r: Record<string, unknown>, items: OrderItemSnapshot[]): Or
     discountAmount: r.discount_amount as number, ongkir: r.ongkir as number, ongkirLabel: r.ongkir_label as string,
     dp: r.dp as number, note: r.note as string, internalNote: (r.internal_note as string) ?? undefined,
     marketerId: (r.marketer_id as string) ?? null, marketerName: (r.marketer_name as string) ?? null,
-    totalFee: r.total_fee as number, subtotal: r.subtotal as number, total: r.total as number,
+    totalFee: (r.total_fee as number) ?? 0, subtotal: r.subtotal as number, total: r.total as number,
     status: r.status as OrderRecord["status"], batch: (r.batch as string) ?? undefined,
     createdAt: Number(r.created_at),
   };

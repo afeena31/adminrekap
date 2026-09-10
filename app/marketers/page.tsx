@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { getMarketers, addMarketer, updateMarketer, deleteMarketer, getMarketerStats, getOrders, formatRupiah, type Marketer, type MarketerStatus, type MarketerStats } from "../data/store";
 import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
+import { useAuth } from "../data/authContext";
 
 
 type StatusFilter = "semua" | MarketerStatus;
@@ -25,6 +26,13 @@ const statusEmoji: Record<MarketerStatus, string> = {
 };
 
 export default function MarketersPage() {
+  // Tahap 7 — order.totalFee (dipakai MarketerStats.fee) di-strip get_orders()
+  // RPC utk Admin sejak Tahap 7 (sama nilainya dgn fees.total_fee yg sudah
+  // disembunyikan sejak Tahap 6), jadi selalu 0 utk Admin — tampilkan
+  // "Tersembunyi", bukan "Rp0" (kelihatan seperti fee-nya emang kosong).
+  const { role: authRole } = useAuth();
+  const isOwner = authRole === "owner";
+  const feeDisplay = (amount: number) => isOwner ? formatRupiah(amount) : "Tersembunyi";
   const [marketerList, setMarketerList] = useState<Marketer[]>([]);
   const [filterStatus, setFilterStatus] = useState<StatusFilter>("semua");
   const [search, setSearch] = useState("");
@@ -214,7 +222,7 @@ export default function MarketersPage() {
             <div className="marketer-card-stats">
               <div><small>Closing</small><b>{stats?.closingCount || 0}</b></div>
               <div><small>Omzet</small><b>{formatRupiah(stats?.omzet || 0)}</b></div>
-              <div><small>Fee</small><b>{formatRupiah(stats?.fee || 0)}</b></div>
+              <div><small>Fee</small><b>{feeDisplay(stats?.fee || 0)}</b></div>
             </div>
           </div>
         );
@@ -253,7 +261,7 @@ export default function MarketersPage() {
                 <div className="mk-stat"><small>Closing</small><b>{stats?.closingCount || 0}</b></div>
                 <div className="mk-stat"><small>Order</small><b>{stats?.orderCount || 0}</b></div>
                 <div className="mk-stat"><small>Omzet</small><b>{formatRupiah(stats?.omzet || 0)}</b></div>
-                <div className="mk-stat"><small>Fee</small><b>{formatRupiah(stats?.fee || 0)}</b></div>
+                <div className="mk-stat"><small>Fee</small><b>{feeDisplay(stats?.fee || 0)}</b></div>
                 <div className="mk-stat"><small>Outstanding</small><b>{formatRupiah(stats?.outstanding || 0)}</b></div>
                 <div className="mk-stat"><small>Customer</small><b>{stats?.customers.length || 0}</b></div>
               </div>

@@ -8,8 +8,16 @@ import { getFees, updateFeeStatus, updateFeeAmount, deleteFee, getMarketers, for
 import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
 import { MoneyInput } from "../components/MoneyInput";
+import { useAuth } from "../data/authContext";
 
 export default function FeesPage() {
+  // Tahap 7 — get_fees() (RPC) strip total_fee/items utk Admin sejak Tahap 6
+  // (jadi selalu 0/kosong, BUKAN nilai asli — FeeRecord nyata gak pernah
+  // dibuat dgn totalFee 0, lihat order/page.tsx's saveFee call site). Tanpa
+  // ini, Rp0 kelihatan seperti nilai ASLI, bukan "disembunyikan" — admin
+  // bisa salah kira fee-nya emang kosong.
+  const { role: authRole } = useAuth();
+  const isOwner = authRole === "owner";
   const [feeList, setFeeList] = useState<FeeRecord[]>([]);
   const [notice, setNotice] = useState("");
   const [filterStatus, setFilterStatus] = useState<"semua" | "belum-diambil" | "sudah-diambil">("semua");
@@ -37,6 +45,12 @@ export default function FeesPage() {
     const matchSearch = f.marketerName.toLowerCase().includes(search.toLowerCase()) || f.items.some(i => i.productName.toLowerCase().includes(search.toLowerCase()));
     return matchStatus && matchMarketer && matchSearch;
   });
+
+  // Admin gak pernah dapat totalFee ASLI (di-strip get_fees() RPC, selalu 0
+  // — FeeRecord asli TIDAK PERNAH dibuat dgn totalFee 0, lihat saveFee call
+  // site di order/page.tsx). Tampilkan "Tersembunyi", bukan "Rp0" (kelihatan
+  // seperti angka asli padahal disembunyikan).
+  const feeDisplay = (amount: number) => isOwner ? formatRupiah(amount) : "Tersembunyi";
 
   const totalOutstanding = feeList.filter(f => f.status === "belum-diambil").reduce((sum, f) => sum + f.totalFee, 0);
   const totalPaid = feeList.filter(f => f.status === "sudah-diambil").reduce((sum, f) => sum + f.totalFee, 0);
@@ -106,21 +120,21 @@ export default function FeesPage() {
         <span className="fee-summary-icon"><Clock size={20} /></span>
         <div>
           <small>Belum Diambil</small>
-          <b>{formatRupiah(totalOutstanding)}</b>
+          <b>{feeDisplay(totalOutstanding)}</b>
         </div>
       </div>
       <div className="fee-summary-card paid">
         <span className="fee-summary-icon"><CheckCircle2 size={20} /></span>
         <div>
           <small>Sudah Diambil</small>
-          <b>{formatRupiah(totalPaid)}</b>
+          <b>{feeDisplay(totalPaid)}</b>
         </div>
       </div>
       <div className="fee-summary-card total">
         <span className="fee-summary-icon"><Wallet size={20} /></span>
         <div>
           <small>Total Fee</small>
-          <b>{formatRupiah(totalAll)}</b>
+          <b>{feeDisplay(totalAll)}</b>
         </div>
       </div>
     </div>
@@ -137,8 +151,8 @@ export default function FeesPage() {
               <small>{m.count} transaksi</small>
             </div>
             <div className="marketer-summary-amounts">
-              <div className="amount-outstanding"><small>Belum</small><b>{formatRupiah(m.outstanding)}</b></div>
-              <div className="amount-paid"><small>Diambil</small><b>{formatRupiah(m.paid)}</b></div>
+              <div className="amount-outstanding"><small>Belum</small><b>{feeDisplay(m.outstanding)}</b></div>
+              <div className="amount-paid"><small>Diambil</small><b>{feeDisplay(m.paid)}</b></div>
             </div>
           </div>
         ))}
@@ -198,7 +212,7 @@ export default function FeesPage() {
             </div>
             <div className="fee-total">
               <span>Total Fee</span>
-              <b>{formatRupiah(fee.totalFee)}</b>
+              <b>{feeDisplay(fee.totalFee)}</b>
             </div>
             {fee.paidDate && <small className="fee-paid-date">Dibayarkan: {fee.paidDate}</small>}
           </div>
@@ -249,7 +263,7 @@ export default function FeesPage() {
             <div className="fee-detail-total">
               <span>Total Fee</span>
               <div className="fee-edit-amount-controls">
-                <b>{formatRupiah(detailFee.totalFee)}</b>
+                <b>{feeDisplay(detailFee.totalFee)}</b>
                 <button className="icon-btn" aria-label="Edit nominal fee" onClick={() => startEditAmount(detailFee)}><Pencil size={15} /></button>
               </div>
             </div>
@@ -290,7 +304,7 @@ export default function FeesPage() {
       <div className="overlay" onClick={() => setDeleteConfirmFee(null)}>
         <section className="modal confirm-modal" onClick={e => e.stopPropagation()}>
           <h2>Hapus Fee Ini?</h2>
-          <p>Fee <b>{formatRupiah(deleteConfirmFee.totalFee)}</b> untuk <b>{deleteConfirmFee.marketerName}</b> akan dihapus permanen. Order aslinya tidak ikut terhapus — cuma catatan fee-nya.</p>
+          <p>Fee <b>{feeDisplay(deleteConfirmFee.totalFee)}</b> untuk <b>{deleteConfirmFee.marketerName}</b> akan dihapus permanen. Order aslinya tidak ikut terhapus — cuma catatan fee-nya.</p>
           <div className="confirm-actions">
             <button className="secondary" onClick={() => setDeleteConfirmFee(null)}>Batal</button>
             <button className="danger" onClick={() => handleDeleteFee(deleteConfirmFee)}><Trash2 size={15} /> Hapus</button>

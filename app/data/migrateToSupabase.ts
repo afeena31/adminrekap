@@ -31,7 +31,7 @@ export async function collectAllLocalData() {
     customers: getAllCustomers(),
     addresses: getAddresses(),
     marketers: await getMarketers(),
-    products: getProducts(),
+    products: await getProducts(),
     warehouses: await getWarehouses(),
     inventory: await getInventory(),
     orders: getOrders(),

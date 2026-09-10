@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 
 import { toDisplayCustomer } from "./data/customers";
 import { getOrders, getFees, getMarketers, getProducts, formatRupiah, getOrderById, getPelunasanWhatsAppUrl, productionStageInfo, shipmentStageInfo, type Marketer } from "./data/store";
+import type { Product } from "./data/products";
 import { BottomNav } from "./components/BottomNav";
 import { QuickPaymentModal } from "./components/QuickPaymentModal";
 import { goBack } from "./lib/goBack";
@@ -48,7 +49,7 @@ export default function DashboardPage() {
   const [orders, setOrders] = useState<ReturnType<typeof getOrders>>([]);
   const [fees, setFees] = useState<ReturnType<typeof getFees>>([]);
   const [marketers, setMarketers] = useState<Marketer[]>([]);
-  const [products, setProducts] = useState<ReturnType<typeof getProducts>>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [allOps, setAllOps] = useState<{ customer: ReturnType<typeof toDisplayCustomer>; ops: ReturnType<typeof getOperations> }[]>([]);
   const [workQueue, setWorkQueue] = useState<ReturnType<typeof getDashboardWorkQueue>>({ perluTindakan: [], bisaDikerjakan: [], segera: [], menunggu: [], ringkasan: [] });
   const [totalCustomers, setTotalCustomers] = useState(0);
@@ -64,7 +65,7 @@ export default function DashboardPage() {
     setOrders(getOrders());
     setFees(getFees());
     getMarketers().then(setMarketers);
-    setProducts(getProducts());
+    getProducts().then(setProducts);
     setAllOps(loadAllDisplayCustomers().map(c => ({ customer: c, ops: getOperations(c.id) })));
     setWorkQueue(getDashboardWorkQueue());
     setTotalCustomers(getCustomers().length);

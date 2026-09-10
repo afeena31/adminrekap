@@ -69,9 +69,10 @@ export default function ProductsPage() {
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
-  // ===== HYDRATION FIX: Muat data dari localStorage setelah hydration =====
+  // ===== HYDRATION FIX: Muat data setelah hydration =====
+  // Produk sudah pindah ke Supabase (Tahap 4 migrasi backend) — async.
   useEffect(() => {
-    setProductList(getProducts());
+    getProducts().then(setProductList);
     setCollectionList(getCollections());
     // Gudang & Stok sudah pindah ke Supabase (Tahap 4 migrasi backend) — async.
     getWarehouses().then(setWarehouseList);
@@ -110,13 +111,13 @@ export default function ProductsPage() {
   // Isi katalog ASLI (bukan demo) dari Master Data Bisnis — sengaja tidak
   // termasuk buku sama sekali. Dicek dulu per-ID biar aman diklik berkali-kali
   // tanpa bikin dobel.
-  const loadMasterCatalog = () => {
-    const existingIds = new Set(getProducts().map(p => p.id));
+  const loadMasterCatalog = async () => {
+    const existingIds = new Set((await getProducts()).map(p => p.id));
     let added = 0;
     for (const p of nonBookMasterCatalog) {
-      if (!existingIds.has(p.id)) { addProduct(p); added++; }
+      if (!existingIds.has(p.id)) { await addProduct(p); added++; }
     }
-    setProductList(getProducts());
+    setProductList(await getProducts());
     notify(added > 0 ? `${added} produk dari Master Data dimuat` : "Katalog Master Data sudah lengkap");
   };
 
@@ -178,7 +179,7 @@ export default function ProductsPage() {
     setShowForm(true);
   };
 
-  const handleSaveProduct = () => {
+  const handleSaveProduct = async () => {
     if (!form.name.trim()) { notify("Nama produk wajib diisi"); return; }
     const price = Number(form.price) || 0;
     if (price <= 0) { notify("Harga jual wajib diisi"); return; }
@@ -211,28 +212,28 @@ export default function ProductsPage() {
     };
 
     if (editingProduct) {
-      const updated = updateProduct(product);
+      const updated = await updateProduct(product);
       setProductList(updated);
       notify("Produk berhasil diperbarui");
     } else {
-      const updated = addProduct(product);
+      const updated = await addProduct(product);
       setProductList(updated);
       notify("Produk baru berhasil ditambahkan");
     }
     setShowForm(false);
   };
 
-  const handleDeleteProduct = () => {
+  const handleDeleteProduct = async () => {
     if (!editingProduct) return;
-    const updated = deleteProduct(editingProduct.id);
+    const updated = await deleteProduct(editingProduct.id);
     setProductList(updated);
     setShowDeleteConfirm(false);
     setShowForm(false);
     notify("Produk dihapus");
   };
 
-  const toggleActive = (product: Product) => {
-    const updated = updateProduct({ ...product, active: product.active !== false ? false : true });
+  const toggleActive = async (product: Product) => {
+    const updated = await updateProduct({ ...product, active: product.active !== false ? false : true });
     setProductList(updated);
     notify(product.active !== false ? `${product.name} dinonaktifkan` : `${product.name} diaktifkan`);
   };

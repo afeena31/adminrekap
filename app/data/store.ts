@@ -261,46 +261,78 @@ function save<T>(key: string, value: T) {
   }
 }
 
-// ===== PRODUCT STORE =====
+// ===== PRODUCT STORE (Tahap 4 migrasi backend — Supabase) =====
+// Baca lewat RPC get_products() (Tahap 1, supabase/schema.sql), BUKAN query
+// tabel langsung — RPC itu sendiri yg strip kolom modal/HPP/fee marketer
+// server-side kalau pemanggilnya role "admin" (dicek dari tabel profiles),
+// jadi data cost BENERAN gak pernah sampai ke browser Admin, bukan cuma
+// disembunyikan di UI (itu baru Tahap 7). Tulis (add/update/delete) ke
+// tabel langsung — RLS "products_write_owner_only" cuma izinin role Owner;
+// Admin yg nyoba nulis bakal ditolak Supabase sendiri (proteksi di
+// database, bukan nunggu UI-nya dikunci di Tahap 7).
 
-// Katalog produk contoh (seedProducts) SENGAJA tidak dipakai sebagai default —
-// user sudah konfirmasi eksplisit itu bukan data bisnis asli. Kalau localStorage
-// kosong (device baru/cache dibersihkan), katalog harus kosong, bukan diam-diam
-// terisi 32 produk contoh lagi.
-export function getProducts(): Product[] {
-  return load<Product[]>(KEYS.products, []);
+function mapProductRow(p: Record<string, unknown>): Product {
+  return {
+    id: p.id as string,
+    name: p.name as string,
+    category: p.category as string,
+    price: p.price as number,
+    originalPrice: (p.original_price as number) ?? undefined,
+    description: (p.description as string) ?? undefined,
+    emoji: p.emoji as string,
+    badge: (p.badge as string) ?? undefined,
+    variants: (p.variants as string[]) ?? undefined,
+    modalKotor: (p.modal_kotor as number) ?? undefined,
+    biayaOperasional: (p.biaya_operasional as number) ?? undefined,
+    hpp: (p.hpp as number) ?? undefined,
+    feeMarketer: (p.fee_marketer as number) ?? undefined,
+    discountDefault: (p.discount_default as number) ?? undefined,
+    discountType: (p.discount_type as "percent" | "nominal") ?? undefined,
+    active: p.active as boolean,
+    defaultCollectionIds: (p.default_collection_ids as string[]) ?? undefined,
+  };
 }
 
-export function saveProducts(list: Product[]) {
-  save(KEYS.products, list);
+function productToRow(product: Product) {
+  return {
+    name: product.name, category: product.category, price: product.price,
+    original_price: product.originalPrice ?? null, description: product.description ?? null,
+    emoji: product.emoji, badge: product.badge ?? null, variants: product.variants ?? null,
+    modal_kotor: product.modalKotor ?? null, biaya_operasional: product.biayaOperasional ?? null,
+    hpp: product.hpp ?? null, fee_marketer: product.feeMarketer ?? null,
+    discount_default: product.discountDefault ?? null, discount_type: product.discountType ?? null,
+    active: product.active !== false, default_collection_ids: product.defaultCollectionIds ?? null,
+  };
 }
 
-export function addProduct(product: Product): Product[] {
-  const list = getProducts();
-  const updated = [...list, product];
-  saveProducts(updated);
-  return updated;
+export async function getProducts(): Promise<Product[]> {
+  const { data, error } = await supabase.rpc("get_products");
+  if (error) { console.error("[getProducts]", error.message); return []; }
+  return ((data || []) as Record<string, unknown>[]).map(mapProductRow);
 }
 
-export function updateProduct(product: Product): Product[] {
-  const list = getProducts();
-  const updated = list.map(p => (p.id === product.id ? product : p));
-  saveProducts(updated);
-  return updated;
+export async function addProduct(product: Product): Promise<Product[]> {
+  const { error } = await supabase.from("products").insert({ id: product.id, ...productToRow(product) });
+  if (error) console.error("[addProduct]", error.message);
+  return getProducts();
 }
 
-export function deleteProduct(id: string): Product[] {
-  const list = getProducts();
-  const updated = list.filter(p => p.id !== id);
-  saveProducts(updated);
+export async function updateProduct(product: Product): Promise<Product[]> {
+  const { error } = await supabase.from("products").update(productToRow(product)).eq("id", product.id);
+  if (error) console.error("[updateProduct]", error.message);
+  return getProducts();
+}
+
+export async function deleteProduct(id: string): Promise<Product[]> {
+  const { error } = await supabase.from("products").delete().eq("id", id);
+  if (error) console.error("[deleteProduct]", error.message);
   // Bersihkan juga Inventory produk ini (pola sama dgn deleteWarehouse) —
   // kalau gak, sisa stok gudangnya nyangkut permanen, dan kalau nanti ada
   // produk baru kebetulan pakai id yang sama, dia bakal "mewarisi" angka
-  // stok lama yang gak nyambung. Inventory sudah pindah ke Supabase (async)
-  // sementara Product ini sendiri belum (masih localStorage) — cleanup-nya
-  // sengaja gak ditunggu (fire-and-forget), bukan critical-path.
+  // stok lama yang gak nyambung. Fire-and-forget (cleanup best-effort,
+  // bukan critical-path).
   deleteInventoryForProduct(id);
-  return updated;
+  return getProducts();
 }
 
 async function deleteInventoryForProduct(productId: string): Promise<void> {

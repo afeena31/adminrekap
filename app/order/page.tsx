@@ -163,7 +163,7 @@ function OrderPageInner() {
   const [jRequestPrice, setJRequestPrice] = useState(0);
 
 
-  const [productList, setProductList] = useState<ReturnType<typeof getProducts>>([]);
+  const [productList, setProductList] = useState<Product[]>([]);
   const [marketers, setMarketers] = useState<Marketer[]>([]);
   const [customerAddresses, setCustomerAddresses] = useState<CustomerAddress[]>(() => getCustomerAddresses(customer.id));
   // Kosong dulu di render pertama (server tidak punya localStorage) — diisi di
@@ -190,7 +190,7 @@ function OrderPageInner() {
   // kondisi 0 customer.
   useEffect(() => {
     setExistingOrders(getOrders());
-    setProductList(getProducts());
+    getProducts().then(setProductList);
     getMarketers().then(setMarketers);
     setCustomerList(getCustomers());
     setBatchNames(getBatchNames());

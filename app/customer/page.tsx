@@ -17,7 +17,7 @@ import { goBack } from "../lib/goBack";
 import { getCollections, getAllCollections, seedCollections, getCollectionStats, addCollection, saveCollections, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus } from "../data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "../data/demoSeed";
 
-import { formatRupiah, getOrdersForCustomer, computePaymentTotals, getProducts, saveProducts, type OrderRecord } from "../data/store";
+import { formatRupiah, getOrdersForCustomer, computePaymentTotals, getProducts, deleteProduct, type OrderRecord } from "../data/store";
 import { products as seedCatalogProducts, nonBookMasterCatalog } from "../data/products";
 import { getOperations, type CustomerOperations } from "../data/operations";
 import { useAuth } from "../data/authContext";
@@ -166,7 +166,7 @@ function HomePageInner() {
   // produk, marketer) — beda dari "Sembunyikan" di atas yang cuma soft-delete
   // 3 customer. Ini benar-benar menghapus, termasuk katalog produk contoh &
   // daftar marketer contoh. Tetap dicadangkan dulu otomatis sebelum dihapus.
-  const wipeAllDemoData = () => {
+  const wipeAllDemoData = async () => {
     backupLocalStorage();
     for (const id of demoCustomerIds) {
       const result = hardDeleteCustomer(id);
@@ -195,7 +195,12 @@ function HomePageInner() {
     // dipakai lagi nanti.
     const realCatalogIds = new Set(nonBookMasterCatalog.map(p => p.id));
     const seedOnlyProductIds = new Set(seedCatalogProducts.filter(p => !realCatalogIds.has(p.id)).map(p => p.id));
-    saveProducts(getProducts().filter(p => !seedOnlyProductIds.has(p.id)));
+    // Produk sudah pindah ke Supabase (Tahap 4 migrasi backend) — gak ada
+    // lagi "save seluruh list", hapus satu-satu produk yang emang seed.
+    const currentProducts = await getProducts();
+    for (const p of currentProducts) {
+      if (seedOnlyProductIds.has(p.id)) await deleteProduct(p.id);
+    }
     // saveFees([]) SENGAJA DIHAPUS — dulu di sini menghapus SELURUH riwayat
     // fee marketer (termasuk order asli), padahal tidak ada data fee demo yang
     // pernah dimuat ke localStorage sama sekali (seedFees di store.ts gak

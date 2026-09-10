@@ -256,6 +256,9 @@ function mapProductRow(p: Record<string, unknown>): Product {
     discountType: (p.discount_type as "percent" | "nominal") ?? undefined,
     active: p.active as boolean,
     defaultCollectionIds: (p.default_collection_ids as string[]) ?? undefined,
+    estimasiReady: (p.estimasi_ready as string) ?? undefined,
+    estimasiPembayaran: (p.estimasi_pembayaran as string) ?? undefined,
+    beratGram: (p.berat_gram as number) ?? undefined,
   };
 }
 
@@ -272,6 +275,8 @@ function productToRpcArgs(product: Product) {
     p_hpp: product.hpp ?? null, p_fee_marketer: product.feeMarketer ?? null,
     p_discount_default: product.discountDefault ?? null, p_discount_type: product.discountType ?? null,
     p_active: product.active !== false, p_default_collection_ids: product.defaultCollectionIds ?? null,
+    p_estimasi_ready: product.estimasiReady ?? null, p_estimasi_pembayaran: product.estimasiPembayaran ?? null,
+    p_berat_gram: product.beratGram ?? null,
   };
 }
 

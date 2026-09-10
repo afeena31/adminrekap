@@ -291,6 +291,13 @@ create table if not exists products (
   active boolean not null default true,
   default_collection_ids text[]
 );
+-- Info utk customer (estimasi ready/pembayaran/berat paket) — BUKAN
+-- cost-sensitive, Admin boleh baca & tulis kolom ini bebas. Ditambah lewat
+-- alter (bukan langsung di create table) krn tabelnya sudah ada isinya
+-- sejak Tahap 1/3 — "if not exists" di sini supaya aman dijalankan ulang.
+alter table products add column if not exists estimasi_ready text;
+alter table products add column if not exists estimasi_pembayaran text;
+alter table products add column if not exists berat_gram numeric;
 alter table products enable row level security;
 -- Cuma Owner yang boleh tulis langsung (Admin nulis produk baru lewat RPC
 -- di Tahap 4 nanti, biar konsisten -- utk sekarang tabel ini masih kosong,
@@ -375,6 +382,13 @@ as $$
   from products p;
 $$;
 
+-- Signature LAMA (sebelum kolom info-customer ditambahkan) — di-drop dulu
+-- supaya create or replace di bawah beneran GANTI, bukan numpuk jadi
+-- overload baru yang terpisah (parameter list-nya beda, Postgres nganggap
+-- signature beda = fungsi beda kalau gak di-drop eksplisit dulu).
+drop function if exists create_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[]);
+drop function if exists update_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[]);
+
 -- ===== RPC: tulis products — Admin BOLEH nulis produk baru (judul, kategori,
 -- harga jual, dll) TAPI kolom cost (modal_kotor/biaya_operasional/hpp/
 -- fee_marketer) SAMA SEKALI GAK PERNAH TERSENTUH kalau bukan Owner yang
@@ -382,12 +396,15 @@ $$;
 -- sendiri (kalau bukan owner, statement INSERT/UPDATE bahkan gak nyebut
 -- kolom2 itu sama sekali). Dipakai buat kasus mis. Admin (Gina) input
 -- katalog buku baru (judul+harga jual), modal diisi belakangan oleh Owner.
+-- estimasi_ready/estimasi_pembayaran/berat_gram BUKAN cost-sensitive —
+-- Admin boleh baca & tulis bebas, ditulis di KEDUA cabang (owner & admin).
 create or replace function create_product(
   p_id text, p_name text, p_category text, p_price numeric,
   p_original_price numeric, p_description text, p_emoji text, p_badge text,
   p_variants text[], p_modal_kotor numeric, p_biaya_operasional numeric,
   p_hpp numeric, p_fee_marketer numeric, p_discount_default numeric,
-  p_discount_type text, p_active boolean, p_default_collection_ids text[]
+  p_discount_type text, p_active boolean, p_default_collection_ids text[],
+  p_estimasi_ready text, p_estimasi_pembayaran text, p_berat_gram numeric
 )
 returns void
 language plpgsql
@@ -396,11 +413,11 @@ set search_path = public
 as $$
 begin
   if is_owner() then
-    insert into products (id, name, category, price, original_price, description, emoji, badge, variants, modal_kotor, biaya_operasional, hpp, fee_marketer, discount_default, discount_type, active, default_collection_ids)
-    values (p_id, p_name, p_category, p_price, p_original_price, p_description, p_emoji, p_badge, p_variants, p_modal_kotor, p_biaya_operasional, p_hpp, p_fee_marketer, p_discount_default, p_discount_type, p_active, p_default_collection_ids);
+    insert into products (id, name, category, price, original_price, description, emoji, badge, variants, modal_kotor, biaya_operasional, hpp, fee_marketer, discount_default, discount_type, active, default_collection_ids, estimasi_ready, estimasi_pembayaran, berat_gram)
+    values (p_id, p_name, p_category, p_price, p_original_price, p_description, p_emoji, p_badge, p_variants, p_modal_kotor, p_biaya_operasional, p_hpp, p_fee_marketer, p_discount_default, p_discount_type, p_active, p_default_collection_ids, p_estimasi_ready, p_estimasi_pembayaran, p_berat_gram);
   else
-    insert into products (id, name, category, price, original_price, description, emoji, badge, variants, active, default_collection_ids)
-    values (p_id, p_name, p_category, p_price, p_original_price, p_description, p_emoji, p_badge, p_variants, p_active, p_default_collection_ids);
+    insert into products (id, name, category, price, original_price, description, emoji, badge, variants, active, default_collection_ids, estimasi_ready, estimasi_pembayaran, berat_gram)
+    values (p_id, p_name, p_category, p_price, p_original_price, p_description, p_emoji, p_badge, p_variants, p_active, p_default_collection_ids, p_estimasi_ready, p_estimasi_pembayaran, p_berat_gram);
   end if;
 end;
 $$;
@@ -410,7 +427,8 @@ create or replace function update_product(
   p_original_price numeric, p_description text, p_emoji text, p_badge text,
   p_variants text[], p_modal_kotor numeric, p_biaya_operasional numeric,
   p_hpp numeric, p_fee_marketer numeric, p_discount_default numeric,
-  p_discount_type text, p_active boolean, p_default_collection_ids text[]
+  p_discount_type text, p_active boolean, p_default_collection_ids text[],
+  p_estimasi_ready text, p_estimasi_pembayaran text, p_berat_gram numeric
 )
 returns void
 language plpgsql
@@ -424,15 +442,18 @@ begin
       description = p_description, emoji = p_emoji, badge = p_badge, variants = p_variants,
       modal_kotor = p_modal_kotor, biaya_operasional = p_biaya_operasional, hpp = p_hpp,
       fee_marketer = p_fee_marketer, discount_default = p_discount_default, discount_type = p_discount_type,
-      active = p_active, default_collection_ids = p_default_collection_ids
+      active = p_active, default_collection_ids = p_default_collection_ids,
+      estimasi_ready = p_estimasi_ready, estimasi_pembayaran = p_estimasi_pembayaran, berat_gram = p_berat_gram
     where id = p_id;
   else
     -- Kolom cost SAMA SEKALI GAK DISENTUH di sini (bukan ditulis NULL) —
     -- tetap apapun nilainya yang sudah ada sebelumnya (biasanya diisi Owner).
+    -- estimasi_ready/estimasi_pembayaran/berat_gram TETAP ditulis (gak sensitif).
     update products set
       name = p_name, category = p_category, price = p_price, original_price = p_original_price,
       description = p_description, emoji = p_emoji, badge = p_badge, variants = p_variants,
-      active = p_active, default_collection_ids = p_default_collection_ids
+      active = p_active, default_collection_ids = p_default_collection_ids,
+      estimasi_ready = p_estimasi_ready, estimasi_pembayaran = p_estimasi_pembayaran, berat_gram = p_berat_gram
     where id = p_id;
   end if;
 end;
@@ -585,8 +606,8 @@ create unique index payments_split_bill_shopee_unique
 grant execute on function get_products() to authenticated;
 grant execute on function get_order_items(text) to authenticated;
 grant execute on function get_fees() to authenticated;
-grant execute on function create_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[]) to authenticated;
-grant execute on function update_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[]) to authenticated;
+grant execute on function create_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[], text, text, numeric) to authenticated;
+grant execute on function update_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[], text, text, numeric) to authenticated;
 grant execute on function create_order_item(text, text, text, text, text, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, jsonb) to authenticated;
 grant execute on function update_order_item(text, text, text, text, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, jsonb) to authenticated;
 grant execute on function delete_order_item(text) to authenticated;

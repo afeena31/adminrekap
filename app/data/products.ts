@@ -19,6 +19,14 @@ export type Product = {
   // (order/page.tsx) — diisi sekali di sini, gak perlu centang manual per
   // order lagi. Admin masih bisa tambah/lepas per-order kalau perlu.
   defaultCollectionIds?: string[];
+  // ===== INFO UTK CUSTOMER (bukan cost-sensitive — Admin boleh isi juga) =====
+  // Dipakai jawab pertanyaan berulang customer ("kapan ready", "kapan bayar")
+  // — teks bebas krn estimasi beda-beda per batch, bukan tanggal pasti per
+  // produk. Ikut ditampilkan di invoice/pesan WhatsApp (lihat buildInvoiceText,
+  // order/page.tsx).
+  estimasiReady?: string;       // contoh: "15-20 hari kerja setelah DP"
+  estimasiPembayaran?: string;  // contoh: "DP saat order, pelunasan saat barang ready"
+  beratGram?: number;           // berat satuan (gram) — dipakai hitung estimasi berat paket
 };
 
 

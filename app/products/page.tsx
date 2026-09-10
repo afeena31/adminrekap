@@ -28,6 +28,9 @@ type ProductFormState = {
   description: string;
   active: boolean;
   defaultCollectionIds: string[];
+  estimasiReady: string;
+  estimasiPembayaran: string;
+  beratGram: string;
 };
 
 const emptyForm: ProductFormState = {
@@ -45,6 +48,9 @@ const emptyForm: ProductFormState = {
   description: "",
   active: true,
   defaultCollectionIds: [],
+  estimasiReady: "",
+  estimasiPembayaran: "",
+  beratGram: "",
 };
 
 const emojiOptions = ["📚", "📖", "🐝", "🧕", "🖤", "🧤", "🧦", "🌸", "🚚", "💰", "✨", "📦", "🎈", "🔤", "🔢", "🕌", "🌍", "✂️", "🧵", "🎀"];
@@ -185,6 +191,9 @@ export default function ProductsPage() {
       description: product.description || "",
       active: product.active !== false,
       defaultCollectionIds: product.defaultCollectionIds || [],
+      estimasiReady: product.estimasiReady || "",
+      estimasiPembayaran: product.estimasiPembayaran || "",
+      beratGram: product.beratGram ? String(product.beratGram) : "",
     });
     setShowForm(true);
   };
@@ -219,6 +228,9 @@ export default function ProductsPage() {
       description: form.description || undefined,
       active: form.active,
       defaultCollectionIds: form.defaultCollectionIds.length > 0 ? form.defaultCollectionIds : undefined,
+      estimasiReady: form.estimasiReady.trim() || undefined,
+      estimasiPembayaran: form.estimasiPembayaran.trim() || undefined,
+      beratGram: form.beratGram ? Number(form.beratGram) : undefined,
     };
 
     try {
@@ -465,6 +477,13 @@ export default function ProductsPage() {
               <b>{formatRupiah(detailProduct.price)}</b>
               {detailProduct.originalPrice && <s>{formatRupiah(detailProduct.originalPrice)}</s>}
             </div>
+            {(detailProduct.estimasiReady || detailProduct.estimasiPembayaran || detailProduct.beratGram) && (
+              <div className="detail-metrics">
+                {detailProduct.estimasiReady && <div className="detail-metric-row"><span>Estimasi Ready</span><b>{detailProduct.estimasiReady}</b></div>}
+                {detailProduct.estimasiPembayaran && <div className="detail-metric-row"><span>Estimasi Pembayaran</span><b>{detailProduct.estimasiPembayaran}</b></div>}
+                {detailProduct.beratGram ? <div className="detail-metric-row"><span>Berat</span><b>{detailProduct.beratGram} gram</b></div> : null}
+              </div>
+            )}
             {(() => {
               const m = calculateProductMetrics(detailProduct);
               return (
@@ -553,6 +572,20 @@ export default function ProductsPage() {
 
           <label>Deskripsi (opsional)
             <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Catatan singkat" />
+          </label>
+
+          <p className="field-hint" style={{ margin: "14px 0 4px" }}>Info utk customer (opsional) — biar mereka gak perlu tanya ulang "kapan ready"/"kapan bayar", dan bisa hitung sendiri estimasi berat paket.</p>
+
+          <label>Estimasi Ready
+            <input value={form.estimasiReady} onChange={e => setForm({ ...form, estimasiReady: e.target.value })} placeholder="Contoh: 15-20 hari kerja setelah DP" />
+          </label>
+
+          <label>Estimasi Waktu Pembayaran
+            <input value={form.estimasiPembayaran} onChange={e => setForm({ ...form, estimasiPembayaran: e.target.value })} placeholder="Contoh: DP saat order, pelunasan saat barang ready" />
+          </label>
+
+          <label>Berat Produk (gram)
+            <input type="number" min="0" value={form.beratGram} onChange={e => setForm({ ...form, beratGram: e.target.value })} placeholder="Contoh: 250" />
           </label>
 
           <label>Collection Default (opsional)

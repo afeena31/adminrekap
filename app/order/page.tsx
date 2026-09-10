@@ -512,7 +512,23 @@ function OrderPageInner() {
     lines.push("Pesanan:");
     inv.items.forEach(item => {
       lines.push(`- ${item.name}${item.detail ? ` (${item.detail})` : ""} x${item.qty} = ${fmt(item.price * item.qty)}`);
+      // Info utk customer (estimasi ready/pembayaran) — diambil dari data
+      // produk SAAT INI (bukan snapshot historis, gak masalah krn ini info
+      // umum bukan angka yang perlu akurat-per-order), biar customer gak
+      // perlu tanya ulang "kapan ready"/"kapan bayar".
+      const productInfo = productList.find(p => p.id === item.productId);
+      if (productInfo?.estimasiReady) lines.push(`  Estimasi ready: ${productInfo.estimasiReady}`);
+      if (productInfo?.estimasiPembayaran) lines.push(`  Estimasi pembayaran: ${productInfo.estimasiPembayaran}`);
     });
+
+    const totalBeratGram = inv.items.reduce((sum, item) => {
+      const productInfo = productList.find(p => p.id === item.productId);
+      return sum + (productInfo?.beratGram || 0) * item.qty;
+    }, 0);
+    if (totalBeratGram > 0) {
+      lines.push("");
+      lines.push(`Estimasi Berat Paket: ${(totalBeratGram / 1000).toLocaleString("id-ID", { maximumFractionDigits: 2 })} kg`);
+    }
 
     if (inv.discountAmount > 0) {
       lines.push("");
@@ -1705,13 +1721,20 @@ function OrderPageInner() {
 
         </div>
         <div className="invoice-items">
-          {invoice.items.map((item, i) => (
-            <div className="invoice-item" key={i}>
-              <div className="invoice-item-name">{item.emoji} {item.name}{item.detail && <small>{item.detail}</small>}</div>
-              <div className="invoice-item-qty">x{item.qty}</div>
-              <div className="invoice-item-price">{formatRupiah(item.price * item.qty)}</div>
-            </div>
-          ))}
+          {invoice.items.map((item, i) => {
+            const productInfo = productList.find(p => p.id === item.productId);
+            return (
+              <div className="invoice-item" key={i}>
+                <div className="invoice-item-name">
+                  {item.emoji} {item.name}{item.detail && <small>{item.detail}</small>}
+                  {productInfo?.estimasiReady && <small>Estimasi ready: {productInfo.estimasiReady}</small>}
+                  {productInfo?.estimasiPembayaran && <small>Estimasi pembayaran: {productInfo.estimasiPembayaran}</small>}
+                </div>
+                <div className="invoice-item-qty">x{item.qty}</div>
+                <div className="invoice-item-price">{formatRupiah(item.price * item.qty)}</div>
+              </div>
+            );
+          })}
           {invoice.discountAmount > 0 && <div className="invoice-item">
             <div className="invoice-item-name">🏷️ Diskon <small>{invoice.discountType === "percent" ? `${invoice.discountValue}%` : formatRupiah(invoice.discountValue)}</small></div>
             <div className="invoice-item-price">-{formatRupiah(invoice.discountAmount)}</div>
@@ -1722,6 +1745,15 @@ function OrderPageInner() {
           </div>}
         </div>
         <div className="invoice-totals">
+          {(() => {
+            const totalBeratGram = invoice.items.reduce((sum, item) => {
+              const productInfo = productList.find(p => p.id === item.productId);
+              return sum + (productInfo?.beratGram || 0) * item.qty;
+            }, 0);
+            return totalBeratGram > 0 ? (
+              <div><span>Estimasi Berat Paket</span><b>{(totalBeratGram / 1000).toLocaleString("id-ID", { maximumFractionDigits: 2 })} kg</b></div>
+            ) : null;
+          })()}
           <div><span>Subtotal</span><b>{formatRupiah(invoice.subtotal)}</b></div>
           {invoice.discountAmount > 0 && <div><span>Diskon</span><b>-{formatRupiah(invoice.discountAmount)}</b></div>}
           {invoice.ongkir > 0 && <div><span>Ongkir</span><b>{formatRupiah(invoice.ongkir)}</b></div>}

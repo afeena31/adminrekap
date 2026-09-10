@@ -89,6 +89,18 @@ body {
 .login-error { color: var(--red); font-size: 13px; margin: -4px 0 13px; }
 .auth-gate-loading { min-height: 100vh; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; }
 
+/* ===== MIGRASI DATA (Tahap 3 migrasi backend) — background gradient sama
+   dgn *-page lain (dashboard-page, order-page, dst), pola yg sama pernah
+   kelupaan pas /produksi dibuat -- ditambahkan dari awal di sini. ===== */
+.migrasi-page {
+  background:
+    radial-gradient(1100px 520px at 8% -6%, rgba(255, 250, 240, 0.95), transparent 60%),
+    radial-gradient(900px 600px at 100% 4%, rgba(232, 235, 221, 0.5), transparent 55%),
+    radial-gradient(700px 500px at 50% 110%, rgba(240, 231, 218, 0.5), transparent 60%),
+    linear-gradient(180deg, #faf7f2 0%, #f6efe6 45%, #f1e7da 100%);
+  background-attachment: fixed;
+}
+
 /* ===== APP SHELL — layered page surface ===== */
 .app-shell {
   max-width: 860px;

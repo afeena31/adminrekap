@@ -220,6 +220,11 @@ export default function DashboardPage() {
           <h2>Akun</h2>
           <p style={{ fontWeight: 600, marginBottom: 2 }}>{authName || session?.user.email}</p>
           <p className="muted" style={{ marginBottom: 20 }}>{authRole === "owner" ? "Owner — lihat semua data" : authRole === "admin" ? "Admin" : "—"}</p>
+          {authRole === "owner" && (
+            <Link href="/migrasi" className="secondary" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", borderRadius: 10, padding: "11px 15px", fontWeight: 600, textDecoration: "none", marginBottom: 8 }}>
+              Migrasi Data ke Database
+            </Link>
+          )}
           <button
             onClick={() => { signOut(); setAccountMenuOpen(false); }}
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", borderRadius: 10, padding: "11px 15px", fontWeight: 600, cursor: "pointer" }}

@@ -115,7 +115,9 @@ export default function ProductsPage() {
     const existingIds = new Set((await getProducts()).map(p => p.id));
     let added = 0;
     for (const p of nonBookMasterCatalog) {
-      if (!existingIds.has(p.id)) { await addProduct(p); added++; }
+      if (!existingIds.has(p.id)) {
+        try { await addProduct(p); added++; } catch (err) { console.error("[loadMasterCatalog]", p.id, err); }
+      }
     }
     setProductList(await getProducts());
     notify(added > 0 ? `${added} produk dari Master Data dimuat` : "Katalog Master Data sudah lengkap");
@@ -211,16 +213,20 @@ export default function ProductsPage() {
       defaultCollectionIds: form.defaultCollectionIds.length > 0 ? form.defaultCollectionIds : undefined,
     };
 
-    if (editingProduct) {
-      const updated = await updateProduct(product);
-      setProductList(updated);
-      notify("Produk berhasil diperbarui");
-    } else {
-      const updated = await addProduct(product);
-      setProductList(updated);
-      notify("Produk baru berhasil ditambahkan");
+    try {
+      if (editingProduct) {
+        const updated = await updateProduct(product);
+        setProductList(updated);
+        notify("Produk berhasil diperbarui");
+      } else {
+        const updated = await addProduct(product);
+        setProductList(updated);
+        notify("Produk baru berhasil ditambahkan");
+      }
+      setShowForm(false);
+    } catch (err) {
+      notify(`Gagal menyimpan produk: ${err instanceof Error ? err.message : "error tidak diketahui"}`);
     }
-    setShowForm(false);
   };
 
   const handleDeleteProduct = async () => {

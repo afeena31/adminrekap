@@ -319,13 +319,13 @@ export async function getProducts(): Promise<Product[]> {
 
 export async function addProduct(product: Product): Promise<Product[]> {
   const { error } = await supabase.rpc("create_product", { p_id: product.id, ...productToRpcArgs(product) });
-  if (error) console.error("[addProduct]", error.message);
+  if (error) { console.error("[addProduct]", error.message); throw new Error(error.message); }
   return getProducts();
 }
 
 export async function updateProduct(product: Product): Promise<Product[]> {
   const { error } = await supabase.rpc("update_product", { p_id: product.id, ...productToRpcArgs(product) });
-  if (error) console.error("[updateProduct]", error.message);
+  if (error) { console.error("[updateProduct]", error.message); throw new Error(error.message); }
   return getProducts();
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 
-import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, CreditCard, HandCoins, Heart, MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Search, ShoppingBag, Trash2, Truck } from "lucide-react";
+import { ArrowLeft, Bell, Box, Check, ChevronRight, ClipboardList, Clock, CreditCard, HandCoins, Heart, LogOut, MapPin, MessageCircle, MoreHorizontal, Pencil, Plus, Search, ShoppingBag, Trash2, Truck } from "lucide-react";
 
 
 import Link from "next/link";
@@ -20,6 +20,7 @@ import { demoCustomers, demoAddresses, demoCustomerIds } from "../data/demoSeed"
 import { formatRupiah, getOrdersForCustomer, computePaymentTotals, getProducts, saveProducts, getMarketers, saveMarketers, defaultMarketers, type OrderRecord } from "../data/store";
 import { products as seedCatalogProducts, nonBookMasterCatalog } from "../data/products";
 import { getOperations, type CustomerOperations } from "../data/operations";
+import { useAuth } from "../data/authContext";
 
 
 
@@ -80,6 +81,7 @@ function HomePageInner() {
   // kalau dibaca langsung di sini akan bikin hydration mismatch. Data asli dimuat
   // lewat useEffect di bawah, setelah mount (lihat pola sama di dashboard/fees).
   const [customer, setCustomer] = useState<Customer>(EMPTY_CUSTOMER);
+  const { role: authRole, name: authName, session, signOut } = useAuth();
   const [notice, setNotice] = useState("");
   const [addressFormOpen, setAddressFormOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null);
@@ -319,6 +321,19 @@ function HomePageInner() {
       <section className="modal" onClick={event => event.stopPropagation()}>
         <button className="close" onClick={() => setSettingsOpen(false)}>×</button>
         <h2>Pengaturan</h2>
+
+        <p className="muted" style={{ marginBottom: 14 }}>Akun</p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 22 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{authName || session?.user.email}</div>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>{authRole === "owner" ? "Owner — lihat semua data" : authRole === "admin" ? "Admin" : "—"}</div>
+          </div>
+          <button
+            onClick={() => { signOut(); setSettingsOpen(false); }}
+            style={{ display: "flex", alignItems: "center", gap: 6, border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", borderRadius: 10, padding: "9px 14px", fontWeight: 600, cursor: "pointer" }}
+          ><LogOut size={15} /> Keluar</button>
+        </div>
+
         <p className="muted" style={{ marginBottom: 14 }}>Data Demo</p>
         <p style={{ fontSize: 13, color: "#8a7c6c", marginBottom: 14 }}>Muat 3 contoh customer untuk melihat tampilan aplikasi, atau sembunyikan kalau sudah tidak diperlukan. Bisa dipulihkan dari backup lokal kapan saja.</p>
         <div className="form-actions" style={{ flexDirection: "column", gap: 8 }}>

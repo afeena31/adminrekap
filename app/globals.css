@@ -78,6 +78,17 @@ body {
   background-attachment: fixed;
 }
 
+/* ===== LOGIN (Tahap 2 migrasi backend) ===== */
+.login-page { display: flex; align-items: center; justify-content: center; }
+.login-card { width: min(380px, 100%); text-align: center; }
+.login-brand { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px; }
+.login-brand-leaf { font-size: 26px; }
+.login-card h1 { font-family: var(--serif); font-size: 26px; margin: 0; color: var(--ink); }
+.login-card > p { text-align: center; }
+.login-card form { text-align: left; }
+.login-error { color: var(--red); font-size: 13px; margin: -4px 0 13px; }
+.auth-gate-loading { min-height: 100vh; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; }
+
 /* ===== APP SHELL — layered page surface ===== */
 .app-shell {
   max-width: 860px;

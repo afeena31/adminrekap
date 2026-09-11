@@ -201,7 +201,10 @@ export default function CollectionsPage() {
         <h2>Semua Collection</h2>
         <p>Klik card untuk membuka workspace</p>
       </div>
-      <button className="collection-add-btn" onClick={openAddForm}><Plus size={15} /> Collection Baru</button>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="collection-add-btn secondary" onClick={loadMasterCollections}>Muat Kategori Master Data</button>
+        <button className="collection-add-btn" onClick={openAddForm}><Plus size={15} /> Collection Baru</button>
+      </div>
     </div>
 
     {/* ===== COLLECTION GRID ===== */}

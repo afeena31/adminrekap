@@ -54,6 +54,11 @@
 .collection-add-btn:hover {
   background: #f5ece4;
 }
+.collection-add-btn.secondary {
+  border-style: solid;
+  background: transparent;
+  color: var(--muted);
+}
 
 .collection-grid {
   display: grid;

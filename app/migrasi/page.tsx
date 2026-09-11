@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, Download, Database, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Download, Database, Upload, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "../data/authContext";
 import { goBack } from "../lib/goBack";
-import { collectAllLocalData, migrateToSupabase, type MigrationStepResult } from "../data/migrateToSupabase";
+import { collectAllLocalData, migrateToSupabase, type MigrationStepResult, type BackupData } from "../data/migrateToSupabase";
 
 export default function MigrasiPage() {
   const { role, loading } = useAuth();
@@ -13,6 +13,8 @@ export default function MigrasiPage() {
   const [running, setRunning] = useState(false);
   const [currentStep, setCurrentStep] = useState("");
   const [results, setResults] = useState<MigrationStepResult[] | null>(null);
+  const [importFileName, setImportFileName] = useState("");
+  const [importError, setImportError] = useState("");
 
   // Halaman ini CUMA utk Owner -- data bisnis asli cuma ada di device Owner,
   // dan risikonya terlalu besar kalau sembarang orang bisa ngetrigger ini.
@@ -46,6 +48,36 @@ export default function MigrasiPage() {
     setCurrentStep("");
   };
 
+  const handleImportFile = async (file: File) => {
+    setImportError("");
+    setImportFileName(file.name);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as Partial<BackupData>;
+      // Field yang tidak ada di file lama dianggap kosong -- aman, upsert
+      // cuma menyentuh entity yang memang ada isinya di file.
+      const data: BackupData = {
+        customers: parsed.customers ?? [], addresses: parsed.addresses ?? [],
+        marketers: parsed.marketers ?? [], products: parsed.products ?? [],
+        warehouses: parsed.warehouses ?? [], inventory: parsed.inventory ?? [],
+        orders: parsed.orders ?? [], payments: parsed.payments ?? [],
+        fees: parsed.fees ?? [], collections: parsed.collections ?? [],
+        collectionOrders: parsed.collectionOrders ?? [],
+        collectionOrderItems: parsed.collectionOrderItems ?? [],
+        batchNames: parsed.batchNames ?? [],
+      };
+      setRunning(true);
+      setResults(null);
+      const res = await migrateToSupabase(step => setCurrentStep(step), data);
+      setResults(res);
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : "File tidak valid / bukan format cadangan JSON UmayasLa.");
+    } finally {
+      setRunning(false);
+      setCurrentStep("");
+    }
+  };
+
   const totalRows = results?.reduce((sum, r) => sum + r.count, 0) || 0;
   const hasErrors = results?.some(r => r.error) || false;
 
@@ -71,6 +103,18 @@ export default function MigrasiPage() {
       <button className="primary" disabled={!exported || running} onClick={() => setConfirmOpen(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}>
         <Database size={16} /> {running ? `Memindahkan: ${currentStep}...` : "Mulai Pindahkan ke Database"}
       </button>
+    </div>
+
+    <div className="card" style={{ marginTop: 16 }}>
+      <h2 style={{ fontFamily: "var(--serif)", fontSize: 20, margin: "0 0 8px" }}>3. Impor dari File Cadangan Lama (JSON)</h2>
+      <p className="muted" style={{ marginBottom: 14 }}>Punya file cadangan JSON dari sebelum pindah ke database bersama (mis. hasil unduhan langkah 1 di sesi lalu)? Upload di sini untuk memasukkan isinya ke database — aman diklik/diupload ulang, data yang sama tidak akan dobel (dicocokkan lewat ID), dan tidak menghapus data yang sudah ada di database sekarang.</p>
+      <label className="primary" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", cursor: running ? "not-allowed" : "pointer", opacity: running ? 0.6 : 1 }}>
+        <Upload size={16} /> {running ? `Memindahkan: ${currentStep}...` : "Pilih File Cadangan (.json)"}
+        <input type="file" accept="application/json,.json" hidden disabled={running}
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ""; }} />
+      </label>
+      {importFileName && !importError && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 10 }}>File: {importFileName}</p>}
+      {importError && <p style={{ color: "var(--red)", fontSize: 13, marginTop: 10 }}><XCircle size={14} style={{ verticalAlign: -2 }} /> {importError}</p>}
     </div>
 
     {results && (

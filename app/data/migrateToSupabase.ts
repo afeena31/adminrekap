@@ -45,6 +45,7 @@ export async function collectAllLocalData() {
 }
 
 export type MigrationStepResult = { label: string; count: number; error: string | null };
+export type BackupData = Awaited<ReturnType<typeof collectAllLocalData>>;
 
 async function upsertBatch(table: string, rows: Record<string, unknown>[], conflictColumn: string): Promise<string | null> {
   if (rows.length === 0) return null;
@@ -52,10 +53,17 @@ async function upsertBatch(table: string, rows: Record<string, unknown>[], confl
   return error ? error.message : null;
 }
 
+// `data` opsional -- kalau tidak dikasih, ambil dari kondisi Supabase saat
+// ini (dipakai tombol "Mulai Pindahkan" di /migrasi, sekarang murni upsert
+// data ke dirinya sendiri, idempotent). Kalau dikasih (mis. isi file
+// cadangan JSON lama yang diupload manual), upsert isi file itu -- dipakai
+// fitur "Impor dari File Cadangan" utk memasukkan kembali data lama yang
+// sempat hilang/tidak ikut ke Supabase.
 export async function migrateToSupabase(
-  onProgress?: (step: string) => void
+  onProgress?: (step: string) => void,
+  data?: BackupData
 ): Promise<MigrationStepResult[]> {
-  const data = await collectAllLocalData();
+  data = data ?? await collectAllLocalData();
   const results: MigrationStepResult[] = [];
 
   const run = async (label: string, table: string, rows: Record<string, unknown>[], conflictColumn = "id") => {

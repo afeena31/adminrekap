@@ -811,8 +811,16 @@ body {
   cursor: pointer;
   text-decoration: none;
   transition: background 0.2s ease, color 0.2s ease;
+  /* flex-basis 0 + min-width 0 -- 7 item WAJIB berbagi rata lebar layar,
+     bukan sekadar "boleh menyusut". Tanpa ini, item dengan label panjang
+     (Dashboard/Marketer/Collection) mempertahankan lebar alami teksnya dan
+     total lebar ke-7 item meluber ke luar layar HP asli (cuma kelihatan
+     lengkap kalau viewport dipaksa lebar lewat mode desktop). */
+  flex: 1 1 0;
+  min-width: 0;
 }
-.bottom-nav svg { width: 21px; }
+.bottom-nav svg { width: 21px; flex-shrink: 0; }
+.bottom-nav span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .bottom-nav .current {
   background: linear-gradient(135deg, #f5ece5, #f0e2d4);
   color: #694628;

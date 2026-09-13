@@ -247,6 +247,14 @@ function HomePageInner() {
     await softDeleteCustomer(customer.id);
     setDeleteCustomerConfirmOpen(false);
     setCustomer(await loadFirstCustomer());
+    // Daftar Universal Search (searchDisplayCustomers) cuma dimuat sekali
+    // saat halaman ini pertama render -- tanpa refresh ini, customer yang
+    // baru dihapus tetap muncul di hasil pencarian (kelihatan seperti
+    // "gagal dihapus") sampai halaman di-reload manual.
+    getCustomers().then(async list => {
+      const withAddresses = await Promise.all(list.map(async c => toDisplayCustomer(c, await getCentralCustomerAddresses(c.id))));
+      setSearchDisplayCustomers(withAddresses);
+    });
     notify("Customer dihapus");
   };
 

@@ -93,7 +93,7 @@ export const products: Product[] = [
 
   // LAINNYA
   { id: "ongkir-id-express", name: "Ongkir ID Express Jawa", category: "lainnya", price: 8500, emoji: "🚚", description: "ID Express Pulau Jawa", active: true },
-  { id: "ongkir-id-express-2kg", name: "Ongkir ID Express 2kg", category: "lainnya", price: 17000, emoji: "🚚", description: "ID Express 2 kg", active: true },
+  { id: "ongkir-id-express-2kg", name: "Ongkir ID Express 2kg", category: "lainnya", price: 18000, emoji: "🚚", description: "ID Express 2 kg", active: true },
   { id: "dp-amna", name: "DP Amna Jilbab", category: "lainnya", price: 100000, emoji: "💰", description: "DP standar per pcs", active: true },
 ];
 
@@ -139,7 +139,7 @@ export const modifikasiInfo = [
 export const ongkirInfo = [
   { name: "ID Express Pulau Jawa", price: 9000, emoji: "🚚" },
   { name: "ID Express Sumatera (per kg)", price: 11000, emoji: "🚚" },
-  { name: "ID Express 2 kg", price: 17000, emoji: "🚚" },
+  { name: "ID Express 2 kg", price: 18000, emoji: "🚚" },
   { name: "Luar Jawa-Sumatera", price: null, note: "Menyesuaikan tarif", emoji: "🌏" },
   { name: "J&T 40%", price: null, note: "Menyesuaikan tarif", emoji: "📦" },
 ];
@@ -256,7 +256,7 @@ export type InvoiceType = "buku" | "ready" | "po-amna" | "pelunasan-amna" | "gab
 
 export const ongkirOptions = [
   { id: "id-jawa", name: "ID Express Pulau Jawa (flat 9.000/kg)", price: 9000 },
-  { id: "id-jawa-2kg", name: "ID Express Pulau Jawa 2 kg", price: 17000 },
+  { id: "id-jawa-2kg", name: "ID Express Pulau Jawa 2 kg", price: 18000 },
   { id: "id-sumatera", name: "ID Express Sumatera (11.000/kg)", price: 11000 },
   { id: "cod", name: "COD", price: 0 },
   { id: "shopee", name: "Shopee", price: 0 },

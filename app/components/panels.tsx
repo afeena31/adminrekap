@@ -266,7 +266,7 @@ function RealProductCard({ order, item, onChange }: { order: OrderRecord; item: 
         {/* "siap-kirim" (legacy, gak lagi ditawarkan sbg tahap baru) tetap
             ditambahkan sbg opsi KALAU item ini masih bertahap itu — sama
             spt penanganan gudang nonaktif, biar value select gak "hilang". */}
-        <select value={item.productionStage || "po"} onChange={e => { updateItemStage(order.id, item.id, { productionStage: e.target.value as ProductionStage }); onChange(); }}>
+        <select value={item.productionStage || "po"} onChange={async e => { await updateItemStage(order.id, item.id, { productionStage: e.target.value as ProductionStage }); onChange(); }}>
           {productionStageOrder.map(s => <option key={s} value={s}>{productionStageInfo[s].emoji} {productionStageInfo[s].name}</option>)}
           {item.productionStage === "siap-kirim" && <option value="siap-kirim">{productionStageInfo["siap-kirim"].emoji} {productionStageInfo["siap-kirim"].name}</option>}
         </select>
@@ -277,7 +277,7 @@ function RealProductCard({ order, item, onChange }: { order: OrderRecord; item: 
             5 tahap linear yg ditawarkan di sini, jadi item yg statusnya
             Dihold/Retur/Refund gak match opsi manapun di dropdown ini
             (beda dari form Order lengkap yg sudah benar dari awal). */}
-        <select value={item.shipmentStage || ""} onChange={e => { updateItemStage(order.id, item.id, { shipmentStage: (e.target.value || undefined) as ShipmentStage | undefined }); onChange(); }}>
+        <select value={item.shipmentStage || ""} onChange={async e => { await updateItemStage(order.id, item.id, { shipmentStage: (e.target.value || undefined) as ShipmentStage | undefined }); onChange(); }}>
           <option value="">— Perlu Diresi —</option>
           {(Object.keys(shipmentStageInfo) as ShipmentStage[]).map(s => <option key={s} value={s}>{shipmentStageInfo[s].emoji} {shipmentStageInfo[s].name}</option>)}
         </select>

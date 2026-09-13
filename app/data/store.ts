@@ -38,12 +38,18 @@ export type CustomRequest = {
 // supaya order lama dgn tahap ini masih render normal, tapi SENGAJA gak
 // dimasukkan ke productionStageOrder lagi (gak muncul lagi sbg pilihan baru
 // di dropdown) — sesuai rute baru yang berhenti di "Proses Packing".
-export type ProductionStage = "po" | "produksi" | "antre-qc" | "qc" | "antre-packing" | "packing" | "siap-kirim";
-export type ShipmentStage = "antre-packing" | "sudah-dipacking" | "proses-resi" | "dalam-pengiriman" | "selesai" | "ditunda" | "retur" | "refund";
+export type ProductionStage = "po" | "ready-pusat" | "produksi" | "antre-qc" | "qc" | "antre-packing" | "packing" | "siap-kirim";
+export type ShipmentStage = "antre-pusat" | "antre-packing" | "sudah-dipacking" | "proses-resi" | "dalam-pengiriman" | "selesai" | "ditunda" | "retur" | "refund";
 
-export const productionStageOrder: ProductionStage[] = ["po", "produksi", "antre-qc", "qc", "antre-packing", "packing"];
+// "ready-pusat" (2026-09-13): khusus buku Etalase YasLa yang diambil dari
+// supplier (bukan diproduksi sendiri) -- barang sudah tersedia/ready di
+// pusat/supplier tapi belum sampai & diproses di tempat kami, jadi gak pas
+// disebut "po" (itu berarti belum ready sama sekali) atau "antre-packing"
+// (itu berarti sudah di tangan kami). Posisinya persis setelah "po".
+export const productionStageOrder: ProductionStage[] = ["po", "ready-pusat", "produksi", "antre-qc", "qc", "antre-packing", "packing"];
 export const productionStageInfo: Record<ProductionStage, { name: string; emoji: string }> = {
   "po": { name: "PO", emoji: "📝" },
+  "ready-pusat": { name: "Ready Pusat", emoji: "🏬" },
   "produksi": { name: "Dalam Produksi", emoji: "🏭" },
   "antre-qc": { name: "Antre QC", emoji: "⏳" },
   "qc": { name: "Proses QC", emoji: "🔍" },
@@ -64,8 +70,13 @@ export const productionStageInfo: Record<ProductionStage, { name: string; emoji:
 // lama) yang cuma label-nya diperbarui jadi "Terkirim"/"Dihold".
 // "ditunda"/"retur"/"refund" TETAP di luar shipmentStageOrder (linear) —
 // status khusus yang bisa terjadi kapan saja, bukan tahap lanjutan.
-export const shipmentStageOrder: ShipmentStage[] = ["antre-packing", "sudah-dipacking", "proses-resi", "dalam-pengiriman", "selesai"];
+// "antre-pusat" (2026-09-13): tahap PALING AWAL -- artinya barang belum
+// ready di tempat kami sama sekali (masih di pusat/supplier), jadi belum
+// bisa masuk "Antre Packing" (itu udah di tangan kami, tinggal nunggu
+// giliran packing).
+export const shipmentStageOrder: ShipmentStage[] = ["antre-pusat", "antre-packing", "sudah-dipacking", "proses-resi", "dalam-pengiriman", "selesai"];
 export const shipmentStageInfo: Record<ShipmentStage, { name: string; emoji: string }> = {
+  "antre-pusat": { name: "Antre di Pusat", emoji: "📥" },
   "antre-packing": { name: "Antre Packing", emoji: "🗂️" },
   "sudah-dipacking": { name: "Sudah Dipacking", emoji: "📦" },
   "proses-resi": { name: "Proses Resi", emoji: "🧾" },

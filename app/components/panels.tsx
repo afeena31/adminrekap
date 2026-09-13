@@ -242,7 +242,7 @@ function ActionCenter({ ops, onAction, unpaidRealOrders, onTagihPelunasan }: { o
 // bukan bikin nama tone baru yang gak pernah punya gaya (className tanpa
 // definisi CSS = tampil polos, sama seperti bug ".eyebrow" yang pernah
 // ditemukan sebelumnya).
-const productionTone: Record<string, string> = { po: "po", produksi: "production", "antre-qc": "qc", qc: "qc", "antre-packing": "packing", packing: "packing", "siap-kirim": "ready" };
+const productionTone: Record<string, string> = { po: "po", "ready-pusat": "po", produksi: "production", "antre-qc": "qc", qc: "qc", "antre-packing": "packing", packing: "packing", "siap-kirim": "ready" };
 const paymentTone: Record<string, string> = { lunas: "paid", dp: "dp", belum: "unpaid" };
 
 function RealProductCard({ order, item, onChange }: { order: OrderRecord; item: OrderItemSnapshot; onChange: () => void }) {

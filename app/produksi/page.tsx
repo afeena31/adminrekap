@@ -17,7 +17,7 @@ import {
 
 type BoardMode = "produksi" | "pengiriman";
 
-const shipmentStageColumns: ShipmentStage[] = ["antre-packing", "sudah-dipacking", "proses-resi", "dalam-pengiriman", "ditunda", "selesai", "retur", "refund"];
+const shipmentStageColumns: ShipmentStage[] = ["antre-pusat", "antre-packing", "sudah-dipacking", "proses-resi", "dalam-pengiriman", "ditunda", "selesai", "retur", "refund"];
 // productionStageOrder (store.ts) SENGAJA gak lagi termasuk "siap-kirim"
 // (rute baru berhenti di "Proses Packing") — tapi item LAMA yang masih
 // bertahap "siap-kirim" tetap perlu kolom sendiri di papan ini, kalau

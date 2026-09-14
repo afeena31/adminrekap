@@ -17,7 +17,7 @@ import { goBack } from "../lib/goBack";
 import { getCollections, getAllCollections, seedCollections, getCollectionStats, addCollection, hardDeleteCollection, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus, type CollectionStats } from "../data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "../data/demoSeed";
 
-import { formatRupiah, getOrdersForCustomer, computePaymentTotals, getProducts, deleteProduct, type OrderRecord } from "../data/store";
+import { formatRupiah, getOrders, getOrdersForCustomer, computePaymentTotals, getProducts, deleteProduct, type OrderRecord } from "../data/store";
 import { products as seedCatalogProducts, nonBookMasterCatalog } from "../data/products";
 import { getOperations, type CustomerOperations } from "../data/operations";
 import { useAuth } from "../data/authContext";
@@ -103,12 +103,28 @@ function HomePageInner() {
   const [searchDisplayCustomers, setSearchDisplayCustomers] = useState<Customer[]>([]);
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
+  // toDisplayCustomer() sengaja isi "orders" dengan "0" statis (adapter
+  // central.ts cuma nyimpen FAKTA, bukan angka olahan -- lihat komentar di
+  // customers.ts) -- jadi hasil Universal Search selalu nunjukin "0 order"
+  // utk SEMUA customer walau ada order asli. Di sini dihitung beneran dari
+  // order asli (1x query semua order, bukan per-customer biar gak berat).
+  const loadSearchDisplayCustomers = async () => {
+    const [list, orders] = await Promise.all([getCustomers(), getOrders()]);
+    const orderCountByCustomer = new Map<string, number>();
+    for (const o of orders) {
+      if (!o.customerId) continue;
+      orderCountByCustomer.set(o.customerId, (orderCountByCustomer.get(o.customerId) || 0) + 1);
+    }
+    const withAddresses = await Promise.all(list.map(async c => {
+      const display = toDisplayCustomer(c, await getCentralCustomerAddresses(c.id));
+      return { ...display, orders: String(orderCountByCustomer.get(c.id) || 0) };
+    }));
+    setSearchDisplayCustomers(withAddresses);
+  };
+
   useEffect(() => {
     getCollections().then(setSearchCollections);
-    getCustomers().then(async list => {
-      const withAddresses = await Promise.all(list.map(async c => toDisplayCustomer(c, await getCentralCustomerAddresses(c.id))));
-      setSearchDisplayCustomers(withAddresses);
-    });
+    loadSearchDisplayCustomers();
   }, []);
 
   // ===== HYDRATION FIX: muat customer asli dari Supabase setelah mount =====
@@ -251,10 +267,7 @@ function HomePageInner() {
     // saat halaman ini pertama render -- tanpa refresh ini, customer yang
     // baru dihapus tetap muncul di hasil pencarian (kelihatan seperti
     // "gagal dihapus") sampai halaman di-reload manual.
-    getCustomers().then(async list => {
-      const withAddresses = await Promise.all(list.map(async c => toDisplayCustomer(c, await getCentralCustomerAddresses(c.id))));
-      setSearchDisplayCustomers(withAddresses);
-    });
+    loadSearchDisplayCustomers();
     notify("Customer dihapus");
   };
 
@@ -461,7 +474,7 @@ function HomePageInner() {
 
     <section className="profile">
       <div className="avatar"><div className="hijab">◖</div><span>✦</span></div>
-      <div className="profile-copy"><h1>{customer.name}</h1><p className="badge"><Heart size={13} fill="currentColor" /> {customer.orders === "0" ? "Customer Baru" : "Repeat Customer"}</p><p><MapPin size={15} /> {customer.city}</p><p><ClipboardList size={14} /> Sejak {customer.since}</p></div>
+      <div className="profile-copy"><h1>{customer.name}</h1><p className="badge"><Heart size={13} fill="currentColor" /> {customerOrders.length === 0 ? "Customer Baru" : "Repeat Customer"}</p><p><MapPin size={15} /> {customer.city}</p><p><ClipboardList size={14} /> Sejak {customer.since}</p></div>
       <div className="profile-actions"><button className="chat" onClick={() => setChatOpen(true)}><MessageCircle size={17} /> Chat</button><Link href="/order" className="add-order"><Plus size={17} /> Order</Link><button onClick={() => setEditCustomerOpen(true)} className="save" aria-label="Edit profil customer"><Pencil size={16} /></button><button onClick={() => setDeleteCustomerConfirmOpen(true)} className="save" aria-label="Hapus customer"><Trash2 size={16} /></button><button onClick={() => { setSaved(!saved); notify(!saved ? "Customer disimpan ke favorit" : "Customer dihapus dari favorit"); }} className={saved ? "saved" : "save"} aria-label="Simpan customer"><Heart size={18} fill={saved ? "currentColor" : "none"} /></button></div>
 
       {/* ===== SITUATION STRIP — kondisi customer saat ini ===== */}

@@ -195,6 +195,10 @@ function OrderPageInner() {
   // order dibuka utk diedit; disimpan lewat setCategoriesForItem tiap Generate
   // Invoice diklik.
   const [itemCategoryMap, setItemCategoryMap] = useState<Record<string, string[]>>({});
+  // Panel Kategori Produk tertutup default (24+ Collection kalau semua Master
+  // Data dimuat bikin daftar chip meluber panjang & bikin susah scroll cek
+  // ulang yang sudah dicentang) -- expand per-item saat dibutuhkan.
+  const [expandedCategoryPicker, setExpandedCategoryPicker] = useState<Set<string>>(new Set());
 
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 2600); };
 
@@ -536,6 +540,14 @@ function OrderPageInner() {
       const current = prev[itemId] || [];
       const next = current.includes(collectionId) ? current.filter(c => c !== collectionId) : [...current, collectionId];
       return { ...prev, [itemId]: next };
+    });
+  };
+
+  const toggleCategoryPickerExpanded = (itemId: string) => {
+    setExpandedCategoryPicker(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId); else next.add(itemId);
+      return next;
     });
   };
 
@@ -1425,28 +1437,52 @@ function OrderPageInner() {
               <button className="remove-btn" onClick={() => removeItem(item.id)}><Trash2 size={15} /></button>
             </div>
           </div>
-          {/* ===== KATEGORI PRODUK — tautkan item ini ke Collection Workspace ===== */}
+          {/* ===== KATEGORI PRODUK — tautkan item ini ke Collection Workspace =====
+               Tertutup default (mis. begitu 18 Collection Master Data dimuat,
+               daftar chip bisa 24+ item — meluber panjang & bikin lama
+               scroll cek ulang yang sudah dicentang). Sekali dibuka, yang
+               sudah dicentang dipindah ke atas & areanya dibatasi tinggi
+               (scroll internal), bukan mendorong seluruh halaman ke bawah. */}
           <div className="order-item-categories">
-            <small className="category-label">🏷️ Kategori Produk</small>
-            {collectionsList.length === 0 ? (
-              <small className="field-hint">Belum ada Collection — buat dulu di tab Collection Workspace.</small>
-            ) : (
-              <div className="category-chips">
-                {collectionsList.map(col => {
-                  const active = (itemCategoryMap[item.id] || []).includes(col.id);
-                  return (
-                    <button
-                      type="button"
-                      key={col.id}
-                      className={`category-chip ${active ? "active" : ""}`}
-                      onClick={() => toggleItemCategory(item.id, col.id)}
-                    >
-                      {col.icon} {col.name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            {(() => {
+              const selectedIds = itemCategoryMap[item.id] || [];
+              const sortedCollections = [...collectionsList].sort((a, b) => Number(selectedIds.includes(b.id)) - Number(selectedIds.includes(a.id)));
+              const isExpanded = expandedCategoryPicker.has(item.id);
+              return <>
+                <button type="button" className="category-toggle" onClick={() => toggleCategoryPickerExpanded(item.id)}>
+                  <small className="category-label">🏷️ Kategori Produk {selectedIds.length > 0 && `(${selectedIds.length} dipilih)`}</small>
+                  <span className="category-toggle-arrow">{isExpanded ? "▴" : "▾"}</span>
+                </button>
+                {!isExpanded && selectedIds.length > 0 && (
+                  <div className="category-chips-preview">
+                    {sortedCollections.filter(c => selectedIds.includes(c.id)).map(col => (
+                      <span key={col.id} className="category-chip active">{col.icon} {col.name}</span>
+                    ))}
+                  </div>
+                )}
+                {isExpanded && (
+                  collectionsList.length === 0 ? (
+                    <small className="field-hint">Belum ada Collection — buat dulu di tab Collection Workspace.</small>
+                  ) : (
+                    <div className="category-chips category-chips-scroll">
+                      {sortedCollections.map(col => {
+                        const active = selectedIds.includes(col.id);
+                        return (
+                          <button
+                            type="button"
+                            key={col.id}
+                            className={`category-chip ${active ? "active" : ""}`}
+                            onClick={() => toggleItemCategory(item.id, col.id)}
+                          >
+                            {col.icon} {col.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+              </>;
+            })()}
           </div>
           {/* ===== SUMBER STOK — PO (default) atau Ready Stock dari gudang ===== */}
           {/* Produk yang sama bisa PO di 1 order & Ready Stock di order lain

@@ -147,6 +147,9 @@ a.nav-link:hover { background: #f5ece5; color: #694628; transform: translateY(-1
 .order-item-info b { display: block; font-size: 14px; color: var(--ink); }
 .order-item-info small { display: block; color: var(--muted); font-size: 11px; line-height: 1.4; margin-top: 3px; }
 .order-item-price { font-size: 13px; font-weight: 700; color: var(--brown); margin-top: 4px; }
+.order-item-price-edit { display: inline-flex; align-items: center; gap: 4px; margin-top: 5px; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; max-width: 140px; }
+.order-item-price-edit span { font-size: 13px; font-weight: 700; color: var(--brown); }
+.order-item-price-edit input { border: 0; outline: none; background: transparent; font-size: 13px; font-weight: 700; color: var(--brown); width: 100%; min-width: 0; padding: 2px 0; }
 .order-item-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 
 .order-item-categories { padding: 0 0 12px 58px; }

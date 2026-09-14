@@ -588,6 +588,14 @@ function OrderPageInner() {
     setItems(prev => prev.map(item => item.id === id ? { ...item, qty: Math.max(1, item.qty + delta) } : item));
   };
 
+  // Harga jual per item BISA beda dari harga katalog (mis. dapat harga PO,
+  // bukan early bird) -- diedit langsung di kolom order, gak ubah harga
+  // Product di Katalog sama sekali (murni snapshot per-item, sama seperti
+  // hpp/feeMarketer yang sudah snapshot dari awal).
+  const updatePrice = (id: string, price: number) => {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, price } : item));
+  };
+
   const updateProductionStage = (id: string, stage: ProductionStage) => {
     setItems(prev => prev.map(item => item.id === id ? { ...item, productionStage: stage } : item));
   };
@@ -1563,7 +1571,10 @@ function OrderPageInner() {
             <div className="order-item-info">
               <b>{item.name}</b>
               {item.detail && <small>{item.detail}</small>}
-              <div className="order-item-price">{formatRupiah(item.price)}</div>
+              <div className="order-item-price-edit">
+                <span>Rp</span>
+                <MoneyInput value={item.price} onChange={price => updatePrice(item.id, price)} />
+              </div>
               {item.feeMarketer > 0 && <small className="fee-tag">Fee {formatRupiah(item.feeMarketer)}/pcs</small>}
               <label className="pay-now-check">
                 <input type="checkbox" checked={!!item.payNow} onChange={() => togglePayNow(item.id)} />

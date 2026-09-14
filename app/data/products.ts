@@ -27,6 +27,18 @@ export type Product = {
   estimasiReady?: string;       // contoh: "15-20 hari kerja setelah DP"
   estimasiPembayaran?: string;  // contoh: "DP saat order, pelunasan saat barang ready"
   beratGram?: number;           // berat satuan (gram) — dipakai hitung estimasi berat paket
+  // ===== DEFAULT SUMBER STOK/GUDANG/TAHAP (2026-09-14) =====
+  // Diisi sekali di sini, otomatis narik ke item order begitu produk ini
+  // ditambahkan (order/page.tsx) -- admin gak perlu ubah 4 dropdown satu-satu
+  // per customer kalau memang lagi jalan sesuai jadwal biasa. TETAP bisa
+  // di-override manual per-item di form Order (custom order / beda jadwal).
+  // Tipe string polos (bukan import ProductionStage/ShipmentStage dari
+  // store.ts) supaya gak muter balik circular import -- store.ts yang
+  // duluan import dari file ini, bukan sebaliknya.
+  defaultStockSource?: "ready" | "po";
+  defaultWarehouseId?: string;
+  defaultProductionStage?: string;  // ProductionStage (store.ts)
+  defaultShipmentStage?: string;    // ShipmentStage (store.ts)
 };
 
 

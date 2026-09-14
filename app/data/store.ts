@@ -275,6 +275,10 @@ function mapProductRow(p: Record<string, unknown>): Product {
     estimasiReady: (p.estimasi_ready as string) ?? undefined,
     estimasiPembayaran: (p.estimasi_pembayaran as string) ?? undefined,
     beratGram: (p.berat_gram as number) ?? undefined,
+    defaultStockSource: (p.default_stock_source as "ready" | "po") ?? undefined,
+    defaultWarehouseId: (p.default_warehouse_id as string) ?? undefined,
+    defaultProductionStage: (p.default_production_stage as string) ?? undefined,
+    defaultShipmentStage: (p.default_shipment_stage as string) ?? undefined,
   };
 }
 
@@ -293,6 +297,8 @@ function productToRpcArgs(product: Product) {
     p_active: product.active !== false, p_default_collection_ids: product.defaultCollectionIds ?? null,
     p_estimasi_ready: product.estimasiReady ?? null, p_estimasi_pembayaran: product.estimasiPembayaran ?? null,
     p_berat_gram: product.beratGram ?? null,
+    p_default_stock_source: product.defaultStockSource ?? null, p_default_warehouse_id: product.defaultWarehouseId ?? null,
+    p_default_production_stage: product.defaultProductionStage ?? null, p_default_shipment_stage: product.defaultShipmentStage ?? null,
   };
 }
 

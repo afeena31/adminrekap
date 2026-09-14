@@ -388,6 +388,10 @@ function OrderPageInner() {
     const fee = isOwner ? (baseProduct?.feeMarketer || 15000) : (baseProduct?.feeMarketer || 0);
 
     const newItemId = "jilbab-" + Date.now();
+    // Default Sumber Stok/Gudang/Tahap dari Katalog (2026-09-14) -- otomatis
+    // kepilih begitu produk ditambahkan, admin masih bisa ubah manual per-item
+    // (lihat penjelasan sama di addProduct di bawah).
+    const jilbabDefaultWarehouseValid = baseProduct?.defaultWarehouseId && warehouseList.some(w => w.id === baseProduct.defaultWarehouseId);
     setItems(prev => [...prev, {
       id: newItemId,
       name: "Amna Jilbab",
@@ -407,6 +411,10 @@ function OrderPageInner() {
       customRequests,
       additionalPrice,
       finalPrice: unitPrice,
+      stockSource: baseProduct?.defaultStockSource,
+      warehouseId: baseProduct?.defaultStockSource === "ready" && jilbabDefaultWarehouseValid ? baseProduct.defaultWarehouseId : undefined,
+      productionStage: baseProduct?.defaultProductionStage as ProductionStage | undefined,
+      shipmentStage: baseProduct?.defaultShipmentStage as ShipmentStage | undefined,
     }]);
     // Collection Default produk (Katalog) otomatis tercentang — disaring dulu
     // terhadap collectionsList (lihat penjelasan sama di addProduct di bawah).
@@ -432,6 +440,15 @@ function OrderPageInner() {
   // warna apa yang benar-benar dipesan.
   const addProduct = (product: Product, variant?: string) => {
     const newItemId = product.id + "-" + Date.now();
+    // Default Sumber Stok/Gudang/Tahap Produksi/Pengiriman dari Katalog
+    // (2026-09-14) -- otomatis kepilih begitu produk ini ditambahkan, admin
+    // gak perlu ubah 4 dropdown satu-satu tiap customer kalau memang lagi
+    // jalan sesuai jadwal biasa. TETAP bisa di-override manual per-item di
+    // dropdown Sumber Stok/Gudang/Tahap Produksi/Pengiriman (custom order/
+    // beda jadwal). Gudang default disaring dulu terhadap warehouseList yg
+    // masih ada (sama pola dgn validasi Collection Default) -- kalau gudang
+    // defaultnya sudah dihapus, jangan nautkan ke id yg gak ada lagi.
+    const defaultWarehouseValid = product.defaultWarehouseId && warehouseList.some(w => w.id === product.defaultWarehouseId);
     setItems(prev => [...prev, {
       id: newItemId,
       name: product.name,
@@ -443,6 +460,10 @@ function OrderPageInner() {
       category: product.category,
       productId: product.id,
       detail: variant,
+      stockSource: product.defaultStockSource,
+      warehouseId: product.defaultStockSource === "ready" && defaultWarehouseValid ? product.defaultWarehouseId : undefined,
+      productionStage: product.defaultProductionStage as ProductionStage | undefined,
+      shipmentStage: product.defaultShipmentStage as ShipmentStage | undefined,
     }]);
     // Collection Default produk (Katalog) otomatis tercentang — gak perlu
     // pilih manual per order lagi kalau produknya sudah diberi default.

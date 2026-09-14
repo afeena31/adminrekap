@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 
 import { productCategories, formatRupiah, modifikasiInfo, ongkirInfo, splitShopeeInfo, rekeningInfo, nonBookMasterCatalog, type Product } from "../data/products";
-import { getProducts, addProduct, updateProduct, deleteProduct, calculateProductMetrics, getWarehouses, getInventory, getInventoryForProduct, inventoryAvailable, setStock, type Warehouse, type Inventory } from "../data/store";
+import { getProducts, addProduct, updateProduct, deleteProduct, calculateProductMetrics, getWarehouses, getInventory, getInventoryForProduct, inventoryAvailable, setStock, productionStageOrder, productionStageInfo, shipmentStageInfo, type Warehouse, type Inventory, type ShipmentStage } from "../data/store";
 import { getCollections, type Collection } from "../data/collections";
 import { MoneyInput } from "../components/MoneyInput";
 import { BottomNav } from "../components/BottomNav";
@@ -31,6 +31,10 @@ type ProductFormState = {
   estimasiReady: string;
   estimasiPembayaran: string;
   beratGram: string;
+  defaultStockSource: "" | "ready" | "po";
+  defaultWarehouseId: string;
+  defaultProductionStage: string;
+  defaultShipmentStage: string;
 };
 
 const emptyForm: ProductFormState = {
@@ -51,6 +55,10 @@ const emptyForm: ProductFormState = {
   estimasiReady: "",
   estimasiPembayaran: "",
   beratGram: "",
+  defaultStockSource: "",
+  defaultWarehouseId: "",
+  defaultProductionStage: "",
+  defaultShipmentStage: "",
 };
 
 const emojiOptions = ["📚", "📖", "🐝", "🧕", "🖤", "🧤", "🧦", "🌸", "🚚", "💰", "✨", "📦", "🎈", "🔤", "🔢", "🕌", "🌍", "✂️", "🧵", "🎀"];
@@ -194,6 +202,10 @@ export default function ProductsPage() {
       estimasiReady: product.estimasiReady || "",
       estimasiPembayaran: product.estimasiPembayaran || "",
       beratGram: product.beratGram ? String(product.beratGram) : "",
+      defaultStockSource: product.defaultStockSource || "",
+      defaultWarehouseId: product.defaultWarehouseId || "",
+      defaultProductionStage: product.defaultProductionStage || "",
+      defaultShipmentStage: product.defaultShipmentStage || "",
     });
     setShowForm(true);
   };
@@ -231,6 +243,10 @@ export default function ProductsPage() {
       estimasiReady: form.estimasiReady.trim() || undefined,
       estimasiPembayaran: form.estimasiPembayaran.trim() || undefined,
       beratGram: form.beratGram ? Number(form.beratGram) : undefined,
+      defaultStockSource: form.defaultStockSource || undefined,
+      defaultWarehouseId: form.defaultWarehouseId || undefined,
+      defaultProductionStage: form.defaultProductionStage || undefined,
+      defaultShipmentStage: form.defaultShipmentStage || undefined,
     };
 
     try {
@@ -586,6 +602,39 @@ export default function ProductsPage() {
 
           <label>Berat Produk (gram)
             <input type="number" min="0" value={form.beratGram} onChange={e => setForm({ ...form, beratGram: e.target.value })} placeholder="Contoh: 250" />
+          </label>
+
+          <p className="field-hint" style={{ margin: "14px 0 4px" }}>Default Sumber Stok/Gudang/Tahap (opsional) — begitu produk ini ditambahkan ke order, 4 field ini otomatis kepilih, gak perlu diubah satu-satu tiap customer. Tetap bisa di-override manual per-item di form Order kalau ada custom order/beda jadwal.</p>
+
+          <label>Sumber Stok Default
+            <select value={form.defaultStockSource} onChange={e => setForm({ ...form, defaultStockSource: e.target.value as "" | "ready" | "po" })}>
+              <option value="">— Tidak diset (isi manual tiap order) —</option>
+              <option value="po">📝 PO</option>
+              <option value="ready">✅ Ready Stock</option>
+            </select>
+          </label>
+
+          {form.defaultStockSource === "ready" && (
+            <label>Gudang Default
+              <select value={form.defaultWarehouseId} onChange={e => setForm({ ...form, defaultWarehouseId: e.target.value })}>
+                <option value="">— Pilih gudang —</option>
+                {warehouseList.map(w => <option key={w.id} value={w.id}>{w.name}{!w.active ? " (nonaktif)" : ""}</option>)}
+              </select>
+            </label>
+          )}
+
+          <label>Tahap Produksi Default
+            <select value={form.defaultProductionStage} onChange={e => setForm({ ...form, defaultProductionStage: e.target.value })}>
+              <option value="">— Tidak diset (isi manual tiap order) —</option>
+              {productionStageOrder.map(s => <option key={s} value={s}>{productionStageInfo[s].emoji} {productionStageInfo[s].name}</option>)}
+            </select>
+          </label>
+
+          <label>Tahap Pengiriman Default
+            <select value={form.defaultShipmentStage} onChange={e => setForm({ ...form, defaultShipmentStage: e.target.value })}>
+              <option value="">— Tidak diset (isi manual tiap order) —</option>
+              {(Object.keys(shipmentStageInfo) as ShipmentStage[]).map(s => <option key={s} value={s}>{shipmentStageInfo[s].emoji} {shipmentStageInfo[s].name}</option>)}
+            </select>
           </label>
 
           <label>Collection Default (opsional)

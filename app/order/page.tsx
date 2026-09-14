@@ -1,10 +1,11 @@
 "use client";
 
 
-import { ArrowLeft, Bell, Check, ChevronLeft, ChevronRight, Copy, FileText, MessageCircle, Minus, Plus, Search, Trash2, Landmark } from "lucide-react";
+import { ArrowLeft, Bell, Camera, Check, ChevronLeft, ChevronRight, Copy, FileText, MessageCircle, Minus, Plus, Search, Trash2, Landmark } from "lucide-react";
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { toPng } from "html-to-image";
 import { BottomNav } from "../components/BottomNav";
 import { goBack } from "../lib/goBack";
 
@@ -111,6 +112,8 @@ function OrderPageInner() {
   const [items, setItems] = useState<OrderItem[]>([]);
   const [notice, setNotice] = useState("");
   const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const invoicePaperRef = useRef<HTMLDivElement>(null);
   const [showJilbabForm, setShowJilbabForm] = useState(false);
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState("");
@@ -1026,6 +1029,39 @@ function OrderPageInner() {
     window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(text)}`, "_blank");
   };
 
+  // ===== KIRIM/UNDUH INVOICE SEBAGAI FOTO (PNG) =====
+  // "Kirim ke WhatsApp" cuma bisa kirim teks (wa.me gak bisa lampirkan file),
+  // jadi ini jalur terpisah: render tampilan invoice-nya sendiri jadi PNG,
+  // lalu coba buka share sheet HP (Android Chrome bisa langsung pilih
+  // WhatsApp & foto ikut terlampir) -- kalau browser gak dukung share file,
+  // fallback unduh filenya biar bisa dilampirkan manual.
+  const sendInvoiceAsImage = async () => {
+    if (!invoice || !invoicePaperRef.current) return;
+    setGeneratingImage(true);
+    try {
+      const dataUrl = await toPng(invoicePaperRef.current, { pixelRatio: 2, backgroundColor: "#fffaf5" });
+      const blob = await (await fetch(dataUrl)).blob();
+      const fileName = `Invoice-${invoice.number.replace(/\//g, "-")}.png`;
+      const file = new File([blob], fileName, { type: "image/png" });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: fileName });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = fileName;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        notify("Gambar invoice terunduh — lampirkan manual ke WhatsApp");
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return; // user batal di share sheet
+      console.error("[sendInvoiceAsImage]", err);
+      notify("Gagal membuat gambar invoice");
+    } finally {
+      setGeneratingImage(false);
+    }
+  };
+
 
   return <main className="app-shell order-page">
     <header className="topbar">
@@ -1705,6 +1741,7 @@ function OrderPageInner() {
     {invoice && <div className="overlay" onClick={() => setInvoice(null)}>
       <section className="modal invoice-modal" onClick={e => e.stopPropagation()}>
         <button className="close" onClick={() => setInvoice(null)}>×</button>
+        <div ref={invoicePaperRef} className="invoice-paper">
         <div className="invoice-head">
           <div className="invoice-brand">Afeena & YasLa</div>
           <div className="invoice-title">INVOICE</div>
@@ -1765,9 +1802,13 @@ function OrderPageInner() {
           </div>}
         </div>
         {invoice.note && <div className="invoice-note"><b>Catatan:</b> {invoice.note}</div>}
+        </div>
         <div className="invoice-actions">
           <button className="primary" onClick={sendInvoiceToWhatsApp}><MessageCircle size={16} /> Kirim ke WhatsApp</button>
           <button className="secondary" onClick={copyInvoice}><Copy size={16} /> Salin Invoice</button>
+        </div>
+        <div className="invoice-actions">
+          <button className="secondary" disabled={generatingImage} onClick={sendInvoiceAsImage}><Camera size={16} /> {generatingImage ? "Menyiapkan foto..." : "Kirim sebagai Foto"}</button>
         </div>
         <div className="invoice-actions">
           <button className="secondary" onClick={() => { setInvoice(null); setItems([]); setItemCategoryMap({}); setDpAmount(0); setOrderPayments([]); setTopUpAmount(0); setNote(""); setInternalNote(""); setDiscountValue(0); setMarketerId(""); setEditingOrderId(null); notify("Order baru siap dibuat"); }}><Check size={16} /> Selesai</button>

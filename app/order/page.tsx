@@ -2033,6 +2033,7 @@ function OrderPageInner() {
         <button className="close" onClick={() => setInvoice(null)}>×</button>
         <div ref={invoicePaperRef} className="invoice-paper">
         <div className="invoice-head">
+          <div className="invoice-flourish">✦ ⋆ ✦</div>
           <div className="invoice-brand">Afeena & YasLa</div>
           <div className="invoice-title">INVOICE</div>
           <div className="invoice-type-tag">{invoiceTypeInfo[invoice.type].name}</div>
@@ -2052,8 +2053,9 @@ function OrderPageInner() {
             const productInfo = productList.find(p => p.id === item.productId);
             return (
               <div className="invoice-item" key={i}>
+                <span className="invoice-item-emoji">{item.emoji}</span>
                 <div className="invoice-item-name">
-                  {item.emoji} {item.name}{item.detail && <small>{item.detail}</small>}
+                  <b>{item.name}</b>{item.detail && <small>{item.detail}</small>}
                   {productInfo?.estimasiReady && <small>Estimasi ready: {productInfo.estimasiReady}</small>}
                   {productInfo?.estimasiPembayaran && <small>Estimasi pembayaran: {productInfo.estimasiPembayaran}</small>}
                 </div>
@@ -2100,6 +2102,10 @@ function OrderPageInner() {
           })()}
         </div>
         {invoice.note && <div className="invoice-note"><b>Catatan:</b> {invoice.note}</div>}
+        <div className="invoice-footer">
+          <div className="invoice-footer-divider"><span>🌸</span></div>
+          <p>Terima kasih atas kepercayaannya</p>
+        </div>
         </div>
         <div className="invoice-actions">
           <button className="primary" onClick={sendInvoiceToWhatsApp}><MessageCircle size={16} /> Kirim ke WhatsApp</button>

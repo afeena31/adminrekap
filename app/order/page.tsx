@@ -56,6 +56,13 @@ type OrderItem = {
   shipmentStage?: ShipmentStage;
   stockSource?: "ready" | "po";
   warehouseId?: string;
+  // Dicentang admin buat jawab "berapa yang harus saya TF sekarang?" saat
+  // baru bikin invoice & customer mau bayar SEBAGIAN produk dulu (mis. yang
+  // udah ready) sementara sisanya (msh PO) dibayar belakangan bareng
+  // pengiriman gabungan. MURNI kalkulator di form ini (gak ikut kesimpen ke
+  // order/OrderItemSnapshot) -- beda dari Tahap Produksi yg memang tersimpan
+  // permanen sbg status operasional.
+  payNow?: boolean;
 };
 
 
@@ -328,6 +335,15 @@ function OrderPageInner() {
   // order.total (Payment/Outstanding, Collection stats, invoice "Sisa
   // Pelunasan" yang sendirinya menghitung total - dp lagi → dp kepotong dua kali).
   const total = subtotal - discountAmount + ongkir;
+  // ===== "Berapa yang harus di-TF sekarang?" — item yang dicentang "Transfer
+  // sekarang" (biasanya yang udah ready, sisanya msh PO dibayar belakangan).
+  // Diskon order diprorata sesuai porsi subtotal item yg dicentang (pola sama
+  // dgn itemShareOfOrder di collections.ts) -- ongkir SENGAJA gak diikutkan,
+  // krn pengiriman baru terjadi belakangan pas semua item sudah ready.
+  const payNowItems = items.filter(i => i.payNow);
+  const payNowSubtotal = payNowItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const payNowDiscount = subtotal > 0 ? discountAmount * (payNowSubtotal / subtotal) : 0;
+  const payNowTotal = payNowSubtotal - payNowDiscount;
   // Fee marketer: gunakan fee per produk jika tersedia, jika tidak gunakan defaultFee marketer
   const selectedMarketer = marketers.find(m => m.id === marketerId);
   const totalFee = items.reduce((sum, item) => {
@@ -478,6 +494,10 @@ function OrderPageInner() {
     setShowProductPicker(false);
     setVariantPickProduct(null);
     notify(`${product.name}${variant ? ` (${variant})` : ""} ditambahkan`);
+  };
+
+  const togglePayNow = (id: string) => {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, payNow: !item.payNow } : item));
   };
 
   const updateQty = (id: string, delta: number) => {
@@ -1391,6 +1411,10 @@ function OrderPageInner() {
               {item.detail && <small>{item.detail}</small>}
               <div className="order-item-price">{formatRupiah(item.price)}</div>
               {item.feeMarketer > 0 && <small className="fee-tag">Fee {formatRupiah(item.feeMarketer)}/pcs</small>}
+              <label className="pay-now-check">
+                <input type="checkbox" checked={!!item.payNow} onChange={() => togglePayNow(item.id)} />
+                Transfer sekarang
+              </label>
             </div>
             <div className="order-item-actions">
               <div className="qty-control">
@@ -1628,6 +1652,17 @@ function OrderPageInner() {
         <small className="field-hint">Khusus admin — TIDAK PERNAH ikut ke invoice atau WhatsApp customer.</small>
       </div>
     </div>
+
+    {/* ===== "BERAPA YANG HARUS DI-TF SEKARANG?" — jawab langsung pertanyaan
+         customer saat bikin invoice, kalau cuma sebagian produk mau dibayar
+         duluan (centang "Transfer sekarang" di produk terkait di atas). ===== */}
+    {payNowItems.length > 0 && (
+      <div className="shopee-split-info">
+        <p><b>💰 Perlu di-TF sekarang ({payNowItems.length} produk): {formatRupiah(payNowTotal)}</b></p>
+        <p>Sisanya ({items.length - payNowItems.length} produk lain) menyusul nanti, dibayar bareng pengiriman gabungan.</p>
+        <button type="button" className="secondary" style={{ marginTop: 4 }} onClick={() => { navigator.clipboard?.writeText(`Total yang perlu di-TF sekarang: ${formatRupiah(payNowTotal)}`); notify("Disalin ke clipboard"); }}><Copy size={14} /> Salin</button>
+      </div>
+    )}
 
     {/* ===== TOTAL ===== */}
     <div className="order-summary">

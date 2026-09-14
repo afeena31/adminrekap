@@ -469,6 +469,10 @@ a.nav-link:hover { background: #f5ece5; color: #694628; transform: translateY(-1
 /* ===== FEE TAG ===== */
 .fee-tag { display: inline-block; background: linear-gradient(135deg, #fef3e2, #fbe8cd); color: #b06a2a; font-size: 10px !important; font-weight: 600; padding: 2px 8px; border-radius: 6px; margin-top: 4px !important; }
 
+/* ===== "TRANSFER SEKARANG" CHECKBOX (per item) ===== */
+.pay-now-check { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 11px; color: var(--muted); cursor: pointer; }
+.pay-now-check input { width: 15px; height: 15px; accent-color: var(--brown); cursor: pointer; }
+
 /* ===== FEE ROW IN SUMMARY ===== */
 .summary-row.fee-row { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 10px; }
 .summary-row.fee-row span { color: #b06a2a; font-size: 12px; }

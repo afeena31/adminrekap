@@ -129,6 +129,15 @@ function OrderPageInner() {
   const [customOngkir, setCustomOngkir] = useState(0);
   const [customOngkirLabel, setCustomOngkirLabel] = useState("");
   const [dpAmount, setDpAmount] = useState(0);
+  // ===== MODE ORDER HISTORIS (2026-09-14) =====
+  // Utk input order lama yang sudah 100% selesai (ready, sudah dibayar,
+  // sudah diresi) -- daripada admin klik ubah 4 status tiap item satu-satu
+  // (padahal semuanya jelas sudah "Selesai"), tinggal nyalakan toggle ini
+  // sekali: semua item (yang sudah ada MAUPUN yang baru ditambahkan
+  // selagi mode ini aktif) otomatis Tahap Produksi "Proses Packing" +
+  // Tahap Pengiriman "Selesai", dan DP otomatis ngikutin Total Tagihan
+  // (lunas). Tetap bisa diubah manual per-item kalau ada pengecualian.
+  const [historisMode, setHistorisMode] = useState(false);
   const [orderPayments, setOrderPayments] = useState<PaymentRecord[]>([]);
   const [topUpAmount, setTopUpAmount] = useState(0);
   const [note, setNote] = useState("");
@@ -358,6 +367,24 @@ function OrderPageInner() {
   // ada, kalau belum diisi pakai perkiraan otomatis (totalFee) sebagai saran awal.
   const effectiveFee = marketerId ? (feeOverride ?? totalFee) : 0;
 
+  // Begitu Mode Historis dinyalakan: paksa semua item YANG SUDAH ADA saat
+  // itu ke tahap "Selesai" sekali jalan. Item yang ditambahkan SETELAHNYA
+  // (selagi mode masih aktif) diatur langsung di addProduct/addJilbab,
+  // efek ini gak perlu jalan ulang tiap item berubah -- supaya admin masih
+  // bebas ubah manual per-item tanpa "dilawan" balik ke Selesai terus.
+  useEffect(() => {
+    if (!historisMode) return;
+    setItems(prev => prev.map(item => ({ ...item, productionStage: "packing", shipmentStage: "selesai" })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historisMode]);
+
+  // DP selalu ngikutin Total Tagihan selama Mode Historis aktif -- "sudah
+  // selesai" = otomatis lunas, gak masuk akal DP-nya beda dari total.
+  useEffect(() => {
+    if (!historisMode) return;
+    setDpAmount(total);
+  }, [historisMode, total]);
+
 
 
   // ===== DECISION TREE (sesuai Operating Manual) =====
@@ -433,8 +460,10 @@ function OrderPageInner() {
       finalPrice: unitPrice,
       stockSource: baseProduct?.defaultStockSource,
       warehouseId: baseProduct?.defaultStockSource === "ready" && jilbabDefaultWarehouseValid ? baseProduct.defaultWarehouseId : undefined,
-      productionStage: baseProduct?.defaultProductionStage as ProductionStage | undefined,
-      shipmentStage: baseProduct?.defaultShipmentStage as ShipmentStage | undefined,
+      // Mode Historis menang atas default Katalog -- order yg ditandai sudah
+      // selesai total ya harus tetap "Selesai", bukan ikut default operasional biasa.
+      productionStage: historisMode ? "packing" : (baseProduct?.defaultProductionStage as ProductionStage | undefined),
+      shipmentStage: historisMode ? "selesai" : (baseProduct?.defaultShipmentStage as ShipmentStage | undefined),
     }]);
     // Collection Default produk (Katalog) otomatis tercentang — disaring dulu
     // terhadap collectionsList (lihat penjelasan sama di addProduct di bawah).
@@ -482,8 +511,9 @@ function OrderPageInner() {
       detail: variant,
       stockSource: product.defaultStockSource,
       warehouseId: product.defaultStockSource === "ready" && defaultWarehouseValid ? product.defaultWarehouseId : undefined,
-      productionStage: product.defaultProductionStage as ProductionStage | undefined,
-      shipmentStage: product.defaultShipmentStage as ShipmentStage | undefined,
+      // Mode Historis menang atas default Katalog (lihat penjelasan sama di addJilbab).
+      productionStage: historisMode ? "packing" : (product.defaultProductionStage as ProductionStage | undefined),
+      shipmentStage: historisMode ? "selesai" : (product.defaultShipmentStage as ShipmentStage | undefined),
     }]);
     // Collection Default produk (Katalog) otomatis tercentang — gak perlu
     // pilih manual per order lagi kalau produknya sudah diberi default.
@@ -1198,6 +1228,15 @@ function OrderPageInner() {
       <h1>{editingOrderId ? "Edit Order" : "Buat Order Baru"}</h1>
       <p>{editingOrderId ? "Ubah detail order yang sudah ada" : "Pilih produk, atur detail, dan generate invoice sesuai manual"}</p>
     </div>
+
+    {/* ===== MODE ORDER HISTORIS ===== */}
+    <label className="historis-toggle">
+      <input type="checkbox" checked={historisMode} onChange={e => setHistorisMode(e.target.checked)} />
+      <div>
+        <b>📋 Order Historis (input data lama yang sudah selesai)</b>
+        <small>Semua item otomatis Tahap Produksi "Proses Packing" + Tahap Pengiriman "Selesai", dan DP otomatis mengikuti Total Tagihan (lunas) — tetap bisa diubah manual per-item kalau ada pengecualian.</small>
+      </div>
+    </label>
 
     {/* ===== EDIT ORDER SECTION ===== */}
     <div className="edit-order-section">

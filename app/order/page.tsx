@@ -303,7 +303,10 @@ function OrderPageInner() {
     setCustomer(c);
     const defAddr = all.find(a => a.isDefault) || all[0];
     setSelectedAddressId(defAddr?.id || "");
-    setRecipientName(defAddr?.recipientName || "");
+    // Nama penerima biasanya sama dgn nama customer -- pre-isi sbg nilai
+    // (bukan cuma placeholder abu-abu) supaya admin gak perlu ketik ulang
+    // kalau memang sama, tapi tetap bisa diedit/ditambah kalau beda.
+    setRecipientName(defAddr?.recipientName || c.name);
     setPhone(defAddr?.phone || "");
     setAddress(defAddr ? `${defAddr.address}${defAddr.landmark ? ` (${defAddr.landmark})` : ""}` : "");
   };
@@ -316,7 +319,7 @@ function OrderPageInner() {
     setCustomer(toDisplayCustomer(created, []));
     setCustomerAddresses([]);
     setSelectedAddressId("");
-    setRecipientName("");
+    setRecipientName(name);
     setPhone("");
     setAddress("");
     setNewCustomerOpen(false);
@@ -1353,7 +1356,7 @@ function OrderPageInner() {
             <option key={a.id} value={a.id}>{a.isDefault ? "⭐ " : ""}{a.label}</option>
           ))}
         </select>
-        <button className="add-address-btn" onClick={() => setShowAddressModal(true)}>
+        <button className="add-address-btn" onClick={() => { setAddrRecipient(prev => prev || customer.name); setShowAddressModal(true); }}>
           <Plus size={15} /> Tambah
         </button>
       </div>

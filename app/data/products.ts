@@ -39,6 +39,13 @@ export type Product = {
   defaultWarehouseId?: string;
   defaultProductionStage?: string;  // ProductionStage (store.ts)
   defaultShipmentStage?: string;    // ShipmentStage (store.ts)
+  // Izin pilih LEBIH DARI 1 varian sekaligus (2026-09-14) -- mis. buku seri
+  // yang punya beberapa judul, dijual Satuan (1 judul) atau Bundling 2/3
+  // (2/3 judul sekaligus dalam 1 baris item). Default false/undefined
+  // supaya varian simple 1-pilihan (mis. warna Manset) TIDAK berubah
+  // perilaku picker-nya (order/page.tsx) -- fitur ini sengaja opt-in per
+  // produk, bukan aktif otomatis begitu ada >1 varian.
+  allowMultiVariant?: boolean;
 };
 
 

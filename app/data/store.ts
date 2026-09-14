@@ -279,6 +279,7 @@ function mapProductRow(p: Record<string, unknown>): Product {
     defaultWarehouseId: (p.default_warehouse_id as string) ?? undefined,
     defaultProductionStage: (p.default_production_stage as string) ?? undefined,
     defaultShipmentStage: (p.default_shipment_stage as string) ?? undefined,
+    allowMultiVariant: (p.allow_multi_variant as boolean) ?? undefined,
   };
 }
 
@@ -299,6 +300,7 @@ function productToRpcArgs(product: Product) {
     p_berat_gram: product.beratGram ?? null,
     p_default_stock_source: product.defaultStockSource ?? null, p_default_warehouse_id: product.defaultWarehouseId ?? null,
     p_default_production_stage: product.defaultProductionStage ?? null, p_default_shipment_stage: product.defaultShipmentStage ?? null,
+    p_allow_multi_variant: product.allowMultiVariant ?? false,
   };
 }
 

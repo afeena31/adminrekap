@@ -35,6 +35,8 @@ type ProductFormState = {
   defaultWarehouseId: string;
   defaultProductionStage: string;
   defaultShipmentStage: string;
+  variants: string[];
+  allowMultiVariant: boolean;
 };
 
 const emptyForm: ProductFormState = {
@@ -59,6 +61,8 @@ const emptyForm: ProductFormState = {
   defaultWarehouseId: "",
   defaultProductionStage: "",
   defaultShipmentStage: "",
+  variants: [],
+  allowMultiVariant: false,
 };
 
 const emojiOptions = ["📚", "📖", "🐝", "🧕", "🖤", "🧤", "🧦", "🌸", "🚚", "💰", "✨", "📦", "🎈", "🔤", "🔢", "🕌", "🌍", "✂️", "🧵", "🎀"];
@@ -82,6 +86,7 @@ export default function ProductsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [form, setForm] = useState<ProductFormState>(emptyForm);
+  const [variantInput, setVariantInput] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [collectionList, setCollectionList] = useState<Collection[]>([]);
   const [warehouseList, setWarehouseList] = useState<Warehouse[]>([]);
@@ -177,6 +182,7 @@ export default function ProductsPage() {
   const openAddForm = () => {
     setEditingProduct(null);
     setForm(emptyForm);
+    setVariantInput("");
     setShowForm(true);
   };
 
@@ -206,7 +212,10 @@ export default function ProductsPage() {
       defaultWarehouseId: product.defaultWarehouseId || "",
       defaultProductionStage: product.defaultProductionStage || "",
       defaultShipmentStage: product.defaultShipmentStage || "",
+      variants: product.variants || [],
+      allowMultiVariant: product.allowMultiVariant || false,
     });
+    setVariantInput("");
     setShowForm(true);
   };
 
@@ -218,12 +227,12 @@ export default function ProductsPage() {
     const modalKotor = Number(form.modalKotor) || 0;
     const biayaOperasional = Number(form.biayaOperasional) || 0;
     const product: Product = {
-      // Field yang gak punya kontrol form (variants — warna/ukuran preset dari
-      // Master Data; badge — label promo mis. "Diskon") HARUS dibawa dari
-      // produk lama saat diedit, jangan sampai objek baru ini nimpa jadi
-      // undefined & datanya hilang diam-diam (persis bug variants yg sudah
-      // ketemu & diperbaiki sebelumnya — badge kena kelas bug yang sama).
-      variants: editingProduct?.variants,
+      // "badge" (label promo mis. "Diskon") gak punya kontrol form -- HARUS
+      // dibawa dari produk lama saat diedit, jangan sampai objek baru ini
+      // nimpa jadi undefined & datanya hilang diam-diam (bug yg sudah pernah
+      // ketemu & diperbaiki sebelumnya). "variants" SEKARANG punya kontrol
+      // form sendiri (lihat form.variants di bawah), gak perlu dibawa lagi.
+      variants: form.variants.length > 0 ? form.variants : undefined,
       badge: editingProduct?.badge,
       id: editingProduct ? editingProduct.id : "prod-" + Date.now(),
       name: form.name.trim(),
@@ -247,6 +256,7 @@ export default function ProductsPage() {
       defaultWarehouseId: form.defaultWarehouseId || undefined,
       defaultProductionStage: form.defaultProductionStage || undefined,
       defaultShipmentStage: form.defaultShipmentStage || undefined,
+      allowMultiVariant: form.allowMultiVariant || undefined,
     };
 
     try {
@@ -588,6 +598,44 @@ export default function ProductsPage() {
 
           <label>Deskripsi (opsional)
             <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Catatan singkat" />
+          </label>
+
+          <label>Varian (opsional)
+            <p className="field-hint" style={{ margin: "0 0 8px" }}>Pilihan warna/ukuran/judul dalam 1 produk (mis. warna Manset, atau 3 judul dalam 1 seri buku) — customer akan diminta pilih salah satu (atau lebih, kalau "Boleh pilih lebih dari 1" di bawah dicentang) saat produk ini ditambahkan ke order.</p>
+            <div className="variant-input-row">
+              <input
+                value={variantInput}
+                onChange={e => setVariantInput(e.target.value)}
+                placeholder="Contoh: Judul 1 - Nama Buku"
+                onKeyDown={e => {
+                  if (e.key !== "Enter" || !variantInput.trim()) return;
+                  e.preventDefault();
+                  setForm({ ...form, variants: [...form.variants, variantInput.trim()] });
+                  setVariantInput("");
+                }}
+              />
+              <button type="button" onClick={() => {
+                if (!variantInput.trim()) return;
+                setForm({ ...form, variants: [...form.variants, variantInput.trim()] });
+                setVariantInput("");
+              }}><Plus size={15} /> Tambah</button>
+            </div>
+            {form.variants.length > 0 && (
+              <div className="variant-tag-list">
+                {form.variants.map((v, i) => (
+                  <span key={i} className="variant-tag">
+                    {v}
+                    <button type="button" onClick={() => setForm({ ...form, variants: form.variants.filter((_, idx) => idx !== i) })} aria-label={`Hapus varian ${v}`}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {form.variants.length > 1 && (
+              <label className="checkbox-label" style={{ marginTop: 10 }}>
+                <input type="checkbox" checked={form.allowMultiVariant} onChange={e => setForm({ ...form, allowMultiVariant: e.target.checked })} />
+                Boleh pilih lebih dari 1 varian sekaligus (mis. Bundling 2/3 judul)
+              </label>
+            )}
           </label>
 
           <p className="field-hint" style={{ margin: "14px 0 4px" }}>Info utk customer (opsional) — biar mereka gak perlu tanya ulang "kapan ready"/"kapan bayar", dan bisa hitung sendiri estimasi berat paket.</p>

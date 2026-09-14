@@ -307,6 +307,13 @@ alter table products add column if not exists default_stock_source text;
 alter table products add column if not exists default_warehouse_id text references warehouses(id) on delete set null;
 alter table products add column if not exists default_production_stage text;
 alter table products add column if not exists default_shipment_stage text;
+-- Izin pilih LEBIH DARI 1 varian sekaligus (2026-09-14) -- mis. buku seri
+-- "Ma'rifatullah" yang punya 3 judul, dijual Satuan (pilih 1 judul) atau
+-- Bundling 2/3 (pilih 2/3 judul sekaligus). Default false supaya produk
+-- varian yang SUDAH ADA (mis. warna Manset, memang cuma boleh 1 pilihan)
+-- gak berubah perilakunya -- picker varian di order/page.tsx tetap
+-- "tap langsung nambah" kecuali admin sengaja nyalakan ini di produknya.
+alter table products add column if not exists allow_multi_variant boolean not null default false;
 alter table products enable row level security;
 -- Cuma Owner yang boleh tulis langsung (Admin nulis produk baru lewat RPC
 -- di Tahap 4 nanti, biar konsisten -- utk sekarang tabel ini masih kosong,
@@ -402,6 +409,10 @@ drop function if exists update_product(text, text, text, numeric, numeric, text,
 -- or replace di bawah beneran ganti, bukan numpuk overload baru.
 drop function if exists create_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[], text, text, numeric);
 drop function if exists update_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[], text, text, numeric);
+-- Signature 2026-09-14 pagi (waktu default stok/gudang/tahap ditambahkan,
+-- sebelum allow_multi_variant) — drop juga.
+drop function if exists create_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[], text, text, numeric, text, text, text, text);
+drop function if exists update_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[], text, text, numeric, text, text, text, text);
 
 -- ===== RPC: tulis products — Admin BOLEH nulis produk baru (judul, kategori,
 -- harga jual, dll) TAPI kolom cost (modal_kotor/biaya_operasional/hpp/
@@ -420,7 +431,8 @@ create or replace function create_product(
   p_discount_type text, p_active boolean, p_default_collection_ids text[],
   p_estimasi_ready text, p_estimasi_pembayaran text, p_berat_gram numeric,
   p_default_stock_source text, p_default_warehouse_id text,
-  p_default_production_stage text, p_default_shipment_stage text
+  p_default_production_stage text, p_default_shipment_stage text,
+  p_allow_multi_variant boolean
 )
 returns void
 language plpgsql
@@ -429,11 +441,11 @@ set search_path = public
 as $$
 begin
   if is_owner() then
-    insert into products (id, name, category, price, original_price, description, emoji, badge, variants, modal_kotor, biaya_operasional, hpp, fee_marketer, discount_default, discount_type, active, default_collection_ids, estimasi_ready, estimasi_pembayaran, berat_gram, default_stock_source, default_warehouse_id, default_production_stage, default_shipment_stage)
-    values (p_id, p_name, p_category, p_price, p_original_price, p_description, p_emoji, p_badge, p_variants, p_modal_kotor, p_biaya_operasional, p_hpp, p_fee_marketer, p_discount_default, p_discount_type, p_active, p_default_collection_ids, p_estimasi_ready, p_estimasi_pembayaran, p_berat_gram, p_default_stock_source, p_default_warehouse_id, p_default_production_stage, p_default_shipment_stage);
+    insert into products (id, name, category, price, original_price, description, emoji, badge, variants, modal_kotor, biaya_operasional, hpp, fee_marketer, discount_default, discount_type, active, default_collection_ids, estimasi_ready, estimasi_pembayaran, berat_gram, default_stock_source, default_warehouse_id, default_production_stage, default_shipment_stage, allow_multi_variant)
+    values (p_id, p_name, p_category, p_price, p_original_price, p_description, p_emoji, p_badge, p_variants, p_modal_kotor, p_biaya_operasional, p_hpp, p_fee_marketer, p_discount_default, p_discount_type, p_active, p_default_collection_ids, p_estimasi_ready, p_estimasi_pembayaran, p_berat_gram, p_default_stock_source, p_default_warehouse_id, p_default_production_stage, p_default_shipment_stage, coalesce(p_allow_multi_variant, false));
   else
-    insert into products (id, name, category, price, original_price, description, emoji, badge, variants, active, default_collection_ids, estimasi_ready, estimasi_pembayaran, berat_gram, default_stock_source, default_warehouse_id, default_production_stage, default_shipment_stage)
-    values (p_id, p_name, p_category, p_price, p_original_price, p_description, p_emoji, p_badge, p_variants, p_active, p_default_collection_ids, p_estimasi_ready, p_estimasi_pembayaran, p_berat_gram, p_default_stock_source, p_default_warehouse_id, p_default_production_stage, p_default_shipment_stage);
+    insert into products (id, name, category, price, original_price, description, emoji, badge, variants, active, default_collection_ids, estimasi_ready, estimasi_pembayaran, berat_gram, default_stock_source, default_warehouse_id, default_production_stage, default_shipment_stage, allow_multi_variant)
+    values (p_id, p_name, p_category, p_price, p_original_price, p_description, p_emoji, p_badge, p_variants, p_active, p_default_collection_ids, p_estimasi_ready, p_estimasi_pembayaran, p_berat_gram, p_default_stock_source, p_default_warehouse_id, p_default_production_stage, p_default_shipment_stage, coalesce(p_allow_multi_variant, false));
   end if;
 end;
 $$;
@@ -446,7 +458,8 @@ create or replace function update_product(
   p_discount_type text, p_active boolean, p_default_collection_ids text[],
   p_estimasi_ready text, p_estimasi_pembayaran text, p_berat_gram numeric,
   p_default_stock_source text, p_default_warehouse_id text,
-  p_default_production_stage text, p_default_shipment_stage text
+  p_default_production_stage text, p_default_shipment_stage text,
+  p_allow_multi_variant boolean
 )
 returns void
 language plpgsql
@@ -463,20 +476,22 @@ begin
       active = p_active, default_collection_ids = p_default_collection_ids,
       estimasi_ready = p_estimasi_ready, estimasi_pembayaran = p_estimasi_pembayaran, berat_gram = p_berat_gram,
       default_stock_source = p_default_stock_source, default_warehouse_id = p_default_warehouse_id,
-      default_production_stage = p_default_production_stage, default_shipment_stage = p_default_shipment_stage
+      default_production_stage = p_default_production_stage, default_shipment_stage = p_default_shipment_stage,
+      allow_multi_variant = coalesce(p_allow_multi_variant, false)
     where id = p_id;
   else
     -- Kolom cost SAMA SEKALI GAK DISENTUH di sini (bukan ditulis NULL) —
     -- tetap apapun nilainya yang sudah ada sebelumnya (biasanya diisi Owner).
-    -- estimasi_ready/estimasi_pembayaran/berat_gram/default_* TETAP ditulis
-    -- (gak sensitif, Admin boleh atur jadwal default sendiri).
+    -- estimasi_ready/estimasi_pembayaran/berat_gram/default_*/allow_multi_variant
+    -- TETAP ditulis (gak sensitif, Admin boleh atur sendiri).
     update products set
       name = p_name, category = p_category, price = p_price, original_price = p_original_price,
       description = p_description, emoji = p_emoji, badge = p_badge, variants = p_variants,
       active = p_active, default_collection_ids = p_default_collection_ids,
       estimasi_ready = p_estimasi_ready, estimasi_pembayaran = p_estimasi_pembayaran, berat_gram = p_berat_gram,
       default_stock_source = p_default_stock_source, default_warehouse_id = p_default_warehouse_id,
-      default_production_stage = p_default_production_stage, default_shipment_stage = p_default_shipment_stage
+      default_production_stage = p_default_production_stage, default_shipment_stage = p_default_shipment_stage,
+      allow_multi_variant = coalesce(p_allow_multi_variant, false)
     where id = p_id;
   end if;
 end;
@@ -629,8 +644,8 @@ create unique index payments_split_bill_shopee_unique
 grant execute on function get_products() to authenticated;
 grant execute on function get_order_items(text) to authenticated;
 grant execute on function get_fees() to authenticated;
-grant execute on function create_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[], text, text, numeric, text, text, text, text) to authenticated;
-grant execute on function update_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[], text, text, numeric, text, text, text, text) to authenticated;
+grant execute on function create_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[], text, text, numeric, text, text, text, text, boolean) to authenticated;
+grant execute on function update_product(text, text, text, numeric, numeric, text, text, text, text[], numeric, numeric, numeric, numeric, numeric, text, boolean, text[], text, text, numeric, text, text, text, text, boolean) to authenticated;
 grant execute on function create_order_item(text, text, text, text, text, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, jsonb) to authenticated;
 grant execute on function update_order_item(text, text, text, text, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, jsonb) to authenticated;
 grant execute on function delete_order_item(text) to authenticated;

@@ -164,6 +164,11 @@ function OrderPageInner() {
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [variantPickProduct, setVariantPickProduct] = useState<Product | null>(null);
+  // Varian yang dicentang di picker multi-pilih (product.allowMultiVariant) --
+  // direset tiap kali produk yang lagi dipilih variannya berganti (termasuk
+  // saat picker ditutup), biar gak nyangkut ke produk berikutnya.
+  const [selectedVariants, setSelectedVariants] = useState<string[]>([]);
+  useEffect(() => { setSelectedVariants([]); }, [variantPickProduct]);
   // Produk yang baru-baru ini ditambahkan ke order (device ini) -- dipakai
   // urutkan "Pilih Produk" biar judul yang lagi sering dibikin invoice tetap
   // di area atas, walau ganti-ganti customer. Murni preferensi per-device
@@ -1997,11 +2002,30 @@ function OrderPageInner() {
             <button type="button" className="quick-payment-back" onClick={() => setVariantPickProduct(null)}><ChevronLeft size={16} /> Kembali</button>
             <h2>Pilih Warna/Varian</h2>
             <p className="field-hint" style={{ marginBottom: 14 }}>{variantPickProduct.emoji} {variantPickProduct.name} · {formatRupiah(variantPickProduct.price)}</p>
-            <div className="warna-chips">
-              {variantPickProduct.variants!.map(v => (
-                <button key={v} type="button" onClick={() => addProduct(variantPickProduct, v)}>{v}</button>
-              ))}
-            </div>
+            {variantPickProduct.allowMultiVariant ? (
+              <>
+                <p className="field-hint" style={{ marginBottom: 10 }}>Bisa pilih lebih dari satu (mis. Bundling 2/3 judul) — centang semua yang sesuai, lalu tekan Tambahkan.</p>
+                <div className="warna-chips">
+                  {variantPickProduct.variants!.map(v => {
+                    const active = selectedVariants.includes(v);
+                    return (
+                      <button key={v} type="button" className={active ? "selected" : ""} onClick={() => setSelectedVariants(prev => active ? prev.filter(x => x !== v) : [...prev, v])}>
+                        {active ? "✓ " : ""}{v}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button type="button" className="primary" style={{ width: "100%", marginTop: 14 }} disabled={selectedVariants.length === 0} onClick={() => addProduct(variantPickProduct, selectedVariants.join(", "))}>
+                  <Plus size={16} /> Tambahkan {selectedVariants.length > 0 ? `(${selectedVariants.length} dipilih)` : ""}
+                </button>
+              </>
+            ) : (
+              <div className="warna-chips">
+                {variantPickProduct.variants!.map(v => (
+                  <button key={v} type="button" onClick={() => addProduct(variantPickProduct, v)}>{v}</button>
+                ))}
+              </div>
+            )}
           </>
         ) : (
           <>

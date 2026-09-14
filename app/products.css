@@ -151,6 +151,15 @@ a.icon-btn { text-decoration: none; display: inline-flex; align-items: center; j
 .emoji-picker button.selected { border-color: var(--brown); background: #f5ece5; }
 .checkbox-label { display: flex !important; align-items: center; gap: 8px; font-weight: 500 !important; }
 .checkbox-label input { width: auto; margin: 0; }
+
+/* ===== VARIAN PRODUK (editor tag) ===== */
+.variant-input-row { display: flex; gap: 8px; margin-top: 6px; }
+.variant-input-row input { flex: 1; margin-top: 0; }
+.variant-input-row button { flex: 0 0 auto; display: flex; align-items: center; gap: 5px; border: 1px solid var(--brown); background: #fff; color: var(--brown); border-radius: 10px; padding: 0 14px; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.variant-tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.variant-tag { display: inline-flex; align-items: center; gap: 6px; background: #f5ece5; border: 1px solid var(--line); border-radius: 999px; padding: 5px 6px 5px 12px; font-size: 12px; font-weight: 600; color: var(--ink); }
+.variant-tag button { border: 0; background: transparent; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; }
+.variant-tag button:hover { background: rgba(116, 80, 52, 0.15); color: var(--brown); }
 .form-preview { background: #fbf6ee; border: 1px solid #f0e6d8; border-radius: 12px; padding: 14px; margin-bottom: 16px; display: grid; gap: 6px; }
 .form-preview div { display: flex; justify-content: space-between; font-size: 13px; }
 .form-preview span { color: var(--muted); }

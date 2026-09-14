@@ -39,7 +39,7 @@ export type CustomRequest = {
 // dimasukkan ke productionStageOrder lagi (gak muncul lagi sbg pilihan baru
 // di dropdown) — sesuai rute baru yang berhenti di "Proses Packing".
 export type ProductionStage = "po" | "ready-pusat" | "produksi" | "antre-qc" | "qc" | "antre-packing" | "packing" | "siap-kirim";
-export type ShipmentStage = "antre-pusat" | "antre-packing" | "sudah-dipacking" | "proses-resi" | "dalam-pengiriman" | "selesai" | "ditunda" | "retur" | "refund";
+export type ShipmentStage = "menunggu-ready" | "antre-pusat" | "antre-packing" | "sudah-dipacking" | "proses-resi" | "dalam-pengiriman" | "selesai" | "ditunda" | "retur" | "refund";
 
 // "ready-pusat" (2026-09-13): khusus buku Etalase YasLa yang diambil dari
 // supplier (bukan diproduksi sendiri) -- barang sudah tersedia/ready di
@@ -70,12 +70,17 @@ export const productionStageInfo: Record<ProductionStage, { name: string; emoji:
 // lama) yang cuma label-nya diperbarui jadi "Terkirim"/"Dihold".
 // "ditunda"/"retur"/"refund" TETAP di luar shipmentStageOrder (linear) —
 // status khusus yang bisa terjadi kapan saja, bukan tahap lanjutan.
-// "antre-pusat" (2026-09-13): tahap PALING AWAL -- artinya barang belum
-// ready di tempat kami sama sekali (masih di pusat/supplier), jadi belum
-// bisa masuk "Antre Packing" (itu udah di tangan kami, tinggal nunggu
-// giliran packing).
-export const shipmentStageOrder: ShipmentStage[] = ["antre-pusat", "antre-packing", "sudah-dipacking", "proses-resi", "dalam-pengiriman", "selesai"];
+// "antre-pusat" (2026-09-13): artinya barang belum ready di tempat kami
+// sama sekali (masih di pusat/supplier, tapi SUDAH ready di sana), jadi
+// belum bisa masuk "Antre Packing" (itu udah di tangan kami, tinggal
+// nunggu giliran packing).
+// "menunggu-ready" (2026-09-14): tahap PALING AWAL -- dipakai kalau tahap
+// Produksi item ini masih "PO" (belum ready sama sekali di manapun, bukan
+// cuma belum sampai ke kami) -- beda dari "antre-pusat" yang barangnya
+// sudah ready, cuma belum dikirim ke kami.
+export const shipmentStageOrder: ShipmentStage[] = ["menunggu-ready", "antre-pusat", "antre-packing", "sudah-dipacking", "proses-resi", "dalam-pengiriman", "selesai"];
 export const shipmentStageInfo: Record<ShipmentStage, { name: string; emoji: string }> = {
+  "menunggu-ready": { name: "Menunggu Ready", emoji: "⏳" },
   "antre-pusat": { name: "Antre di Pusat", emoji: "📥" },
   "antre-packing": { name: "Antre Packing", emoji: "🗂️" },
   "sudah-dipacking": { name: "Sudah Dipacking", emoji: "📦" },

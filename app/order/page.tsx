@@ -584,6 +584,35 @@ function OrderPageInner() {
     return lines.join("\n");
   };
 
+  // ===== TEKS PENDEK: TOTAL TRANSFER + REKENING SAJA =====
+  // Dipisah dari buildInvoiceText (yang isinya rincian LENGKAP) -- dipakai
+  // saat invoice dikirim sebagai FOTO (foto gak bisa di-tap nomor rekeningnya),
+  // jadi customer tetap bisa tap-untuk-salin nomor rekening dari teks ini
+  // tanpa perlu ngetik ulang manual dari gambar.
+  const buildPaymentText = (inv: Invoice): string => {
+    const splitCredit = inv.splitShopee ? SPLIT_BILL_PRODUK : 0;
+    const hasPartialPayment = inv.type === "po-amna" || inv.dp > 0 || splitCredit > 0;
+    const amountDue = hasPartialPayment ? Math.max(0, inv.total - inv.dp - splitCredit) : inv.total;
+    const lines: string[] = [];
+    lines.push(`💰 Total Transfer: Rp${fmt(amountDue)}`);
+    const rek = determineRekening(inv.items.map(i => i.category || "lainnya"));
+    if (rek) {
+      lines.push("");
+      lines.push("Ke rekening:");
+      lines.push(rek.name);
+      lines.push(rek.bank);
+      lines.push(rek.number);
+      lines.push("a/n " + rek.owner);
+    }
+    return lines.join("\n");
+  };
+
+  const copyPaymentInfo = () => {
+    if (!invoice) return;
+    navigator.clipboard?.writeText(buildPaymentText(invoice));
+    notify("Info pembayaran (total + rekening) disalin ke clipboard");
+  };
+
   const generateInvoice = async () => {
     if (items.length === 0) { notify("Tambahkan produk dulu"); return; }
     const now = new Date();
@@ -1044,7 +1073,7 @@ function OrderPageInner() {
       const fileName = `Invoice-${invoice.number.replace(/\//g, "-")}.png`;
       const file = new File([blob], fileName, { type: "image/png" });
       if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: fileName });
+        await navigator.share({ files: [file], title: fileName, text: buildPaymentText(invoice) });
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -1809,6 +1838,7 @@ function OrderPageInner() {
         </div>
         <div className="invoice-actions">
           <button className="secondary" disabled={generatingImage} onClick={sendInvoiceAsImage}><Camera size={16} /> {generatingImage ? "Menyiapkan foto..." : "Kirim sebagai Foto"}</button>
+          <button className="secondary" onClick={copyPaymentInfo}><Copy size={16} /> Salin Total + Rekening</button>
         </div>
         <div className="invoice-actions">
           <button className="secondary" onClick={() => { setInvoice(null); setItems([]); setItemCategoryMap({}); setDpAmount(0); setOrderPayments([]); setTopUpAmount(0); setNote(""); setInternalNote(""); setDiscountValue(0); setMarketerId(""); setEditingOrderId(null); notify("Order baru siap dibuat"); }}><Check size={16} /> Selesai</button>

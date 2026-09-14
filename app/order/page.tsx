@@ -551,6 +551,21 @@ function OrderPageInner() {
     });
   };
 
+  // ===== "TRANSFER TAHAP 1" — dari item yg dicentang "Transfer sekarang" =====
+  // invoice.items adalah SNAPSHOT items (state) saat "Generate Invoice"
+  // diklik, termasuk flag payNow-nya -- jadi bisa dipakai lintas render
+  // (buildInvoiceText/buildPaymentText/modal invoice), gak cuma pas lagi
+  // nyusun order. null kalau gak ada yg dicentang, atau SEMUA item dicentang
+  // (berarti bukan pembayaran bertahap, "Total Tagihan" biasa sudah cukup).
+  const getPayNowBreakdown = (inv: Invoice) => {
+    const payNowItems = inv.items.filter(i => i.payNow);
+    if (payNowItems.length === 0 || payNowItems.length === inv.items.length) return null;
+    const payNowSubtotal = payNowItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+    const payNowDiscount = inv.subtotal > 0 ? inv.discountAmount * (payNowSubtotal / inv.subtotal) : 0;
+    const payNowTotal = payNowSubtotal - payNowDiscount;
+    return { count: payNowItems.length, remainingCount: inv.items.length - payNowItems.length, total: payNowTotal, remaining: Math.max(0, inv.total - payNowTotal) };
+  };
+
   // ===== GENERATE INVOICE TEXT (sesuai Operating Manual) =====
   const buildInvoiceText = (inv: Invoice): string => {
     const lines: string[] = [];
@@ -618,6 +633,15 @@ function OrderPageInner() {
       lines.push("TOTAL:");
       lines.push("Rp" + fmt(inv.total));
     }
+    const payNowBreakdown = getPayNowBreakdown(inv);
+    if (payNowBreakdown) {
+      lines.push("");
+      lines.push(`💰 Transfer Tahap 1 (${payNowBreakdown.count} produk sudah ready):`);
+      lines.push("Rp" + fmt(payNowBreakdown.total));
+      lines.push("");
+      lines.push(`Sisanya menyusul (${payNowBreakdown.remainingCount} produk masih PO):`);
+      lines.push("Rp" + fmt(payNowBreakdown.remaining));
+    }
     if (inv.note) {
       lines.push("");
       lines.push("Catatan:");
@@ -643,11 +667,17 @@ function OrderPageInner() {
   // jadi customer tetap bisa tap-untuk-salin nomor rekening dari teks ini
   // tanpa perlu ngetik ulang manual dari gambar.
   const buildPaymentText = (inv: Invoice): string => {
-    const splitCredit = inv.splitShopee ? SPLIT_BILL_PRODUK : 0;
-    const hasPartialPayment = inv.type === "po-amna" || inv.dp > 0 || splitCredit > 0;
-    const amountDue = hasPartialPayment ? Math.max(0, inv.total - inv.dp - splitCredit) : inv.total;
     const lines: string[] = [];
-    lines.push(`💰 Total Transfer: Rp${fmt(amountDue)}`);
+    const payNowBreakdown = getPayNowBreakdown(inv);
+    if (payNowBreakdown) {
+      lines.push(`💰 Transfer Tahap 1 (${payNowBreakdown.count} produk sudah ready): Rp${fmt(payNowBreakdown.total)}`);
+      lines.push(`Sisanya menyusul: Rp${fmt(payNowBreakdown.remaining)}`);
+    } else {
+      const splitCredit = inv.splitShopee ? SPLIT_BILL_PRODUK : 0;
+      const hasPartialPayment = inv.type === "po-amna" || inv.dp > 0 || splitCredit > 0;
+      const amountDue = hasPartialPayment ? Math.max(0, inv.total - inv.dp - splitCredit) : inv.total;
+      lines.push(`💰 Total Transfer: Rp${fmt(amountDue)}`);
+    }
     const rek = determineRekening(inv.items.map(i => i.category || "lainnya"));
     if (rek) {
       lines.push("");
@@ -1921,6 +1951,14 @@ function OrderPageInner() {
           {(invoice.type === "po-amna" || invoice.dp > 0 || invoice.splitShopee) && <div className="invoice-sisa">
             <span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, invoice.total - invoice.dp - (invoice.splitShopee ? SPLIT_BILL_PRODUK : 0)))}</b>
           </div>}
+          {(() => {
+            const payNowBreakdown = getPayNowBreakdown(invoice);
+            if (!payNowBreakdown) return null;
+            return <>
+              <div className="invoice-sisa"><span>💰 Transfer Tahap 1 ({payNowBreakdown.count} produk sudah ready)</span><b>{formatRupiah(payNowBreakdown.total)}</b></div>
+              <div><span>Sisanya menyusul ({payNowBreakdown.remainingCount} produk masih PO)</span><b>{formatRupiah(payNowBreakdown.remaining)}</b></div>
+            </>;
+          })()}
         </div>
         {invoice.note && <div className="invoice-note"><b>Catatan:</b> {invoice.note}</div>}
         </div>

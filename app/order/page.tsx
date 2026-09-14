@@ -91,6 +91,33 @@ type Invoice = {
 
 const fmt = (v: number) => v.toLocaleString("id-ID");
 
+// ===== PRODUK YANG BARU DIPAKAI (localStorage, per-device) =====
+// Murni preferensi urutan tampilan "Pilih Produk" -- judul yang baru
+// ditambahkan ke order (device ini) naik ke atas, biar gak perlu scroll/
+// cari ulang tiap kali ganti customer selagi lagi batch bikin invoice
+// utk judul yang sama. Bukan data bisnis, gak perlu Supabase.
+const RECENT_PRODUCTS_KEY = "umayasla_recent_products";
+const RECENT_PRODUCTS_LIMIT = 20;
+
+function getRecentProductIds(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_PRODUCTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function recordRecentProduct(productId: string): string[] {
+  try {
+    const next = [productId, ...getRecentProductIds().filter(id => id !== productId)].slice(0, RECENT_PRODUCTS_LIMIT);
+    localStorage.setItem(RECENT_PRODUCTS_KEY, JSON.stringify(next));
+    return next;
+  } catch {
+    return getRecentProductIds();
+  }
+}
+
 export default function OrderPage() {
   return <Suspense fallback={null}><OrderPageInner /></Suspense>;
 }
@@ -125,6 +152,11 @@ function OrderPageInner() {
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [variantPickProduct, setVariantPickProduct] = useState<Product | null>(null);
+  // Produk yang baru-baru ini ditambahkan ke order (device ini) -- dipakai
+  // urutkan "Pilih Produk" biar judul yang lagi sering dibikin invoice tetap
+  // di area atas, walau ganti-ganti customer. Murni preferensi per-device
+  // (localStorage), gak perlu disinkronkan ke Supabase.
+  const [recentProductIds, setRecentProductIds] = useState<string[]>([]);
   const [ongkirId, setOngkirId] = useState("id-jawa");
   const [customOngkir, setCustomOngkir] = useState(0);
   const [customOngkirLabel, setCustomOngkirLabel] = useState("");
@@ -233,6 +265,7 @@ function OrderPageInner() {
     // async, dimuat terpisah dari getter localStorage lain di atas.
     getWarehouses().then(setWarehouseList);
     getInventory().then(setInventoryList);
+    setRecentProductIds(getRecentProductIds());
   }, []);
 
   useEffect(() => {
@@ -525,6 +558,7 @@ function OrderPageInner() {
     if (validDefaultCollections.length > 0) {
       setItemCategoryMap(prev => ({ ...prev, [newItemId]: validDefaultCollections }));
     }
+    setRecentProductIds(recordRecentProduct(product.id));
     setShowProductPicker(false);
     setVariantPickProduct(null);
     notify(`${product.name}${variant ? ` (${variant})` : ""} ditambahkan`);
@@ -1925,6 +1959,17 @@ function OrderPageInner() {
               {productList
                 .filter(p => p.category !== "amna-jilbab" && p.active !== false)
                 .filter(p => p.name.toLowerCase().includes(productSearch.trim().toLowerCase()))
+                // Yang baru-baru ini dipakai naik ke atas (paling baru duluan),
+                // sisanya tetap urutan aslinya (sort stabil) -- lihat
+                // recordRecentProduct/RECENT_PRODUCTS_KEY di atas.
+                .sort((a, b) => {
+                  const aIdx = recentProductIds.indexOf(a.id);
+                  const bIdx = recentProductIds.indexOf(b.id);
+                  if (aIdx === -1 && bIdx === -1) return 0;
+                  if (aIdx === -1) return 1;
+                  if (bIdx === -1) return -1;
+                  return aIdx - bIdx;
+                })
                 .map(p => (
                 <button key={p.id} onClick={() => (p.variants && p.variants.length > 1) ? setVariantPickProduct(p) : addProduct(p, p.variants?.[0])}>
                   <span className="picker-emoji">{p.emoji}</span>

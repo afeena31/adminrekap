@@ -108,6 +108,18 @@ function getRecentProductIds(): string[] {
   }
 }
 
+// ===== CATATAN PRESET (2026-09-14) =====
+// Kalimat yang sering dipakai berulang di "Catatan (opsional)" -- daripada
+// ngetik ulang tiap order, tinggal centang. Toggle: nambah/nyabut 1 baris
+// dari note (bukan nimpa isi lain), jadi masih bisa digabung dgn teks
+// bebas atau beberapa preset sekaligus.
+const CATATAN_PRESETS = [
+  "Tidak ada pesanan buku lainnya",
+  "Menunggu pesanan lainnya",
+  "Menunggu semua pesanan ready",
+  "Kirim terpisah, beda kota pengiriman",
+];
+
 function recordRecentProduct(productId: string): string[] {
   try {
     const next = [productId, ...getRecentProductIds().filter(id => id !== productId)].slice(0, RECENT_PRODUCTS_LIMIT);
@@ -157,6 +169,7 @@ function OrderPageInner() {
   // di area atas, walau ganti-ganti customer. Murni preferensi per-device
   // (localStorage), gak perlu disinkronkan ke Supabase.
   const [recentProductIds, setRecentProductIds] = useState<string[]>([]);
+  const [catatanPickerOpen, setCatatanPickerOpen] = useState(false);
   const [ongkirId, setOngkirId] = useState("id-jawa");
   const [customOngkir, setCustomOngkir] = useState(0);
   const [customOngkirLabel, setCustomOngkirLabel] = useState("");
@@ -607,6 +620,18 @@ function OrderPageInner() {
       const current = prev[itemId] || [];
       const next = current.includes(collectionId) ? current.filter(c => c !== collectionId) : [...current, collectionId];
       return { ...prev, [itemId]: next };
+    });
+  };
+
+  // Nambah/nyabut 1 baris preset di Catatan tanpa nimpa baris lain (teks
+  // bebas yg sudah diketik admin, atau preset lain yg sudah dicentang, tetap
+  // aman). Dicocokkan exact-line, bukan substring -- kalau admin ubah dikit
+  // teksnya jadi gak match lagi, itu wajar (bukan preset itu lagi).
+  const toggleCatatanPreset = (preset: string) => {
+    setNote(prev => {
+      const lines = prev.split("\n").map(l => l.trim()).filter(Boolean);
+      const next = lines.includes(preset) ? lines.filter(l => l !== preset) : [...lines, preset];
+      return next.join("\n");
     });
   };
 
@@ -1795,6 +1820,22 @@ function OrderPageInner() {
 
       <div className="setting-row">
         <label>Catatan (opsional)</label>
+        <button type="button" className="category-toggle" onClick={() => setCatatanPickerOpen(!catatanPickerOpen)}>
+          <small className="category-label">💬 Kalimat Cepat</small>
+          <span className="category-toggle-arrow">{catatanPickerOpen ? "▴" : "▾"}</span>
+        </button>
+        {catatanPickerOpen && (
+          <div className="category-chips category-chips-scroll" style={{ marginBottom: 10 }}>
+            {CATATAN_PRESETS.map(preset => {
+              const active = note.split("\n").map(l => l.trim()).includes(preset);
+              return (
+                <button type="button" key={preset} className={`category-chip ${active ? "active" : ""}`} onClick={() => toggleCatatanPreset(preset)}>
+                  {active ? "✓ " : ""}{preset}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Contoh: kirim sekalian jika semua barang ready" />
         <small className="field-hint">Catatan ini ikut tampil di invoice & pesan WhatsApp ke customer.</small>
       </div>

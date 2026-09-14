@@ -563,7 +563,11 @@ function OrderPageInner() {
     const payNowSubtotal = payNowItems.reduce((sum, item) => sum + item.price * item.qty, 0);
     const payNowDiscount = inv.subtotal > 0 ? inv.discountAmount * (payNowSubtotal / inv.subtotal) : 0;
     const payNowTotal = payNowSubtotal - payNowDiscount;
-    return { count: payNowItems.length, remainingCount: inv.items.length - payNowItems.length, total: payNowTotal, remaining: Math.max(0, inv.total - payNowTotal) };
+    // "Sisanya menyusul" itu pembayaran TAHAP 2 (sisa produk + ongkir) --
+    // krn kredit Split Bill Shopee sengaja ditujukan utk tahap ini (bukan
+    // tahap 1), harus dikurangi dari sini juga, bukan cuma dari Total Tagihan.
+    const splitCredit = inv.splitShopee ? SPLIT_BILL_PRODUK : 0;
+    return { count: payNowItems.length, remainingCount: inv.items.length - payNowItems.length, total: payNowTotal, remaining: Math.max(0, inv.total - payNowTotal - splitCredit) };
   };
 
   // ===== GENERATE INVOICE TEXT (sesuai Operating Manual) =====

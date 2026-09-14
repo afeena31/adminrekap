@@ -1161,6 +1161,13 @@ function OrderPageInner() {
       const file = new File([blob], fileName, { type: "image/png" });
       if (navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: fileName, text: buildPaymentText(invoice) });
+        // TANPA notify di sini, admin gak tahu share-nya beneran ke-handle
+        // atau enggak (share sheet cuma nutup diam-diam) -- bikin ragu & tap
+        // tombolnya lagi, ujung-ujungnya kekirim 2x ke customer. "Siap
+        // dikirim" (bukan "sudah terkirim") krn navigator.share() resolve
+        // begitu WhatsApp kebuka dgn foto/teksnya, BUKAN nunggu admin
+        // beneran pencet Send di dalam WhatsApp-nya.
+        notify("Foto siap dikirim — lanjutkan di WhatsApp");
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");

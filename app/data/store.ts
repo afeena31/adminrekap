@@ -922,6 +922,64 @@ export async function recordPaymentForOrder(order: OrderRecord, amount: number, 
   return { updatedOrder, payment };
 }
 
+// ===== KREDIT CUSTOMER (saldo lebih bayar, 2026-09-15) =====
+// Ledger (bukan kolom saldo tunggal) -- saldo customer = SUM(amount) semua
+// barisnya, selalu dihitung ulang dari sumber (bukan angka cache terpisah
+// yg bisa nyimpang). amount positif = kelebihan bayar order jadi kredit,
+// amount negatif = kredit dipakai (mengurangi tagihan order lain).
+export type CustomerCredit = {
+  id: string;
+  customerId: string;
+  orderId: string | null;
+  amount: number;
+  reason: string;
+  createdAt: number;
+};
+
+function mapCustomerCreditRow(r: Record<string, unknown>): CustomerCredit {
+  return {
+    id: r.id as string,
+    customerId: r.customer_id as string,
+    orderId: (r.order_id as string) ?? null,
+    amount: r.amount as number,
+    reason: r.reason as string,
+    createdAt: Number(r.created_at),
+  };
+}
+
+export async function getCustomerCredits(customerId: string): Promise<CustomerCredit[]> {
+  const { data, error } = await supabase.from("customer_credits").select("*").eq("customer_id", customerId).order("created_at", { ascending: false });
+  if (error) { console.error("[getCustomerCredits]", error.message); return []; }
+  return ((data || []) as Record<string, unknown>[]).map(mapCustomerCreditRow);
+}
+
+export async function getCustomerCreditBalance(customerId: string): Promise<number> {
+  const credits = await getCustomerCredits(customerId);
+  return credits.reduce((sum, c) => sum + c.amount, 0);
+}
+
+// Dipanggil tiap order disimpan (baru maupun edit) -- hapus dulu baris
+// lama milik order ini (bikin ini AMAN dipanggil berkali-kali/idempotent,
+// gak dobel walau order diedit berulang), baru tulis ulang sesuai kondisi
+// TERKINI: 1 baris "dipakai" (kalau creditUsed > 0) dan/atau 1 baris
+// "kelebihan bayar baru" (kalau overpayment > 0). Order yang gak menyentuh
+// kredit sama sekali (kasus normal, paling sering) -- gak nulis apa-apa.
+export async function syncOrderCredit(orderId: string, customerId: string | null | undefined, creditUsed: number, overpayment: number, orderNumber: string): Promise<void> {
+  if (!customerId) return;
+  const { error: delError } = await supabase.from("customer_credits").delete().eq("order_id", orderId);
+  if (delError) console.error("[syncOrderCredit:delete]", delError.message);
+  const rows: Record<string, unknown>[] = [];
+  if (creditUsed > 0) {
+    rows.push({ id: "cred-use-" + orderId, customer_id: customerId, order_id: orderId, amount: -creditUsed, reason: `Dipakai untuk order ${orderNumber}`, created_at: Date.now() });
+  }
+  if (overpayment > 0) {
+    rows.push({ id: "cred-gain-" + orderId, customer_id: customerId, order_id: orderId, amount: overpayment, reason: `Kelebihan pembayaran order ${orderNumber}`, created_at: Date.now() });
+  }
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("customer_credits").insert(rows);
+  if (error) console.error("[syncOrderCredit:insert]", error.message);
+}
+
 // ===== WAREHOUSE STORE (Tahap 4 migrasi backend — Supabase, bukan localStorage lagi) =====
 // Semua fungsi di bawah sekarang ASYNC (query Supabase). Dipertahankan
 // entity-list-return-nya (Warehouse[]/Inventory[]) biar bentuk data yg

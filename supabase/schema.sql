@@ -207,6 +207,27 @@ drop policy if exists "payments_all_authenticated" on payments;
 create policy "payments_all_authenticated" on payments for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
+-- ===== CUSTOMER CREDITS (saldo lebih bayar, 2026-09-15) =====
+-- Ledger, bukan kolom saldo tunggal -- tiap baris merepresentasikan SATU
+-- kejadian (kelebihan bayar dari 1 order jadi +amount, ATAU dipakai ke 1
+-- order jadi -amount). Saldo customer = SUM(amount) semua barisnya, gak
+-- ada kolom "balance" terpisah yg bisa nyimpang dari histori -- selalu
+-- dihitung ulang dari sumber. order_id dipakai buat rekonsiliasi idempotent
+-- (tiap kali order disimpan, baris lama miliknya dihapus dulu baru ditulis
+-- ulang, jadi aman diedit berkali-kali tanpa dobel).
+create table if not exists customer_credits (
+  id text primary key,
+  customer_id text not null references customers(id) on delete cascade,
+  order_id text references orders(id) on delete set null,
+  amount numeric not null,
+  reason text not null default '',
+  created_at bigint not null
+);
+alter table customer_credits enable row level security;
+drop policy if exists "customer_credits_all_authenticated" on customer_credits;
+create policy "customer_credits_all_authenticated" on customer_credits for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
 -- ===== COLLECTIONS (Collection Workspace) =====
 create table if not exists collections (
   id text primary key,

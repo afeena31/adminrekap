@@ -12,7 +12,7 @@ import { goBack } from "../lib/goBack";
 
 import { formatRupiah, jilbabSizes, jilbabPads, jilbabModifikasi, AMNA_DEFAULT_FABRIC, AMNA_DEFAULT_COLOR, ongkirOptions, invoiceTypeInfo, determineRekening, SPLIT_BILL_PRODUK, type Product, type InvoiceType } from "../data/products";
 import { toDisplayCustomer, createNewCustomer, EMPTY_CUSTOMER, type Customer, type CustomerAddress } from "../data/customers";
-import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, recordPaymentForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, getWarehouses, getTotalAvailable, adjustStock, getInventory, inventoryAvailable, type OrderItemSnapshot, type Inventory, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus, type Warehouse } from "../data/store";
+import { getProducts, getMarketers, getActiveMarketers, addMarketer, saveOrder, updateOrder, deleteOrder, getOrders, getOrderById, saveFee, removeFeeForOrder, getNextInvoiceNumber, getBatchNames, addBatchName, calculateDiscount, calculateOrderFee, getPaymentsForOrder, addPayment, deletePayment, markPaymentWithdrawn, removePaymentsForOrder, recordPaymentForOrder, productionStageOrder, productionStageInfo, shipmentStageInfo, getWarehouses, getTotalAvailable, adjustStock, getInventory, inventoryAvailable, getCustomerCreditBalance, syncOrderCredit, type OrderItemSnapshot, type Inventory, type DiscountType, type OrderRecord, type FeeRecord, type PaymentRecord, type ProductionStage, type ShipmentStage, type CustomRequest, type Marketer, type MarketerStatus, type Warehouse } from "../data/store";
 import { getCustomers, getCustomer as getCentralCustomer, addCustomer, getCustomerAddresses, addAddress } from "../data/central";
 import { getOrCreateBatchCollection, syncOrderBatchCollection, removeOrderFromAllCollections, getCollections, getCollectionIdsForItem, setCategoriesForItem, removeItemLinksForOrder, type Collection } from "../data/collections";
 import { NewCustomerForm } from "../components/NewCustomerForm";
@@ -77,7 +77,9 @@ type Invoice = {
   ongkir: number;
   ongkirLabel: string;
   splitShopee: boolean;
-  dp: number;
+  dp: number;       // TOTAL diterima (dpManual + splitShopeeCredit + creditUsed) -- dipakai order.dp
+  dpManual: number; // Cuma bagian transfer manual (buat ditampilkan terpisah, hindari dobel hitung splitShopeeCredit)
+  creditUsed: number;
   note: string;
   discountType: DiscountType;
   discountValue: number;
@@ -180,6 +182,13 @@ function OrderPageInner() {
   const [customOngkir, setCustomOngkir] = useState(0);
   const [customOngkirLabel, setCustomOngkirLabel] = useState("");
   const [dpAmount, setDpAmount] = useState(0);
+  // ===== KREDIT CUSTOMER (saldo lebih bayar dari order sebelumnya) =====
+  // creditBalance = saldo TERSEDIA milik customer yg lagi dipilih (dimuat
+  // ulang tiap ganti customer). creditUsed = berapa dari saldo itu yg
+  // ADMIN PILIH pakai buat order INI (manual via tombol "Pakai Kredit",
+  // BUKAN otomatis -- keputusan user: kredit gak boleh kepake diam-diam).
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [creditUsed, setCreditUsed] = useState(0);
   // ===== MODE ORDER HISTORIS (2026-09-14) =====
   // Utk input order lama yang sudah 100% selesai (ready, sudah dibayar,
   // sudah diresi) -- daripada admin klik ubah 4 status tiap item satu-satu
@@ -305,6 +314,15 @@ function OrderPageInner() {
     })();
     return () => { cancelled = true; };
   }, [customer.id, initialCustomerId]);
+
+  // Saldo kredit customer (kelebihan bayar dari order sebelumnya) -- dimuat
+  // ulang tiap ganti customer, creditUsed direset (kredit customer LAMA
+  // gak boleh nyangkut kepake ke order customer BARU).
+  useEffect(() => {
+    setCreditUsed(0);
+    if (!customer.id) { setCreditBalance(0); return; }
+    getCustomerCreditBalance(customer.id).then(setCreditBalance);
+  }, [customer.id]);
 
   // ===== CUSTOMER & SHIPPING ADDRESS =====
   // Alamat default otomatis terpilih saat customer dipilih.
@@ -442,8 +460,8 @@ function OrderPageInner() {
   // yang gak pernah beneran terjadi).
   useEffect(() => {
     if (!historisMode) return;
-    setDpAmount(Math.max(0, total - splitShopeeCredit));
-  }, [historisMode, total, splitShopeeCredit]);
+    setDpAmount(Math.max(0, total - splitShopeeCredit - creditUsed));
+  }, [historisMode, total, splitShopeeCredit, creditUsed]);
 
 
 
@@ -675,10 +693,11 @@ function OrderPageInner() {
     const payNowDiscount = inv.subtotal > 0 ? inv.discountAmount * (payNowSubtotal / inv.subtotal) : 0;
     const payNowTotal = payNowSubtotal - payNowDiscount;
     // "Sisanya menyusul" itu pembayaran TAHAP 2 (sisa produk + ongkir) --
-    // krn kredit Split Bill Shopee sengaja ditujukan utk tahap ini (bukan
-    // tahap 1), harus dikurangi dari sini juga, bukan cuma dari Total Tagihan.
+    // krn kredit Split Bill Shopee & kredit customer sengaja ditujukan utk
+    // tahap ini (bukan tahap 1), harus dikurangi dari sini juga, bukan cuma
+    // dari Total Tagihan.
     const splitCredit = inv.splitShopee ? SPLIT_BILL_PRODUK : 0;
-    return { count: payNowItems.length, remainingCount: inv.items.length - payNowItems.length, total: payNowTotal, remaining: Math.max(0, inv.total - payNowTotal - splitCredit) };
+    return { count: payNowItems.length, remainingCount: inv.items.length - payNowItems.length, total: payNowTotal, remaining: Math.max(0, inv.total - payNowTotal - splitCredit - inv.creditUsed) };
   };
 
   // ===== GENERATE INVOICE TEXT (sesuai Operating Manual) =====
@@ -731,19 +750,24 @@ function OrderPageInner() {
     if (inv.type === "po-amna" || inv.dp > 0 || splitCredit > 0) {
       lines.push("TOTAL:");
       lines.push("Rp" + fmt(inv.total));
-      if (inv.dp > 0) {
+      if (inv.dpManual > 0) {
         lines.push("");
         lines.push("Deposit:");
-        lines.push("Rp" + fmt(inv.dp));
+        lines.push("Rp" + fmt(inv.dpManual));
       }
       if (splitCredit > 0) {
         lines.push("");
         lines.push("Split Bill Shopee (sudah checkout):");
         lines.push("Rp" + fmt(splitCredit));
       }
+      if (inv.creditUsed > 0) {
+        lines.push("");
+        lines.push("Kredit Customer Dipakai:");
+        lines.push("Rp" + fmt(inv.creditUsed));
+      }
       lines.push("");
       lines.push("Sisa Pelunasan:");
-      lines.push("Rp" + fmt(Math.max(0, inv.total - inv.dp - splitCredit)));
+      lines.push("Rp" + fmt(Math.max(0, inv.total - inv.dpManual - splitCredit - inv.creditUsed)));
     } else {
       lines.push("TOTAL:");
       lines.push("Rp" + fmt(inv.total));
@@ -790,7 +814,7 @@ function OrderPageInner() {
     } else {
       const splitCredit = inv.splitShopee ? SPLIT_BILL_PRODUK : 0;
       const hasPartialPayment = inv.type === "po-amna" || inv.dp > 0 || splitCredit > 0;
-      const amountDue = hasPartialPayment ? Math.max(0, inv.total - inv.dp - splitCredit) : inv.total;
+      const amountDue = hasPartialPayment ? Math.max(0, inv.total - inv.dpManual - splitCredit - inv.creditUsed) : inv.total;
       lines.push(`💰 Total Transfer: Rp${fmt(amountDue)}`);
     }
     const rek = determineRekening(inv.items.map(i => i.category || "lainnya"));
@@ -831,7 +855,9 @@ function OrderPageInner() {
       ongkir,
       ongkirLabel,
       splitShopee,
-      dp: dpAmount,
+      dp: dpAmount + splitShopeeCredit + creditUsed,
+      dpManual: dpAmount,
+      creditUsed,
       note,
       discountType,
       discountValue,
@@ -916,8 +942,9 @@ function OrderPageInner() {
       ongkirLabel,
       // order.dp = TOTAL yang sudah beneran diterima (dipakai Payment/Outstanding
       // di seluruh app) — termasuk Rp1.500 Split Bill Shopee yang otomatis lunas
-      // lewat checkout Shopee, bukan cuma DP manual yang diketik admin.
-      dp: dpAmount + splitShopeeCredit,
+      // lewat checkout Shopee, dan kredit customer yang dipakai (creditUsed) --
+      // bukan cuma DP manual yang diketik admin.
+      dp: dpAmount + splitShopeeCredit + creditUsed,
       note,
       internalNote: internalNote.trim() || undefined,
       marketerId: marketer?.id || null,
@@ -977,6 +1004,32 @@ function OrderPageInner() {
       } else if (splitShopeeCredit === 0 && shopeePayment) {
         await deletePayment(shopeePayment.id);
       }
+      // ===== SINKRON RIWAYAT PEMBAYARAN — KREDIT CUSTOMER ===== (pola sama persis)
+      const creditPayment = (await getPaymentsForOrder(orderId)).find(p => p.note === "Kredit customer dipakai");
+      if (creditUsed > 0 && !creditPayment) {
+        await addPayment({
+          id: "pay-" + Date.now() + "-credit",
+          orderId, orderNumber, customerId: customer.id || null, customerName: customer.name,
+          productSummary: snapshots.map(s => s.name).join(", "),
+          amount: creditUsed,
+          dateReceived: now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
+          status: "belum-ditarik", dateWithdrawn: null,
+          note: "Kredit customer dipakai", createdAt: Date.now(),
+        });
+      } else if (creditUsed === 0 && creditPayment) {
+        await deletePayment(creditPayment.id);
+      } else if (creditPayment && creditPayment.amount !== creditUsed) {
+        await deletePayment(creditPayment.id);
+        await addPayment({
+          id: "pay-" + Date.now() + "-credit",
+          orderId, orderNumber, customerId: customer.id || null, customerName: customer.name,
+          productSummary: snapshots.map(s => s.name).join(", "),
+          amount: creditUsed,
+          dateReceived: now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
+          status: "belum-ditarik", dateWithdrawn: null,
+          note: "Kredit customer dipakai", createdAt: Date.now(),
+        });
+      }
       setOrderPayments(await getPaymentsForOrder(orderId));
     } else {
       await saveOrder(orderRecord);
@@ -1015,6 +1068,22 @@ function OrderPageInner() {
           status: "belum-ditarik",
           dateWithdrawn: null,
           note: "Split Bill Shopee (checkout otomatis)",
+          createdAt: Date.now(),
+        });
+      }
+      if (creditUsed > 0) {
+        newPayments.push({
+          id: "pay-" + Date.now() + "-credit",
+          orderId,
+          orderNumber,
+          customerId: customer.id || null,
+          customerName: customer.name,
+          productSummary,
+          amount: creditUsed,
+          dateReceived: now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
+          status: "belum-ditarik",
+          dateWithdrawn: null,
+          note: "Kredit customer dipakai",
           createdAt: Date.now(),
         });
       }
@@ -1073,6 +1142,15 @@ function OrderPageInner() {
       await removeFeeForOrder(orderId);
     }
 
+    // ===== SINKRON KREDIT CUSTOMER =====
+    // Kelebihan bayar (dp+splitShopeeCredit+creditUsed melebihi total) otomatis
+    // jadi kredit baru; kredit yang dipakai (creditUsed) dicatat sbg pemakaian.
+    // syncOrderCredit hapus dulu baris lama milik order ini jadi aman diedit
+    // berkali-kali (idempotent), lihat store.ts.
+    const overpayment = Math.max(0, dpAmount + splitShopeeCredit + creditUsed - total);
+    await syncOrderCredit(orderId, customer.id, creditUsed, overpayment, orderNumber);
+    if (customer.id) setCreditBalance(await getCustomerCreditBalance(customer.id));
+
     // Refresh daftar order agar order yang baru dibuat/diedit langsung terlihat.
     setExistingOrders(await getOrders());
   };
@@ -1129,12 +1207,16 @@ function OrderPageInner() {
     setOngkirId(matchedOngkir ? matchedOngkir.id : "custom");
     setCustomOngkir(order.ongkir);
     setCustomOngkirLabel(matchedOngkir ? "" : order.ongkirLabel);
-    // order.dp tersimpan SUDAH termasuk Rp1.500 Split Bill Shopee (lihat generateInvoice)
-    // — kurangi lagi di sini supaya field DP manual di form kembali menampilkan
-    // angka yang benar-benar diketik admin, bukan dobel dengan kredit otomatis.
+    // order.dp tersimpan SUDAH termasuk Rp1.500 Split Bill Shopee DAN kredit
+    // customer yang dipakai (lihat generateInvoice) — kurangi keduanya lagi
+    // di sini supaya field DP manual di form kembali menampilkan angka yang
+    // benar-benar diketik admin, bukan dobel dengan kredit otomatis.
     const loadedSplitShopee = matchedOngkir?.id === "shopee";
-    setDpAmount(order.dp - (loadedSplitShopee ? SPLIT_BILL_PRODUK : 0));
-    setOrderPayments(await getPaymentsForOrder(order.id));
+    const loadedPayments = await getPaymentsForOrder(order.id);
+    const loadedCreditUsed = loadedPayments.find(p => p.note === "Kredit customer dipakai")?.amount || 0;
+    setDpAmount(order.dp - (loadedSplitShopee ? SPLIT_BILL_PRODUK : 0) - loadedCreditUsed);
+    setCreditUsed(loadedCreditUsed);
+    setOrderPayments(loadedPayments);
     setTopUpAmount(0);
     setNote(order.note);
     setInternalNote(order.internalNote || "");
@@ -1166,8 +1248,11 @@ function OrderPageInner() {
     // tapi belum klik Generate Invoice, keduanya bisa beda dan bikin dpAmount
     // salah hitung (bahkan bisa negatif). Math.max(0, ...) jaga-jaga tambahan.
     const persistedSplitShopee = ongkirOptions.find(o => o.name === existingOrder.ongkirLabel)?.id === "shopee";
-    setDpAmount(Math.max(0, updatedOrder.dp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0)));
-    setOrderPayments(await getPaymentsForOrder(editingOrderId));
+    const paymentsAfter = await getPaymentsForOrder(editingOrderId);
+    const usedCredit = paymentsAfter.find(p => p.note === "Kredit customer dipakai")?.amount || 0;
+    setDpAmount(Math.max(0, updatedOrder.dp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0) - usedCredit));
+    setCreditUsed(usedCredit);
+    setOrderPayments(paymentsAfter);
     setExistingOrders(await getOrders());
     setTopUpAmount(0);
     notify(`Pembayaran ${formatRupiah(topUpAmount)} dicatat`);
@@ -1181,8 +1266,11 @@ function OrderPageInner() {
     await updateOrder({ ...existingOrder, dp: newDp });
     await deletePayment(payment.id);
     const persistedSplitShopee = ongkirOptions.find(o => o.name === existingOrder.ongkirLabel)?.id === "shopee";
-    setDpAmount(Math.max(0, newDp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0)));
-    setOrderPayments(await getPaymentsForOrder(editingOrderId));
+    const paymentsAfter = await getPaymentsForOrder(editingOrderId);
+    const usedCredit = paymentsAfter.find(p => p.note === "Kredit customer dipakai")?.amount || 0;
+    setDpAmount(Math.max(0, newDp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0) - usedCredit));
+    setCreditUsed(usedCredit);
+    setOrderPayments(paymentsAfter);
     setExistingOrders(await getOrders());
     notify(`Pembayaran ${formatRupiah(payment.amount)} dihapus`);
   };
@@ -1811,7 +1899,7 @@ function OrderPageInner() {
       {editingOrderId ? (
         <div className="setting-row payment-history-block">
           <label>Riwayat Pembayaran</label>
-          <div className="payment-total-preview">Total dibayar: <b>{formatRupiah(dpAmount + splitShopeeCredit)}</b></div>
+          <div className="payment-total-preview">Total dibayar: <b>{formatRupiah(dpAmount + splitShopeeCredit + creditUsed)}</b></div>
           {orderPayments.length === 0 && <p className="field-hint">Belum ada pembayaran tercatat untuk order ini.</p>}
           {orderPayments.map(p => (
             <div className="payment-row" key={p.id}>
@@ -1880,6 +1968,18 @@ function OrderPageInner() {
       </div>
     )}
 
+    {/* ===== KREDIT CUSTOMER (saldo lebih bayar dari order sebelumnya) ===== */}
+    {customer.id && creditBalance > 0 && (
+      <div className="shopee-split-info">
+        <p>💳 Customer ini punya <b>saldo kredit {formatRupiah(creditBalance)}</b> dari kelebihan bayar order sebelumnya.</p>
+        {creditUsed === 0 ? (
+          <button type="button" className="secondary" onClick={() => setCreditUsed(Math.min(creditBalance, Math.max(0, total - splitShopeeCredit)))}>Pakai Kredit</button>
+        ) : (
+          <p><b>✓ {formatRupiah(creditUsed)}</b> dipakai di order ini. <button type="button" className="secondary" onClick={() => setCreditUsed(0)}>Batalkan</button></p>
+        )}
+      </div>
+    )}
+
     {/* ===== TOTAL ===== */}
     <div className="order-summary">
       <div className="summary-row"><span>Subtotal</span><b>{formatRupiah(subtotal)}</b></div>
@@ -1888,7 +1988,8 @@ function OrderPageInner() {
       <div className="summary-row total-row"><span>Total Tagihan</span><b>{formatRupiah(total)}</b></div>
       {dpAmount > 0 && <div className="summary-row"><span>DP / Deposit</span><b>-{formatRupiah(dpAmount)}</b></div>}
       {splitShopeeCredit > 0 && <div className="summary-row"><span>Split Bill Shopee (produk)</span><b>-{formatRupiah(splitShopeeCredit)}</b></div>}
-      {(dpAmount > 0 || splitShopeeCredit > 0) && <div className="summary-row"><span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, total - dpAmount - splitShopeeCredit))}</b></div>}
+      {creditUsed > 0 && <div className="summary-row"><span>💳 Kredit Customer Dipakai</span><b>-{formatRupiah(creditUsed)}</b></div>}
+      {(dpAmount > 0 || splitShopeeCredit > 0 || creditUsed > 0) && <div className="summary-row"><span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, total - dpAmount - splitShopeeCredit - creditUsed))}</b></div>}
       {marketerId && effectiveFee > 0 && <div className="summary-row fee-row"><span>Fee marketer (internal)</span><b>{formatRupiah(effectiveFee)}</b></div>}
     </div>
 
@@ -2127,11 +2228,12 @@ function OrderPageInner() {
           <div><span>Subtotal</span><b>{formatRupiah(invoice.subtotal)}</b></div>
           {invoice.discountAmount > 0 && <div><span>Diskon</span><b>-{formatRupiah(invoice.discountAmount)}</b></div>}
           {invoice.ongkir > 0 && <div><span>Ongkir</span><b>{formatRupiah(invoice.ongkir)}</b></div>}
-          {invoice.dp > 0 && <div><span>DP / Deposit</span><b>-{formatRupiah(invoice.dp)}</b></div>}
+          {invoice.dpManual > 0 && <div><span>DP / Deposit</span><b>-{formatRupiah(invoice.dpManual)}</b></div>}
           {invoice.splitShopee && <div><span>Split Bill Shopee (produk)</span><b>-{formatRupiah(SPLIT_BILL_PRODUK)}</b></div>}
+          {invoice.creditUsed > 0 && <div><span>💳 Kredit Customer Dipakai</span><b>-{formatRupiah(invoice.creditUsed)}</b></div>}
           <div className="invoice-grand"><span>Total Tagihan</span><b>{formatRupiah(invoice.total)}</b></div>
           {(invoice.type === "po-amna" || invoice.dp > 0 || invoice.splitShopee) && <div className="invoice-sisa">
-            <span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, invoice.total - invoice.dp - (invoice.splitShopee ? SPLIT_BILL_PRODUK : 0)))}</b>
+            <span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, invoice.total - invoice.dpManual - (invoice.splitShopee ? SPLIT_BILL_PRODUK : 0) - invoice.creditUsed))}</b>
           </div>}
           {(() => {
             const payNowBreakdown = getPayNowBreakdown(invoice);

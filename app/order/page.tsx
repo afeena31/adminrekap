@@ -435,10 +435,15 @@ function OrderPageInner() {
 
   // DP selalu ngikutin Total Tagihan selama Mode Historis aktif -- "sudah
   // selesai" = otomatis lunas, gak masuk akal DP-nya beda dari total.
+  // Dikurangi splitShopeeCredit dulu (BUKAN disamakan persis dgn total) --
+  // kalau enggak, begitu ongkir Shopee dipilih SETELAH Mode Historis
+  // dinyalakan, kredit Rp1.500-nya numpuk DI ATAS dp yang sudah = total,
+  // seolah uang masuk lebih besar dari tagihan sebenarnya (kelebihan bayar
+  // yang gak pernah beneran terjadi).
   useEffect(() => {
     if (!historisMode) return;
-    setDpAmount(total);
-  }, [historisMode, total]);
+    setDpAmount(Math.max(0, total - splitShopeeCredit));
+  }, [historisMode, total, splitShopeeCredit]);
 
 
 

@@ -118,6 +118,7 @@ const CATATAN_PRESETS = [
   "Menunggu pesanan lainnya",
   "Menunggu semua pesanan ready",
   "Kirim terpisah, beda kota pengiriman",
+  "Kirim duluan",
 ];
 
 function recordRecentProduct(productId: string): string[] {

@@ -421,6 +421,12 @@ function OrderPageInner() {
   // order.total (Payment/Outstanding, Collection stats, invoice "Sisa
   // Pelunasan" yang sendirinya menghitung total - dp lagi → dp kepotong dua kali).
   const total = subtotal - discountAmount + ongkir;
+  // Kelebihan bayar (dp manual + Split Bill Shopee + kredit yang dipakai
+  // melebihi total) -- BUKAN error, ini beneran terjadi kalau customer
+  // transfer penuh padahal sudah dapat potongan Shopee. Ditampilkan
+  // eksplisit (bukan cuma di-floor jadi "Sisa Pelunasan: Rp0" diam-diam)
+  // supaya admin sadar & tau ini bakal otomatis jadi kredit customer.
+  const overpaymentPreview = Math.max(0, dpAmount + splitShopeeCredit + creditUsed - total);
   // ===== "Berapa yang harus di-TF sekarang?" — item yang dicentang "Transfer
   // sekarang" (biasanya yang udah ready, sisanya msh PO dibayar belakangan).
   // Diskon order diprorata sesuai porsi subtotal item yg dicentang (pola sama
@@ -452,16 +458,18 @@ function OrderPageInner() {
   }, [historisMode]);
 
   // DP selalu ngikutin Total Tagihan selama Mode Historis aktif -- "sudah
-  // selesai" = otomatis lunas, gak masuk akal DP-nya beda dari total.
-  // Dikurangi splitShopeeCredit dulu (BUKAN disamakan persis dgn total) --
-  // kalau enggak, begitu ongkir Shopee dipilih SETELAH Mode Historis
-  // dinyalakan, kredit Rp1.500-nya numpuk DI ATAS dp yang sudah = total,
-  // seolah uang masuk lebih besar dari tagihan sebenarnya (kelebihan bayar
-  // yang gak pernah beneran terjadi).
+  // selesai" = otomatis lunas, gak masuk akal DP-nya beda dari total. DP di
+  // sini SENGAJA disamakan PERSIS dgn total (bukan dikurangi splitShopeeCredit
+  // lagi) -- DP itu representasi uang TRANSFER MANUAL asli yang masuk ke
+  // rekening, independen dari Split Bill Shopee (yang uangnya masuk ke Shopee,
+  // BUKAN ke rekening kita). Kalau ongkir Shopee JUGA dipilih, dp+split bisa
+  // melebihi total -- itu kelebihan bayar BENERAN (customer transfer penuh
+  // padahal sudah dapat potongan Shopee), otomatis jadi kredit customer lewat
+  // syncOrderCredit, BUKAN dipaksa pas-pasan dengan mengurangi DP secara paksa.
   useEffect(() => {
     if (!historisMode) return;
-    setDpAmount(Math.max(0, total - splitShopeeCredit - creditUsed));
-  }, [historisMode, total, splitShopeeCredit, creditUsed]);
+    setDpAmount(total);
+  }, [historisMode, total]);
 
 
 
@@ -768,6 +776,12 @@ function OrderPageInner() {
       lines.push("");
       lines.push("Sisa Pelunasan:");
       lines.push("Rp" + fmt(Math.max(0, inv.total - inv.dpManual - splitCredit - inv.creditUsed)));
+      const overpayInv = Math.max(0, inv.dpManual + splitCredit + inv.creditUsed - inv.total);
+      if (overpayInv > 0) {
+        lines.push("");
+        lines.push("Kelebihan Bayar (disimpan sebagai kredit untuk order berikutnya):");
+        lines.push("Rp" + fmt(overpayInv));
+      }
     } else {
       lines.push("TOTAL:");
       lines.push("Rp" + fmt(inv.total));
@@ -1990,6 +2004,7 @@ function OrderPageInner() {
       {splitShopeeCredit > 0 && <div className="summary-row"><span>Split Bill Shopee (produk)</span><b>-{formatRupiah(splitShopeeCredit)}</b></div>}
       {creditUsed > 0 && <div className="summary-row"><span>💳 Kredit Customer Dipakai</span><b>-{formatRupiah(creditUsed)}</b></div>}
       {(dpAmount > 0 || splitShopeeCredit > 0 || creditUsed > 0) && <div className="summary-row"><span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, total - dpAmount - splitShopeeCredit - creditUsed))}</b></div>}
+      {overpaymentPreview > 0 && <div className="summary-row"><span>🎁 Kelebihan Bayar (jadi kredit customer)</span><b>+{formatRupiah(overpaymentPreview)}</b></div>}
       {marketerId && effectiveFee > 0 && <div className="summary-row fee-row"><span>Fee marketer (internal)</span><b>{formatRupiah(effectiveFee)}</b></div>}
     </div>
 
@@ -2235,6 +2250,11 @@ function OrderPageInner() {
           {(invoice.type === "po-amna" || invoice.dp > 0 || invoice.splitShopee) && <div className="invoice-sisa">
             <span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, invoice.total - invoice.dpManual - (invoice.splitShopee ? SPLIT_BILL_PRODUK : 0) - invoice.creditUsed))}</b>
           </div>}
+          {(() => {
+            const paidTotal = invoice.dpManual + (invoice.splitShopee ? SPLIT_BILL_PRODUK : 0) + invoice.creditUsed;
+            const overpay = Math.max(0, paidTotal - invoice.total);
+            return overpay > 0 ? <div className="invoice-sisa"><span>🎁 Kelebihan Bayar (jadi kredit customer)</span><b>+{formatRupiah(overpay)}</b></div> : null;
+          })()}
           {(() => {
             const payNowBreakdown = getPayNowBreakdown(invoice);
             if (!payNowBreakdown) return null;

@@ -104,6 +104,11 @@ export default function DashboardPage() {
   // supaya render pertama di server & di client sama, lalu diisi data asli
   // lewat HYDRATION FIX useEffect setelah mount.
   const [orders, setOrders] = useState<OrderRecord[]>([]);
+  // Tiap grup Work Queue cuma nampilin 3 item duluan (bisa ampe puluhan kalau
+  // orderan lagi banyak, scroll panjang banget) -- expand per-grup buat lihat
+  // sisanya di area scroll internal sendiri, sama pola dgn Kategori Produk.
+  const [expandedQueueGroups, setExpandedQueueGroups] = useState<Set<string>>(new Set());
+  const QUEUE_PREVIEW_COUNT = 3;
   const [marketers, setMarketers] = useState<Marketer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [allOps, setAllOps] = useState<{ customer: ReturnType<typeof toDisplayCustomer>; ops: ReturnType<typeof getOperations> }[]>([]);
@@ -293,6 +298,9 @@ export default function DashboardPage() {
 
       {queueSections.map(group => {
         const Icon = group.icon;
+        const isExpanded = expandedQueueGroups.has(group.key);
+        const visibleItems = isExpanded ? group.items : group.items.slice(0, QUEUE_PREVIEW_COUNT);
+        const hiddenCount = group.items.length - visibleItems.length;
         return (
           <div key={group.key} className="dash-queue-group">
             <div className="dash-queue-group-head">
@@ -301,7 +309,8 @@ export default function DashboardPage() {
               <span className="dash-queue-count">{group.items.length}</span>
             </div>
             {group.items.length === 0 && <p className="dash-queue-empty">{group.empty}</p>}
-            {group.items.map(item => {
+            <div className={isExpanded ? "dash-queue-scroll" : undefined}>
+            {visibleItems.map(item => {
               const body = <>
                 <span className="mini-avatar">{item.customerName.slice(0, 2).toUpperCase()}</span>
                 <div className="dash-queue-body">
@@ -324,6 +333,17 @@ export default function DashboardPage() {
                 <Link key={item.orderId} href={`/order?orderId=${item.orderId}`} className="dash-queue-item">{body}</Link>
               );
             })}
+            </div>
+            {hiddenCount > 0 && (
+              <button type="button" className="dash-queue-toggle" onClick={() => setExpandedQueueGroups(prev => new Set(prev).add(group.key))}>
+                Tampilkan {hiddenCount} lagi <ChevronRight size={14} style={{ transform: "rotate(90deg)" }} />
+              </button>
+            )}
+            {isExpanded && group.items.length > QUEUE_PREVIEW_COUNT && (
+              <button type="button" className="dash-queue-toggle" onClick={() => setExpandedQueueGroups(prev => { const next = new Set(prev); next.delete(group.key); return next; })}>
+                Tutup <ChevronRight size={14} style={{ transform: "rotate(-90deg)" }} />
+              </button>
+            )}
           </div>
         );
       })}

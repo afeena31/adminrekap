@@ -77,8 +77,8 @@ type Invoice = {
   ongkir: number;
   ongkirLabel: string;
   splitShopee: boolean;
-  dp: number;       // TOTAL diterima (dpManual + splitShopeeCredit + creditUsed) -- dipakai order.dp
-  dpManual: number; // Cuma bagian transfer manual (buat ditampilkan terpisah, hindari dobel hitung splitShopeeCredit)
+  dp: number;       // Uang yang MASUK KE REKENING (dpManual + creditUsed) -- dipakai order.dp. Split Bill Shopee TIDAK di sini (lihat "total").
+  dpManual: number; // Cuma bagian transfer manual (ditampilkan terpisah)
   creditUsed: number;
   note: string;
   discountType: DiscountType;
@@ -409,24 +409,29 @@ function OrderPageInner() {
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const discountAmount = calculateDiscount(subtotal, discountType, discountValue);
   const ongkir = ongkirId === "custom" ? customOngkir : (ongkirOptions.find(o => o.id === ongkirId)?.price || 0);
-  // Split Bill Shopee: begitu ongkir dipilih "Shopee", customer otomatis checkout
-  // lewat trik Split Bill (lihat Master Data bagian 9) — Rp1.500 dari situ SUDAH
-  // otomatis terhitung sebagai bagian yang lunas, admin tidak perlu tambah manual.
+  // Split Bill Shopee: begitu ongkir dipilih "Shopee", customer checkout Rp1.500
+  // lewat trik Split Bill (lihat Master Data bagian 9) -- ini POTONGAN HARGA
+  // (kayak Diskon), BUKAN pembayaran yang masuk ke rekening kita (uangnya ke
+  // Shopee). Makanya ngurangin TOTAL TAGIHAN langsung, bukan dijumlah ke DP.
   const splitShopee = ongkirId === "shopee";
   const splitShopeeCredit = splitShopee ? SPLIT_BILL_PRODUK : 0;
-  // "total" adalah TOTAL UTUH invoice (dipakai buildInvoiceText & disimpan ke
-  // orderRecord.total) — JANGAN kurangi DP di sini. Sebelumnya DP ikut
-  // dikurangkan di sini, jadi order.total yang tersimpan jadi salah (bahkan
-  // bisa negatif kalau DP >= subtotal+ongkir), merusak semua yang baca
-  // order.total (Payment/Outstanding, Collection stats, invoice "Sisa
-  // Pelunasan" yang sendirinya menghitung total - dp lagi → dp kepotong dua kali).
-  const total = subtotal - discountAmount + ongkir;
-  // Kelebihan bayar (dp manual + Split Bill Shopee + kredit yang dipakai
-  // melebihi total) -- BUKAN error, ini beneran terjadi kalau customer
-  // transfer penuh padahal sudah dapat potongan Shopee. Ditampilkan
-  // eksplisit (bukan cuma di-floor jadi "Sisa Pelunasan: Rp0" diam-diam)
-  // supaya admin sadar & tau ini bakal otomatis jadi kredit customer.
-  const overpaymentPreview = Math.max(0, dpAmount + splitShopeeCredit + creditUsed - total);
+  // "total" = TOTAL TAGIHAN SEBENARNYA yang harus dibayar customer (subtotal -
+  // diskon + ongkir - potongan Split Bill Shopee) -- dipakai buildInvoiceText &
+  // disimpan ke orderRecord.total. JANGAN kurangi DP di sini (DP itu VARIABEL,
+  // berubah tiap ada transferan baru -- kalau ikut dikurangkan di sini,
+  // order.total yang tersimpan jadi salah/bisa negatif, merusak semua yang
+  // baca order.total: Payment/Outstanding, Collection stats, dst). Split Bill
+  // Shopee beda -- nilainya TETAP (ditentukan sekali oleh pilihan ongkir, gak
+  // berubah-ubah kayak DP), jadi aman & memang seharusnya dikurangkan di sini,
+  // sama seperti discountAmount.
+  const total = subtotal - discountAmount + ongkir - splitShopeeCredit;
+  // Kelebihan bayar (DP manual + kredit yang dipakai melebihi total) -- BUKAN
+  // error, ini beneran terjadi kalau customer transfer PENUH ke rekening
+  // padahal harusnya sudah dapat potongan Shopee (gak sadar/gak pakai split
+  // bill-nya). Ditampilkan eksplisit (bukan cuma di-floor jadi "Sisa
+  // Pelunasan: Rp0" diam-diam) supaya admin sadar & tau ini bakal otomatis
+  // jadi kredit customer.
+  const overpaymentPreview = Math.max(0, dpAmount + creditUsed - total);
   // ===== "Berapa yang harus di-TF sekarang?" — item yang dicentang "Transfer
   // sekarang" (biasanya yang udah ready, sisanya msh PO dibayar belakangan).
   // Diskon order diprorata sesuai porsi subtotal item yg dicentang (pola sama
@@ -458,14 +463,13 @@ function OrderPageInner() {
   }, [historisMode]);
 
   // DP selalu ngikutin Total Tagihan selama Mode Historis aktif -- "sudah
-  // selesai" = otomatis lunas, gak masuk akal DP-nya beda dari total. DP di
-  // sini SENGAJA disamakan PERSIS dgn total (bukan dikurangi splitShopeeCredit
-  // lagi) -- DP itu representasi uang TRANSFER MANUAL asli yang masuk ke
-  // rekening, independen dari Split Bill Shopee (yang uangnya masuk ke Shopee,
-  // BUKAN ke rekening kita). Kalau ongkir Shopee JUGA dipilih, dp+split bisa
-  // melebihi total -- itu kelebihan bayar BENERAN (customer transfer penuh
-  // padahal sudah dapat potongan Shopee), otomatis jadi kredit customer lewat
-  // syncOrderCredit, BUKAN dipaksa pas-pasan dengan mengurangi DP secara paksa.
+  // selesai" = otomatis lunas, gak masuk akal DP-nya beda dari total. "total"
+  // di sini SUDAH bersih dari potongan Split Bill Shopee (lihat perhitungan
+  // total di atas), jadi dp=total = asumsi wajar "transfer manual persis
+  // sejumlah tagihan bersih". Kalau kenyataannya customer transfer LEBIH dari
+  // itu (mis. gak pakai potongan Shopee-nya), admin tinggal ubah manual field
+  // DP-nya -- kelebihannya otomatis jadi kredit customer lewat syncOrderCredit,
+  // BUKAN dipaksa pas-pasan dengan mengurangi DP secara paksa.
   useEffect(() => {
     if (!historisMode) return;
     setDpAmount(total);
@@ -701,11 +705,10 @@ function OrderPageInner() {
     const payNowDiscount = inv.subtotal > 0 ? inv.discountAmount * (payNowSubtotal / inv.subtotal) : 0;
     const payNowTotal = payNowSubtotal - payNowDiscount;
     // "Sisanya menyusul" itu pembayaran TAHAP 2 (sisa produk + ongkir) --
-    // krn kredit Split Bill Shopee & kredit customer sengaja ditujukan utk
-    // tahap ini (bukan tahap 1), harus dikurangi dari sini juga, bukan cuma
-    // dari Total Tagihan.
-    const splitCredit = inv.splitShopee ? SPLIT_BILL_PRODUK : 0;
-    return { count: payNowItems.length, remainingCount: inv.items.length - payNowItems.length, total: payNowTotal, remaining: Math.max(0, inv.total - payNowTotal - splitCredit - inv.creditUsed) };
+    // inv.total SUDAH bersih dari potongan Split Bill Shopee (dikurangkan di
+    // level total, bukan di sini lagi), jadi kredit customer aja yang perlu
+    // dikurangi eksplisit di sini.
+    return { count: payNowItems.length, remainingCount: inv.items.length - payNowItems.length, total: payNowTotal, remaining: Math.max(0, inv.total - payNowTotal - inv.creditUsed) };
   };
 
   // ===== GENERATE INVOICE TEXT (sesuai Operating Manual) =====
@@ -753,20 +756,20 @@ function OrderPageInner() {
       lines.push("Ongkir: " + inv.ongkirLabel);
       lines.push(fmt(inv.ongkir));
     }
-    lines.push("");
     const splitCredit = inv.splitShopee ? SPLIT_BILL_PRODUK : 0;
-    if (inv.type === "po-amna" || inv.dp > 0 || splitCredit > 0) {
+    if (splitCredit > 0) {
+      lines.push("");
+      lines.push("🛒 Potongan Split Bill Shopee:");
+      lines.push("-" + fmt(splitCredit));
+    }
+    lines.push("");
+    if (inv.type === "po-amna" || inv.dp > 0) {
       lines.push("TOTAL:");
       lines.push("Rp" + fmt(inv.total));
       if (inv.dpManual > 0) {
         lines.push("");
         lines.push("Deposit:");
         lines.push("Rp" + fmt(inv.dpManual));
-      }
-      if (splitCredit > 0) {
-        lines.push("");
-        lines.push("Split Bill Shopee (sudah checkout):");
-        lines.push("Rp" + fmt(splitCredit));
       }
       if (inv.creditUsed > 0) {
         lines.push("");
@@ -775,8 +778,8 @@ function OrderPageInner() {
       }
       lines.push("");
       lines.push("Sisa Pelunasan:");
-      lines.push("Rp" + fmt(Math.max(0, inv.total - inv.dpManual - splitCredit - inv.creditUsed)));
-      const overpayInv = Math.max(0, inv.dpManual + splitCredit + inv.creditUsed - inv.total);
+      lines.push("Rp" + fmt(Math.max(0, inv.total - inv.dpManual - inv.creditUsed)));
+      const overpayInv = Math.max(0, inv.dpManual + inv.creditUsed - inv.total);
       if (overpayInv > 0) {
         lines.push("");
         lines.push("Kelebihan Bayar (disimpan sebagai kredit untuk order berikutnya):");
@@ -826,14 +829,13 @@ function OrderPageInner() {
       lines.push(`💰 Transfer Tahap 1 (${payNowBreakdown.count} produk sudah ready): Rp${fmt(payNowBreakdown.total)}`);
       lines.push(`Sisanya menyusul: Rp${fmt(payNowBreakdown.remaining)}`);
     } else {
-      const splitCredit = inv.splitShopee ? SPLIT_BILL_PRODUK : 0;
-      const hasPartialPayment = inv.type === "po-amna" || inv.dp > 0 || splitCredit > 0;
-      const amountDue = hasPartialPayment ? Math.max(0, inv.total - inv.dpManual - splitCredit - inv.creditUsed) : inv.total;
+      const hasPartialPayment = inv.type === "po-amna" || inv.dp > 0;
+      const amountDue = hasPartialPayment ? Math.max(0, inv.total - inv.dpManual - inv.creditUsed) : inv.total;
       // Sudah lunas (bahkan kelebihan) -- gak masuk akal masih nyuruh
       // transfer + kasih nomor rekening. Tampilkan status lunas aja, kredit
       // kelebihannya (kalau ada) ikut disebut biar customer tau.
       if (amountDue <= 0 && hasPartialPayment) {
-        const overpayInv = Math.max(0, inv.dpManual + splitCredit + inv.creditUsed - inv.total);
+        const overpayInv = Math.max(0, inv.dpManual + inv.creditUsed - inv.total);
         lines.push("✅ Lunas, terima kasih!");
         if (overpayInv > 0) lines.push(`Kelebihan Rp${fmt(overpayInv)} disimpan sebagai kredit untuk order berikutnya.`);
         return lines.join("\n");
@@ -878,7 +880,7 @@ function OrderPageInner() {
       ongkir,
       ongkirLabel,
       splitShopee,
-      dp: dpAmount + splitShopeeCredit + creditUsed,
+      dp: dpAmount + creditUsed,
       dpManual: dpAmount,
       creditUsed,
       note,
@@ -963,11 +965,12 @@ function OrderPageInner() {
       discountAmount,
       ongkir,
       ongkirLabel,
-      // order.dp = TOTAL yang sudah beneran diterima (dipakai Payment/Outstanding
-      // di seluruh app) — termasuk Rp1.500 Split Bill Shopee yang otomatis lunas
-      // lewat checkout Shopee, dan kredit customer yang dipakai (creditUsed) --
-      // bukan cuma DP manual yang diketik admin.
-      dp: dpAmount + splitShopeeCredit + creditUsed,
+      // order.dp = uang yang beneran MASUK KE REKENING (dipakai Payment/
+      // Outstanding di seluruh app) -- DP manual + kredit customer yang
+      // dipakai. Split Bill Shopee SENGAJA TIDAK ikut di sini lagi -- uangnya
+      // ke Shopee, bukan ke rekening kita, jadi diperlakukan sbg potongan
+      // order.total (lihat perhitungan "total" di atas), bukan bagian dp.
+      dp: dpAmount + creditUsed,
       note,
       internalNote: internalNote.trim() || undefined,
       marketerId: marketer?.id || null,
@@ -999,35 +1002,13 @@ function OrderPageInner() {
 
     if (editingOrderId) {
       await updateOrder(orderRecord);
-      // ===== SINKRON RIWAYAT PEMBAYARAN — SPLIT BILL SHOPEE =====
-      // dp di atas sudah dihitung ulang pakai splitShopeeCredit dari ongkir yang
-      // dipilih SEKARANG di form, tapi baris PaymentRecord "Split Bill Shopee"
-      // cuma pernah dibuat sekali saat order BARU dibuat (blok di bawah, cabang
-      // else). Kalau admin ganti ongkir ke/dari Shopee pas EDIT, order.dp ikut
-      // berubah tapi Riwayat Pembayaran bisa nyimpang (dp nambah 1.500 tanpa
-      // baris baru, atau baris lama masih ada padahal dp sudah dikurangi lagi).
-      // Disamakan di sini: tambah/hapus baris ledger biar order.dp & Riwayat
-      // Pembayaran tetap 1:1, sama seperti alur order baru.
+      // Split Bill Shopee SEKARANG jadi potongan order.total (bukan bagian
+      // dp/Riwayat Pembayaran lagi) -- bersihkan baris ledger "Split Bill
+      // Shopee (checkout otomatis)" peninggalan sistem lama kalau masih ada,
+      // biar Riwayat Pembayaran gak nyimpang dari order.dp yang baru.
       const shopeePayment = (await getPaymentsForOrder(orderId)).find(p => p.note === "Split Bill Shopee (checkout otomatis)");
-      if (splitShopeeCredit > 0 && !shopeePayment) {
-        await addPayment({
-          id: "pay-" + Date.now() + "-shopee",
-          orderId,
-          orderNumber,
-          customerId: customer.id || null,
-          customerName: customer.name,
-          productSummary: snapshots.map(s => s.name).join(", "),
-          amount: splitShopeeCredit,
-          dateReceived: now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
-          status: "belum-ditarik",
-          dateWithdrawn: null,
-          note: "Split Bill Shopee (checkout otomatis)",
-          createdAt: Date.now(),
-        });
-      } else if (splitShopeeCredit === 0 && shopeePayment) {
-        await deletePayment(shopeePayment.id);
-      }
-      // ===== SINKRON RIWAYAT PEMBAYARAN — KREDIT CUSTOMER ===== (pola sama persis)
+      if (shopeePayment) await deletePayment(shopeePayment.id);
+      // ===== SINKRON RIWAYAT PEMBAYARAN — KREDIT CUSTOMER =====
       const creditPayment = (await getPaymentsForOrder(orderId)).find(p => p.note === "Kredit customer dipakai");
       if (creditUsed > 0 && !creditPayment) {
         await addPayment({
@@ -1057,9 +1038,11 @@ function OrderPageInner() {
     } else {
       await saveOrder(orderRecord);
       // ===== RIWAYAT PEMBAYARAN: catat top up awal (kalau ada) =====
-      // Order baru (bukan edit) — dpAmount manual & kredit Split Bill Shopee
-      // dicatat sebagai baris riwayat TERPISAH sejak awal, bukan cuma angka
-      // tunggal di order.dp yang gak jelas asalnya dari transfer yang mana.
+      // Order baru (bukan edit) — dpAmount manual & kredit customer yang
+      // dipakai dicatat sebagai baris riwayat TERPISAH sejak awal, bukan
+      // cuma angka tunggal di order.dp. Split Bill Shopee SENGAJA TIDAK
+      // dicatat di sini lagi -- itu potongan harga (order.total), bukan
+      // uang yang masuk ke rekening.
       const productSummary = snapshots.map(s => s.name).join(", ");
       const newPayments: PaymentRecord[] = [];
       if (dpAmount > 0) {
@@ -1075,22 +1058,6 @@ function OrderPageInner() {
           status: "belum-ditarik",
           dateWithdrawn: null,
           note: "DP saat order dibuat",
-          createdAt: Date.now(),
-        });
-      }
-      if (splitShopeeCredit > 0) {
-        newPayments.push({
-          id: "pay-" + Date.now() + "-shopee",
-          orderId,
-          orderNumber,
-          customerId: customer.id || null,
-          customerName: customer.name,
-          productSummary,
-          amount: splitShopeeCredit,
-          dateReceived: now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
-          status: "belum-ditarik",
-          dateWithdrawn: null,
-          note: "Split Bill Shopee (checkout otomatis)",
           createdAt: Date.now(),
         });
       }
@@ -1166,11 +1133,12 @@ function OrderPageInner() {
     }
 
     // ===== SINKRON KREDIT CUSTOMER =====
-    // Kelebihan bayar (dp+splitShopeeCredit+creditUsed melebihi total) otomatis
-    // jadi kredit baru; kredit yang dipakai (creditUsed) dicatat sbg pemakaian.
-    // syncOrderCredit hapus dulu baris lama milik order ini jadi aman diedit
-    // berkali-kali (idempotent), lihat store.ts.
-    const overpayment = Math.max(0, dpAmount + splitShopeeCredit + creditUsed - total);
+    // Kelebihan bayar (dp+creditUsed melebihi total, yang SUDAH bersih dari
+    // potongan Split Bill Shopee) otomatis jadi kredit baru; kredit yang
+    // dipakai (creditUsed) dicatat sbg pemakaian. syncOrderCredit hapus dulu
+    // baris lama milik order ini jadi aman diedit berkali-kali (idempotent),
+    // lihat store.ts.
+    const overpayment = Math.max(0, dpAmount + creditUsed - total);
     await syncOrderCredit(orderId, customer.id, creditUsed, overpayment, orderNumber);
     if (customer.id) setCreditBalance(await getCustomerCreditBalance(customer.id));
 
@@ -1230,14 +1198,14 @@ function OrderPageInner() {
     setOngkirId(matchedOngkir ? matchedOngkir.id : "custom");
     setCustomOngkir(order.ongkir);
     setCustomOngkirLabel(matchedOngkir ? "" : order.ongkirLabel);
-    // order.dp tersimpan SUDAH termasuk Rp1.500 Split Bill Shopee DAN kredit
-    // customer yang dipakai (lihat generateInvoice) — kurangi keduanya lagi
-    // di sini supaya field DP manual di form kembali menampilkan angka yang
-    // benar-benar diketik admin, bukan dobel dengan kredit otomatis.
-    const loadedSplitShopee = matchedOngkir?.id === "shopee";
+    // order.dp tersimpan SUDAH termasuk kredit customer yang dipakai (lihat
+    // generateInvoice) — kurangi lagi di sini supaya field DP manual di form
+    // kembali menampilkan angka yang benar-benar diketik admin. Split Bill
+    // Shopee TIDAK ikut di sini lagi (itu potongan order.total, bukan
+    // bagian dp).
     const loadedPayments = await getPaymentsForOrder(order.id);
     const loadedCreditUsed = loadedPayments.find(p => p.note === "Kredit customer dipakai")?.amount || 0;
-    setDpAmount(order.dp - (loadedSplitShopee ? SPLIT_BILL_PRODUK : 0) - loadedCreditUsed);
+    setDpAmount(order.dp - loadedCreditUsed);
     setCreditUsed(loadedCreditUsed);
     setOrderPayments(loadedPayments);
     setTopUpAmount(0);
@@ -1265,15 +1233,9 @@ function OrderPageInner() {
     const existingOrder = await getOrderById(editingOrderId);
     if (!existingOrder) return;
     const { updatedOrder } = await recordPaymentForOrder(existingOrder, topUpAmount);
-    // Dasar kredit Split Bill Shopee dari ongkir yang BENERAN tersimpan di
-    // order (existingOrder.ongkirLabel), BUKAN dari pilihan ongkir di form
-    // (ongkirId/splitShopeeCredit) — kalau admin sempat ganti ongkir di form
-    // tapi belum klik Generate Invoice, keduanya bisa beda dan bikin dpAmount
-    // salah hitung (bahkan bisa negatif). Math.max(0, ...) jaga-jaga tambahan.
-    const persistedSplitShopee = ongkirOptions.find(o => o.name === existingOrder.ongkirLabel)?.id === "shopee";
     const paymentsAfter = await getPaymentsForOrder(editingOrderId);
     const usedCredit = paymentsAfter.find(p => p.note === "Kredit customer dipakai")?.amount || 0;
-    setDpAmount(Math.max(0, updatedOrder.dp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0) - usedCredit));
+    setDpAmount(Math.max(0, updatedOrder.dp - usedCredit));
     setCreditUsed(usedCredit);
     setOrderPayments(paymentsAfter);
     setExistingOrders(await getOrders());
@@ -1288,10 +1250,9 @@ function OrderPageInner() {
     const newDp = Math.max(0, existingOrder.dp - payment.amount);
     await updateOrder({ ...existingOrder, dp: newDp });
     await deletePayment(payment.id);
-    const persistedSplitShopee = ongkirOptions.find(o => o.name === existingOrder.ongkirLabel)?.id === "shopee";
     const paymentsAfter = await getPaymentsForOrder(editingOrderId);
     const usedCredit = paymentsAfter.find(p => p.note === "Kredit customer dipakai")?.amount || 0;
-    setDpAmount(Math.max(0, newDp - (persistedSplitShopee ? SPLIT_BILL_PRODUK : 0) - usedCredit));
+    setDpAmount(Math.max(0, newDp - usedCredit));
     setCreditUsed(usedCredit);
     setOrderPayments(paymentsAfter);
     setExistingOrders(await getOrders());
@@ -1915,14 +1876,14 @@ function OrderPageInner() {
       </div>
 
       {splitShopee && <div className="shopee-split-info">
-        <p>🛒 <b>Split Bill Shopee aktif</b> (ongkir = Shopee) — Rp{fmt(SPLIT_BILL_PRODUK)} dari Total Tagihan otomatis dianggap sudah terbayar lewat checkout Shopee. Sisa yang perlu ditransfer manual sudah dikurangi otomatis di bawah.</p>
+        <p>🛒 <b>Split Bill Shopee aktif</b> (ongkir = Shopee) — Rp{fmt(SPLIT_BILL_PRODUK)} otomatis jadi potongan Total Tagihan (customer checkout kecil ini di Shopee, uangnya ke Shopee, BUKAN ke rekening kita). DP / Deposit tetap diisi sesuai nominal transfer manual yang BENERAN masuk ke rekening.</p>
         <p className="muted">Detail biaya admin per kategori ada di halaman Katalog → tab Split Shopee.</p>
       </div>}
 
       {editingOrderId ? (
         <div className="setting-row payment-history-block">
           <label>Riwayat Pembayaran</label>
-          <div className="payment-total-preview">Total dibayar: <b>{formatRupiah(dpAmount + splitShopeeCredit + creditUsed)}</b></div>
+          <div className="payment-total-preview">Total dibayar: <b>{formatRupiah(dpAmount + creditUsed)}</b></div>
           {orderPayments.length === 0 && <p className="field-hint">Belum ada pembayaran tercatat untuk order ini.</p>}
           {orderPayments.map(p => (
             <div className="payment-row" key={p.id}>
@@ -1996,7 +1957,7 @@ function OrderPageInner() {
       <div className="shopee-split-info">
         <p>💳 Customer ini punya <b>saldo kredit {formatRupiah(creditBalance)}</b> dari kelebihan bayar order sebelumnya.</p>
         {creditUsed === 0 ? (
-          <button type="button" className="secondary" onClick={() => setCreditUsed(Math.min(creditBalance, Math.max(0, total - splitShopeeCredit)))}>Pakai Kredit</button>
+          <button type="button" className="secondary" onClick={() => setCreditUsed(Math.min(creditBalance, Math.max(0, total - dpAmount)))}>Pakai Kredit</button>
         ) : (
           <p><b>✓ {formatRupiah(creditUsed)}</b> dipakai di order ini. <button type="button" className="secondary" onClick={() => setCreditUsed(0)}>Batalkan</button></p>
         )}
@@ -2008,11 +1969,11 @@ function OrderPageInner() {
       <div className="summary-row"><span>Subtotal</span><b>{formatRupiah(subtotal)}</b></div>
       {discountAmount > 0 && <div className="summary-row"><span>Diskon</span><b>-{formatRupiah(discountAmount)}</b></div>}
       <div className="summary-row"><span>Ongkir</span><b>{ongkir > 0 ? formatRupiah(ongkir) : "—"}</b></div>
+      {splitShopeeCredit > 0 && <div className="summary-row"><span>🛒 Potongan Split Bill Shopee</span><b>-{formatRupiah(splitShopeeCredit)}</b></div>}
       <div className="summary-row total-row"><span>Total Tagihan</span><b>{formatRupiah(total)}</b></div>
       {dpAmount > 0 && <div className="summary-row"><span>DP / Deposit</span><b>-{formatRupiah(dpAmount)}</b></div>}
-      {splitShopeeCredit > 0 && <div className="summary-row"><span>Split Bill Shopee (produk)</span><b>-{formatRupiah(splitShopeeCredit)}</b></div>}
       {creditUsed > 0 && <div className="summary-row"><span>💳 Kredit Customer Dipakai</span><b>-{formatRupiah(creditUsed)}</b></div>}
-      {(dpAmount > 0 || splitShopeeCredit > 0 || creditUsed > 0) && <div className="summary-row"><span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, total - dpAmount - splitShopeeCredit - creditUsed))}</b></div>}
+      {(dpAmount > 0 || creditUsed > 0) && <div className="summary-row"><span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, total - dpAmount - creditUsed))}</b></div>}
       {overpaymentPreview > 0 && <div className="summary-row"><span>🎁 Kelebihan Bayar (jadi kredit customer)</span><b>+{formatRupiah(overpaymentPreview)}</b></div>}
       {marketerId && effectiveFee > 0 && <div className="summary-row fee-row"><span>Fee marketer (internal)</span><b>{formatRupiah(effectiveFee)}</b></div>}
     </div>
@@ -2252,15 +2213,15 @@ function OrderPageInner() {
           <div><span>Subtotal</span><b>{formatRupiah(invoice.subtotal)}</b></div>
           {invoice.discountAmount > 0 && <div><span>Diskon</span><b>-{formatRupiah(invoice.discountAmount)}</b></div>}
           {invoice.ongkir > 0 && <div><span>Ongkir</span><b>{formatRupiah(invoice.ongkir)}</b></div>}
-          {invoice.dpManual > 0 && <div><span>DP / Deposit</span><b>-{formatRupiah(invoice.dpManual)}</b></div>}
-          {invoice.splitShopee && <div><span>Split Bill Shopee (produk)</span><b>-{formatRupiah(SPLIT_BILL_PRODUK)}</b></div>}
-          {invoice.creditUsed > 0 && <div><span>💳 Kredit Customer Dipakai</span><b>-{formatRupiah(invoice.creditUsed)}</b></div>}
+          {invoice.splitShopee && <div><span>🛒 Potongan Split Bill Shopee</span><b>-{formatRupiah(SPLIT_BILL_PRODUK)}</b></div>}
           <div className="invoice-grand"><span>Total Tagihan</span><b>{formatRupiah(invoice.total)}</b></div>
-          {(invoice.type === "po-amna" || invoice.dp > 0 || invoice.splitShopee) && <div className="invoice-sisa">
-            <span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, invoice.total - invoice.dpManual - (invoice.splitShopee ? SPLIT_BILL_PRODUK : 0) - invoice.creditUsed))}</b>
+          {invoice.dpManual > 0 && <div><span>DP / Deposit</span><b>-{formatRupiah(invoice.dpManual)}</b></div>}
+          {invoice.creditUsed > 0 && <div><span>💳 Kredit Customer Dipakai</span><b>-{formatRupiah(invoice.creditUsed)}</b></div>}
+          {(invoice.type === "po-amna" || invoice.dp > 0) && <div className="invoice-sisa">
+            <span>Sisa Pelunasan</span><b>{formatRupiah(Math.max(0, invoice.total - invoice.dpManual - invoice.creditUsed))}</b>
           </div>}
           {(() => {
-            const paidTotal = invoice.dpManual + (invoice.splitShopee ? SPLIT_BILL_PRODUK : 0) + invoice.creditUsed;
+            const paidTotal = invoice.dpManual + invoice.creditUsed;
             const overpay = Math.max(0, paidTotal - invoice.total);
             return overpay > 0 ? <div className="invoice-sisa"><span>🎁 Kelebihan Bayar (jadi kredit customer)</span><b>+{formatRupiah(overpay)}</b></div> : null;
           })()}

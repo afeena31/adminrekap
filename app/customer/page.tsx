@@ -17,7 +17,7 @@ import { goBack } from "../lib/goBack";
 import { getCollections, getAllCollections, seedCollections, getCollectionStats, addCollection, hardDeleteCollection, collectionTypeInfo, collectionStatusInfo, collectionColors, collectionIcons, type Collection, type CollectionType, type CollectionStatus, type CollectionStats } from "../data/collections";
 import { demoCustomers, demoAddresses, demoCustomerIds } from "../data/demoSeed";
 
-import { formatRupiah, getOrders, getOrdersForCustomer, computePaymentTotals, getProducts, deleteProduct, type OrderRecord } from "../data/store";
+import { formatRupiah, getOrders, getOrdersForCustomer, computePaymentTotals, getProducts, deleteProduct, getCustomerCreditBalance, type OrderRecord } from "../data/store";
 import { products as seedCatalogProducts, nonBookMasterCatalog } from "../data/products";
 import { getOperations, type CustomerOperations } from "../data/operations";
 import { useAuth } from "../data/authContext";
@@ -96,6 +96,7 @@ function HomePageInner() {
   const [wipeDemoConfirmOpen, setWipeDemoConfirmOpen] = useState(false);
   const [ops, setOps] = useState<CustomerOperations>(() => getOperations("-"));
   const [customerOrders, setCustomerOrders] = useState<OrderRecord[]>([]);
+  const [creditBalance, setCreditBalance] = useState(0);
   // Collection & Customer sekarang Supabase (async) — dipreload di sini,
   // dipakai Universal Search finder di bawah (gak bisa panggil getCollections()/
   // getCustomers() langsung di render lagi).
@@ -156,6 +157,13 @@ function HomePageInner() {
   useEffect(() => {
     if (customer.id) getOrdersForCustomer(customer.id).then(setCustomerOrders);
     else setCustomerOrders([]);
+  }, [customer.id]);
+
+  // Saldo Kredit (kelebihan bayar dari order sebelumnya) -- dimuat ulang
+  // tiap ganti customer, sama pola dgn customerOrders di atas.
+  useEffect(() => {
+    if (customer.id) getCustomerCreditBalance(customer.id).then(setCreditBalance);
+    else setCreditBalance(0);
   }, [customer.id]);
 
   // Setiap kali customer yang aktif berganti (pindah profil / bikin customer baru),
@@ -499,6 +507,7 @@ function HomePageInner() {
         <div className="situation-item"><small>Pengiriman</small><b>{customerOrders.reduce((sum, o) => sum + o.items.filter(i => i.shipmentStage === "dalam-pengiriman").length, 0)} aktif</b></div>
 
         <div className="situation-item"><small>Prioritas</small><b className="situation-priority">{(ops.actionCenter.length + customerOrders.filter(o => o.total - o.dp > 0).length) > 0 ? `${ops.actionCenter.length + customerOrders.filter(o => o.total - o.dp > 0).length} aksi` : "Tenang"}</b></div>
+        {creditBalance > 0 && <div className="situation-item"><small>💳 Saldo Kredit</small><b style={{ color: "var(--green)" }}>{formatRupiah(creditBalance)}</b></div>}
       </div>
     </section>
 

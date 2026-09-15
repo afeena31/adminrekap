@@ -109,6 +109,10 @@ export default function DashboardPage() {
   // sisanya di area scroll internal sendiri, sama pola dgn Kategori Produk.
   const [expandedQueueGroups, setExpandedQueueGroups] = useState<Set<string>>(new Set());
   const QUEUE_PREVIEW_COUNT = 3;
+  // Sama pola dgn Work Queue di atas -- "Aktivitas Terbaru" & "Produksi" juga
+  // bisa numpuk panjang, jadi dibatasi 3 duluan + tombol buka/tutup + scroll.
+  const [expandedDashSections, setExpandedDashSections] = useState<Set<string>>(new Set());
+  const DASH_PREVIEW_COUNT = 3;
   const [marketers, setMarketers] = useState<Marketer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [allOps, setAllOps] = useState<{ customer: ReturnType<typeof toDisplayCustomer>; ops: ReturnType<typeof getOperations> }[]>([]);
@@ -383,19 +387,38 @@ export default function DashboardPage() {
             <Link href="/order" className="dash-empty-cta"><Plus size={15} /> Buat Order</Link>
           </div>
         )}
-        {activityFeed.map(item => {
-          const Icon = item.icon;
-          return (
-            <div key={item.key} className="dash-activity-item">
-              <span className={`dash-activity-dot ${item.iconClass}`}><Icon size={14} /></span>
-              <div className="dash-activity-body">
-                <b>{item.title}</b>
-                <span>{item.desc}</span>
-              </div>
-              <span className="dash-activity-time">{item.time}</span>
+        {(() => {
+          const isExpanded = expandedDashSections.has("activity");
+          const visible = isExpanded ? activityFeed : activityFeed.slice(0, DASH_PREVIEW_COUNT);
+          const hiddenCount = activityFeed.length - visible.length;
+          return <>
+            <div className={isExpanded ? "dash-queue-scroll" : undefined}>
+              {visible.map(item => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.key} className="dash-activity-item">
+                    <span className={`dash-activity-dot ${item.iconClass}`}><Icon size={14} /></span>
+                    <div className="dash-activity-body">
+                      <b>{item.title}</b>
+                      <span>{item.desc}</span>
+                    </div>
+                    <span className="dash-activity-time">{item.time}</span>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+            {hiddenCount > 0 && (
+              <button type="button" className="dash-queue-toggle" onClick={() => setExpandedDashSections(prev => new Set(prev).add("activity"))}>
+                Tampilkan {hiddenCount} lagi <ChevronRight size={14} style={{ transform: "rotate(90deg)" }} />
+              </button>
+            )}
+            {isExpanded && activityFeed.length > DASH_PREVIEW_COUNT && (
+              <button type="button" className="dash-queue-toggle" onClick={() => setExpandedDashSections(prev => { const next = new Set(prev); next.delete("activity"); return next; })}>
+                Tutup <ChevronRight size={14} style={{ transform: "rotate(-90deg)" }} />
+              </button>
+            )}
+          </>;
+        })()}
       </div>
     </section>
 
@@ -416,37 +439,57 @@ export default function DashboardPage() {
             <p>Semua produksi telah selesai. Siap untuk batch berikutnya.</p>
           </div>
         )}
-        {realProductionItems.map(({ order, item }, i) => (
-          <Link key={"real-" + i} href={`/order?orderId=${order.id}`} className="dash-batch-card">
-            <div className="dash-batch-head">
-              <span className="dash-batch-icon"><Factory size={18} /></span>
-              <div>
-                <b>{item.name} · {order.customer}</b>
-                <span>{order.number}</span>
+        {(() => {
+          const cards = [
+            ...realProductionItems.map(({ order, item }, i) => (
+              <Link key={"real-" + i} href={`/order?orderId=${order.id}`} className="dash-batch-card">
+                <div className="dash-batch-head">
+                  <span className="dash-batch-icon"><Factory size={18} /></span>
+                  <div>
+                    <b>{item.name} · {order.customer}</b>
+                    <span>{order.number}</span>
+                  </div>
+                  <span className="dash-batch-status produksi">{productionStageInfo[item.productionStage || "po"].name}</span>
+                </div>
+              </Link>
+            )),
+            ...productionBatches.map(({ customer, batch }, i) => (
+              <div key={"batch-" + i} className="dash-batch-card">
+                <div className="dash-batch-head">
+                  <span className="dash-batch-icon"><Factory size={18} /></span>
+                  <div>
+                    <b>{batch.name} · {batch.product}</b>
+                    <span>{batch.warehouse} · {customer.name}</span>
+                  </div>
+                  <span className={`dash-batch-status ${batch.status}`}>{batch.status === "produksi" ? "Produksi" : batch.status === "ready" ? "Ready" : "Selesai"}</span>
+                </div>
+                <div className="dash-batch-progress">
+                  <div className="dash-batch-progress-bar" style={{ width: `${batchProgress(batch.status)}%` }} />
+                </div>
+                <div className="dash-batch-meta">
+                  <span><Clock size={13} /> Estimasi siap: {batch.estimateReady}</span>
+                  <span className="dash-batch-percent">{batchProgress(batch.status)}%</span>
+                </div>
               </div>
-              <span className="dash-batch-status produksi">{productionStageInfo[item.productionStage || "po"].name}</span>
-            </div>
-          </Link>
-        ))}
-        {productionBatches.map(({ customer, batch }, i) => (
-          <div key={i} className="dash-batch-card">
-            <div className="dash-batch-head">
-              <span className="dash-batch-icon"><Factory size={18} /></span>
-              <div>
-                <b>{batch.name} · {batch.product}</b>
-                <span>{batch.warehouse} · {customer.name}</span>
-              </div>
-              <span className={`dash-batch-status ${batch.status}`}>{batch.status === "produksi" ? "Produksi" : batch.status === "ready" ? "Ready" : "Selesai"}</span>
-            </div>
-            <div className="dash-batch-progress">
-              <div className="dash-batch-progress-bar" style={{ width: `${batchProgress(batch.status)}%` }} />
-            </div>
-            <div className="dash-batch-meta">
-              <span><Clock size={13} /> Estimasi siap: {batch.estimateReady}</span>
-              <span className="dash-batch-percent">{batchProgress(batch.status)}%</span>
-            </div>
-          </div>
-        ))}
+            )),
+          ];
+          const isExpanded = expandedDashSections.has("produksi");
+          const visible = isExpanded ? cards : cards.slice(0, DASH_PREVIEW_COUNT);
+          const hiddenCount = cards.length - visible.length;
+          return <>
+            <div className={isExpanded ? "dash-queue-scroll" : undefined}>{visible}</div>
+            {hiddenCount > 0 && (
+              <button type="button" className="dash-queue-toggle" onClick={() => setExpandedDashSections(prev => new Set(prev).add("produksi"))}>
+                Tampilkan {hiddenCount} lagi <ChevronRight size={14} style={{ transform: "rotate(90deg)" }} />
+              </button>
+            )}
+            {isExpanded && cards.length > DASH_PREVIEW_COUNT && (
+              <button type="button" className="dash-queue-toggle" onClick={() => setExpandedDashSections(prev => { const next = new Set(prev); next.delete("produksi"); return next; })}>
+                Tutup <ChevronRight size={14} style={{ transform: "rotate(-90deg)" }} />
+              </button>
+            )}
+          </>;
+        })()}
       </div>
     </section>
 

@@ -829,6 +829,15 @@ function OrderPageInner() {
       const splitCredit = inv.splitShopee ? SPLIT_BILL_PRODUK : 0;
       const hasPartialPayment = inv.type === "po-amna" || inv.dp > 0 || splitCredit > 0;
       const amountDue = hasPartialPayment ? Math.max(0, inv.total - inv.dpManual - splitCredit - inv.creditUsed) : inv.total;
+      // Sudah lunas (bahkan kelebihan) -- gak masuk akal masih nyuruh
+      // transfer + kasih nomor rekening. Tampilkan status lunas aja, kredit
+      // kelebihannya (kalau ada) ikut disebut biar customer tau.
+      if (amountDue <= 0 && hasPartialPayment) {
+        const overpayInv = Math.max(0, inv.dpManual + splitCredit + inv.creditUsed - inv.total);
+        lines.push("✅ Lunas, terima kasih!");
+        if (overpayInv > 0) lines.push(`Kelebihan Rp${fmt(overpayInv)} disimpan sebagai kredit untuk order berikutnya.`);
+        return lines.join("\n");
+      }
       lines.push(`💰 Total Transfer: Rp${fmt(amountDue)}`);
     }
     const rek = determineRekening(inv.items.map(i => i.category || "lainnya"));
